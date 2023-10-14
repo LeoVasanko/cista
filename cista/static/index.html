@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<title>Storage</title>
+<div>
+  <h2>Quick file upload</h2>
+  <p>Uses parallel WebSocket connections for increased bandwidth /api/upload</p>
+  <input type=file id=fileInput>
+  <progress id=progressBar value=0 max=1></progress>
+</div>
+
+<div>
+  <h2>File downloads (websocket)</h2>
+  <ul id=file_list></ul>
+</div>
+
+<h2>File listings</h2>
+<p>Plain HTML browser <a href=/files/>/files/</a></p>
+
+<p>JSON list updated via WebSocket /api/watch:</p>
+
+<textarea id=list style="padding: 1em; width: 80ch; height: 40ch;"></textarea>
+<script>
+const list = document.getElementById("list")
+let files = {}
+
+function createWatchSocket() {
+  const wsurl = new URL("/api/watch", location.href.replace(/^http/, 'ws'))
+  const ws = new WebSocket(wsurl)
+  ws.onmessage = event => {
+    msg = JSON.parse(event.data)
+    console.log("Watch", msg)
+    if (msg.root) {
+      files = msg.root
+      file_list(files)
+    } else if (msg.update) {
+      const {path, data} = msg.update
+      for (const p of path.split("/")) {
+        // TODO update files at path with new data
+      }
+    }
+    list.value = JSON.stringify(files)
+  }
+}
+
+function file_list(files) {
+  const ul = document.getElementById("file_list")
+  ul.innerHTML = ""
+  const dir = ""
+  let ptr = files.dir
+  console.log(ptr)
+  for (const name of Object.keys(ptr)) {
+    if (ptr[name].dir) continue
+    const {size, mtime} = ptr[name]
+    const li = document.createElement("li")
+    const a = document.createElement("a")
+    ul.appendChild(li)
+    li.appendChild(a)
+    a.textContent = name
+    a.href = name
+    a.onclick = event => {
+      event.preventDefault()
+      download(name, size)
+    }
+  }
+
+}
+createWatchSocket()
+
+async function download(name, size) {
+  const wsurl = new URL("/api/download", location.href.replace(/^http/, 'ws'))
+  const ws = new WebSocket(wsurl)
+  ws.binaryType = 'arraybuffer'
+  ws.onopen = () => {
+    console.log("Download socket connected")
+    ws.send(JSON.stringify({name, start: 0, end: size, size}))
+  }
+  ws.onmessage = event => {
+    const data = event.data
+    console.log("Download", data)
+    const blob = new Blob([data], {type: "application/octet-stream"})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = name
+    a.click()
+    ws.close()
+  }
+  ws.onclose = () => {
+    console.log("Download socket disconnected")
+  }
+}
+
+const fileInput = document.getElementById("fileInput")
+const progress = document.getElementById("progressBar")
+const numConnections = 2
+const chunkSize = 1<<20
+const wsConnections = new Set()
+
+for (let i = 0; i < numConnections; i++) createUploadWS()
+
+function createUploadWS() {
+  const wsurl = new URL("/api/upload", location.href.replace(/^http/, 'ws'))
+  const ws = new WebSocket(wsurl)
+  ws.binaryType = 'arraybuffer'
+  ws.onopen = () => {
+    wsConnections.add(ws)
+    console.log("Upload socket connected")
+  }
+  ws.onmessage = event => {
+    msg = JSON.parse(event.data)
+    if (msg.written) progress.value += +msg.written
+    else console.log(`Error: ${msg.error}`)
+  }
+  ws.onclose = () => {
+    wsConnections.delete(ws)
+    console.log("Upload socket disconnected, reconnecting...")
+    setTimeout(createUploadWS, 1000)
+  }
+}
+
+async function load(file, start, end) {
+  const reader = new FileReader()
+  const load = new Promise(resolve => reader.onload = resolve)
+  reader.readAsArrayBuffer(file.slice(start, end))
+  const event = await load
+  return event.target.result
+}
+
+async function sendChunk(file, start, end, ws) {
+  const chunk = await load(file, start, end)
+  ws.send(JSON.stringify({
+    name: file.name,
+    size: file.size,
+    start: start,
+    end: end
+  }))
+  ws.send(chunk)
+}
+
+fileInput.addEventListener("change", async function() {
+  const file = this.files[0]
+  const numChunks = Math.ceil(file.size / chunkSize)
+  progress.value = 0
+  progress.max = file.size
+
+  console.log(wsConnections)
+  for (let i = 0; i < numChunks; i++) {
+    const ws = Array.from(wsConnections)[i % wsConnections.size]
+    const start = i * chunkSize
+    const end = Math.min(file.size, start + chunkSize)
+    const res = await sendChunk(file, start, end, ws)
+  }
+})
+
+</script>

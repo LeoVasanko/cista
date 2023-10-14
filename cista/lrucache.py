@@ -1,5 +1,6 @@
 from time import monotonic
 
+
 class LRUCache:
     def __init__(self, open: callable, *, capacity: int, maxage: float):
         self.open = open
@@ -27,3 +28,7 @@ class LRUCache:
         ts = monotonic() - self.maxage
         while len(self.cache) > self.capacity or self.cache and self.cache[-1][2] < ts:
             self.cache.pop()[1].close()
+
+    def close(self):
+        self.capacity = 0
+        self.expire_items()

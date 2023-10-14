@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import suppress
 
+
 class AsyncLink:
     """Facilitate two-way connection between asyncio and a worker thread."""
 
