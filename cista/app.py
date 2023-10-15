@@ -1,14 +1,11 @@
 import asyncio
-import logging
+from importlib.resources import files
 from pathlib import Path
-from tarfile import DEFAULT_FORMAT
-from typing import ParamSpecKwargs
 
 import msgspec
-from importlib.resources import files
 from sanic import Sanic
-from sanic.response import html
 from sanic.log import logger
+from sanic.response import html
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
