@@ -1,18 +1,21 @@
-import asyncio
 from importlib.resources import files
 
 import msgspec
-from sanic import Sanic
+from html5tagger import E
+from sanic import Sanic, redirect
 from sanic.log import logger
 from sanic.response import html
 
-from . import watching
+from . import session, watching
+from .auth import authbp
+from .config import config
 from .fileio import ROOT, FileServer
 from .protocol import ErrorMsg, FileRange, StatusMsg
 
 app = Sanic("cista")
 fileserver = FileServer()
 watching.register(app, "/api/watch")
+app.blueprint(authbp)
 
 def asend(ws, msg):
     return ws.send(msg if isinstance(msg, bytes) else msgspec.json.encode(msg).decode())
@@ -27,7 +30,14 @@ async def stop_fileserver(app, _):
 
 @app.get("/")
 async def index_page(request):
+    s = config.public or session.get(request)
+    print("Main session", s)
+    if not s:
+        return redirect("/login")
     index = files("cista").joinpath("static", "index.html").read_text()
+    flash = request.cookies.flash
+    if flash:
+        index += str(E.div(flash, id="flash"))
     return html(index)
 
 app.static("/files", ROOT, use_content_range=True, stream_large_files=True, directory_view=True)
@@ -58,12 +68,6 @@ async def upload(request, ws):
             await asend(ws, res)
             logger.exception(repr(res), e)
             return
-
-@app.websocket("/ws")
-async def ws(request, ws):
-    while True:
-        data = await ws.recv()
-        await ws.send(data)
 
 @app.websocket('/api/download')
 async def download(request, ws):

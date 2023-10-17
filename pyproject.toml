@@ -17,6 +17,7 @@ dependencies = [
     "argon2-cffi",
     "msgspec",
     "pathvalidate",
+    "pyjwt",
     "sanic",
     "tomli_w",
     "watchdog",

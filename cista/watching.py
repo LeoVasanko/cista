@@ -1,11 +1,11 @@
 import asyncio
 import secrets
-from pathlib import Path, PurePosixPath
 import threading
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+from pathlib import Path, PurePosixPath
 
 import msgspec
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from . import config
 from .fileio import ROOT
