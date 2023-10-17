@@ -1,5 +1,26 @@
 <!DOCTYPE html>
 <title>Storage</title>
+<style>
+  body {
+    font-family: sans-serif;
+    max-width: 100ch;
+    margin: 0 auto;
+    padding: 1em;
+    background-color: #333;
+    color: #eee;
+  }
+  td {
+    text-align: right;
+    padding: .5em;
+  }
+  td:first-child {
+    text-align: left;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+</style>
 <div>
   <h2>Quick file upload</h2>
   <p>Uses parallel WebSocket connections for increased bandwidth /api/upload</p>
@@ -8,84 +29,148 @@
 </div>
 
 <div>
-  <h2>File downloads (websocket)</h2>
+  <h2>Files</h2>
   <ul id=file_list></ul>
 </div>
 
-<h2>File listings</h2>
-<p>Plain HTML browser <a href=/files/>/files/</a></p>
-
-<p>JSON list updated via WebSocket /api/watch:</p>
-
-<textarea id=list style="padding: 1em; width: 80ch; height: 40ch;"></textarea>
 <script>
-const list = document.getElementById("list")
 let files = {}
+let flatfiles = {}
 
 function createWatchSocket() {
   const wsurl = new URL("/api/watch", location.href.replace(/^http/, 'ws'))
   const ws = new WebSocket(wsurl)
   ws.onmessage = event => {
     msg = JSON.parse(event.data)
-    console.log("Watch", msg)
-    if (msg.root) {
-      files = msg.root
+    if (msg.update) {
+      tree_update(msg.update)
       file_list(files)
-    } else if (msg.update) {
-      const {path, data} = msg.update
-      for (const p of path.split("/")) {
-        // TODO update files at path with new data
-      }
+    } else {
+      console.log("Unkonwn message from watch socket", msg)
     }
-    list.value = JSON.stringify(files)
   }
 }
 
-function file_list(files) {
-  const ul = document.getElementById("file_list")
-  ul.innerHTML = ""
-  const dir = ""
-  let ptr = files.dir
-  console.log(ptr)
-  for (const name of Object.keys(ptr)) {
-    if (ptr[name].dir) continue
-    const {size, mtime} = ptr[name]
-    const li = document.createElement("li")
-    const a = document.createElement("a")
-    ul.appendChild(li)
-    li.appendChild(a)
-    a.textContent = name
-    a.href = name
-    a.onclick = event => {
-      event.preventDefault()
-      download(name, size)
-    }
-  }
-
-}
 createWatchSocket()
 
-async function download(name, size) {
+function tree_update(msg) {
+  let node = files
+  for (const elem of msg) {
+    if (elem.deleted) {
+      delete node.dir[elem.name]
+      delete flatfiles[p]
+      break
+    }
+    if (elem.name !== undefined) node = node.dir[elem.name] ||= {}
+    if (elem.size !== undefined) node.size = elem.size
+    if (elem.mtime !== undefined) node.mtime = elem.mtime
+    if (elem.dir !== undefined) node.dir = elem.dir
+  }
+  // Update paths and flatfiles
+  files.path = "/"
+  const nodes = [files]
+  flatfiles = {}
+  while (node = nodes.pop()) {
+    flatfiles[node.path] = node
+    if (node.dir === undefined) continue
+    for (const name of Object.keys(node.dir)) {
+      const child = node.dir[name]
+      child.path = node.path + name + (child.dir === undefined ? "" : "/")
+      nodes.push(child)
+    }
+  }
+}
+
+var collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+
+const compare_path = (a, b) => collator.compare(a.path, b.path)
+const compare_time = (a, b) => a.mtime > b.mtime
+
+function file_list(files) {
+  const table = document.getElementById("file_list")
+  const sorted = Object.values(flatfiles).sort(compare_time)
+  table.innerHTML = ""
+  for (const f of sorted) {
+    const {path, size, mtime} = f
+    const tr = document.createElement("tr")
+    const name_td = document.createElement("td")
+    const size_td = document.createElement("td")
+    const mtime_td = document.createElement("td")
+    const a = document.createElement("a")
+    table.appendChild(tr)
+    tr.appendChild(name_td)
+    tr.appendChild(size_td)
+    tr.appendChild(mtime_td)
+    name_td.appendChild(a)
+    size_td.textContent = size
+    mtime_td.textContent = formatUnixDate(mtime)
+    a.textContent = path
+    a.href = `/files${path}`
+    /*a.onclick = event => {
+      if (window.showSaveFilePicker) {
+        event.preventDefault()
+        download_ws(name, size)
+      }
+    }
+    a.download = ""*/
+  }
+}
+
+function formatUnixDate(t) {
+    const date = new Date(t * 1000)
+    const now = new Date()
+    const diff = date - now
+    const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+
+    if (Math.abs(diff) <= 60000) {
+        return formatter.format(Math.round(diff / 1000), 'second')
+    }
+
+    if (Math.abs(diff) <= 3600000) {
+        return formatter.format(Math.round(diff / 60000), 'minute')
+    }
+
+    if (Math.abs(diff) <= 86400000) {
+        return formatter.format(Math.round(diff / 3600000), 'hour')
+    }
+
+    if (Math.abs(diff) <= 604800000) {
+        return formatter.format(Math.round(diff / 86400000), 'day')
+    }
+
+    return date.toLocaleDateString()
+}
+
+async function download_ws(name, size) {
+  const fh = await window.showSaveFilePicker({
+    suggestedName: name,
+  })
+  const writer = await fh.createWritable()
+  writer.truncate(size)
   const wsurl = new URL("/api/download", location.href.replace(/^http/, 'ws'))
   const ws = new WebSocket(wsurl)
-  ws.binaryType = 'arraybuffer'
+  let pos = 0
   ws.onopen = () => {
-    console.log("Download socket connected")
+    console.log("Downloading over WebSocket", name, size)
     ws.send(JSON.stringify({name, start: 0, end: size, size}))
   }
   ws.onmessage = event => {
-    const data = event.data
-    console.log("Download", data)
-    const blob = new Blob([data], {type: "application/octet-stream"})
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = name
-    a.click()
-    ws.close()
+    if (typeof event.data === 'string') {
+      const msg = JSON.parse(event.data)
+      console.log("Download finished", msg)
+      ws.close()
+      return
+    }
+    console.log("Received chunk", name, pos, pos + event.data.size)
+    pos += event.data.size
+    writer.write(event.data)
   }
   ws.onclose = () => {
-    console.log("Download socket disconnected")
+    if (pos < size) {
+      console.log("Download aborted", name, pos)
+      writer.truncate(pos)
+    }
+    writer.close()
   }
 }
 
@@ -95,7 +180,7 @@ const numConnections = 2
 const chunkSize = 1<<20
 const wsConnections = new Set()
 
-for (let i = 0; i < numConnections; i++) createUploadWS()
+//for (let i = 0; i < numConnections; i++) createUploadWS()
 
 function createUploadWS() {
   const wsurl = new URL("/api/upload", location.href.replace(/^http/, 'ws'))

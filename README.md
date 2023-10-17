@@ -1,12 +1,10 @@
 # Web File Storage
 
-Development install:
-
+Run directly from repository with Hatch (or use pip install as usual):
 ```sh
-pip install hatch --break-system-packages
-hatch run sanic cista --reload --dev       # Runs on localhost:8000
+hatch run sanic cista --reload --dev
 ```
 
-Environment variable `STORAGE=<path>` may be used to choose which folder it serves. The default is current directory.
+Configuration file is created `.cista.toml` in current directory, which is also shared by default. Edit while the server is not running to set share path and other parameters.
 
-No authentication is supported, so implement access control externally or be careful with your files.
+No authentication yet, so implement access control externally or be careful with your files.

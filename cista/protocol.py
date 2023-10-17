@@ -15,11 +15,9 @@ class FileRange(msgspec.Struct):
 class ErrorMsg(msgspec.Struct):
     error: str
     req: FileRange
-    url: str
 
 class StatusMsg(msgspec.Struct):
     status: str
-    url: str
     req: FileRange
 
 
@@ -32,7 +30,38 @@ class FileEntry(msgspec.Struct):
 class DirEntry(msgspec.Struct):
     size: int
     mtime: int
-    dir: Dict[str, Union[FileEntry, DirEntry]]
+    dir: DirList
+
+    def __getitem__(self, name):
+        return self.dir[name]
+
+    def __setitem__(self, name, value):
+        self.dir[name] = value
+
+    def __contains__(self, name):
+        return name in self.dir
+
+    def __delitem__(self, name):
+        del self.dir[name]
+
+    @property
+    def props(self):
+        return {
+            k: v
+            for k, v in self.__struct_fields__
+            if k != "dir"
+        }
+
+DirList = dict[str, Union[FileEntry, DirEntry]]
+
+
+class UpdateEntry(msgspec.Struct, omit_defaults=True):
+    """Updates the named entry in the tree. Fields that are set replace old values. A list of entries recurses directories."""
+    name: str = ""
+    deleted: bool = False
+    size: int | None = None
+    mtime: int | None = None
+    dir: DirList | None = None
 
 def make_dir_data(root):
     if len(root) == 2:

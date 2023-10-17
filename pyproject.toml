@@ -14,9 +14,11 @@ authors = [
 classifiers = [
 ]
 dependencies = [
+    "argon2-cffi",
     "msgspec",
     "pathvalidate",
     "sanic",
+    "tomli_w",
     "watchdog",
 ]
 

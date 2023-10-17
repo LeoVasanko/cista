@@ -1,20 +1,28 @@
 import asyncio
 import os
 import unicodedata
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from pathvalidate import sanitize_filepath
 
+from . import config
 from .asynclink import AsyncLink
 from .lrucache import LRUCache
 
-ROOT = Path(os.environ.get("STORAGE", Path.cwd()))
+ROOT = config.config.path
+print("Serving", ROOT)
 
-def sanitize_filename(filename):
+def fuid(stat) -> str:
+    """Unique file ID. Stays the same on renames and modification."""
+    return config.derived_secret("filekey-inode", stat.st_dev, stat.st_ino).hex()
+
+def sanitize_filename(filename: str) -> str:
     filename = unicodedata.normalize("NFC", filename)
+    # UNIX filenames can contain backslashes but for compatibility we replace them with dashes
+    filename = filename.replace("\\", "-")
     filename = sanitize_filepath(filename)
-    filename = filename.replace("/", "-")
-    return filename
+    filename = filename.strip("/")
+    return PurePosixPath(filename).as_posix()
 
 class File:
     def __init__(self, filename):
