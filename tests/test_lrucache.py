@@ -1,7 +1,10 @@
-import pytest
-from unittest.mock import Mock
 from time import sleep
+from unittest.mock import Mock
+
+import pytest
+
 from cista.lrucache import LRUCache  # Replace with actual import
+
 
 def mock_open(key):
     mock = Mock()

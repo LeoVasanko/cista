@@ -8,13 +8,12 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from . import config
-from .fileio import ROOT
 from .protocol import DirEntry, FileEntry, UpdateEntry
 
 secret = secrets.token_bytes(8)
 pubsub = {}
 
-def walk(path: Path = ROOT) -> DirEntry | FileEntry | None:
+def walk(path: Path) -> DirEntry | FileEntry | None:
     try:
         s = path.stat()
         mtime = int(s.st_mtime)
@@ -34,8 +33,9 @@ def walk(path: Path = ROOT) -> DirEntry | FileEntry | None:
         print("OS error walking path", path, e)
         return None
 
-tree = {"": walk()}
+tree = None
 tree_lock = threading.Lock()
+rootpath = None
 
 def refresh():
     root = tree[""]
@@ -44,7 +44,7 @@ def refresh():
     ]}).decode()
 
 def update(relpath: PurePosixPath, loop):
-    new = walk(ROOT / relpath)
+    new = walk(rootpath / relpath)
     with tree_lock:
         msg = update_internal(relpath, new)
         print(msg)
@@ -102,11 +102,16 @@ async def broadcast(msg):
 def register(app, url):
     @app.before_server_start
     async def start_watcher(app, loop):
+        global tree, rootpath
+        config.load_config()
+        rootpath = config.config.path
+        # Pseudo nameless root entry to ease updates
+        tree = {"": walk(rootpath)}
         class Handler(FileSystemEventHandler):
             def on_any_event(self, event):
-                update(Path(event.src_path).relative_to(ROOT), loop)
+                update(Path(event.src_path).relative_to(rootpath), loop)
         app.ctx.observer = Observer()
-        app.ctx.observer.schedule(Handler(), str(ROOT), recursive=True)
+        app.ctx.observer.schedule(Handler(), str(rootpath), recursive=True)
         app.ctx.observer.start()
 
     @app.after_server_stop

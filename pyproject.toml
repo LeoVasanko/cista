@@ -9,12 +9,13 @@ description = "Dropbox-like file server with modern web interface"
 readme = "README.md"
 license = ""
 authors = [
-    { name = "Vasanko lda" },
+    { name = "Vasanko" },
 ]
 classifiers = [
 ]
 dependencies = [
     "argon2-cffi",
+    "docopt",
     "msgspec",
     "pathvalidate",
     "pyjwt",
@@ -26,8 +27,11 @@ dependencies = [
 [project.urls]
 Homepage = ""
 
-[tool.hatch]
-version.source = "vcs"
+[project.scripts]
+cista = "cista.__main__:main"
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build]
 hooks.vcs.version-file = "cista/_version.py"

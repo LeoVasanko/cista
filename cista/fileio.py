@@ -9,8 +9,6 @@ from . import config
 from .asynclink import AsyncLink
 from .lrucache import LRUCache
 
-ROOT = config.config.path
-print("Serving", ROOT)
 
 def fuid(stat) -> str:
     """Unique file ID. Stays the same on renames and modification."""
@@ -26,7 +24,7 @@ def sanitize_filename(filename: str) -> str:
 
 class File:
     def __init__(self, filename):
-        self.path = ROOT / filename
+        self.path = config.config.path / filename
         self.fd = None
         self.writable = False
 

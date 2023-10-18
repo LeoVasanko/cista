@@ -10,7 +10,8 @@ import msgspec
 
 
 class Config(msgspec.Struct):
-    path: Path = Path.cwd()
+    path: Path
+    listen: str
     secret: str = secrets.token_hex(12)
     public: bool = False
     users: dict[str, User] = {}
@@ -26,7 +27,8 @@ class Link(msgspec.Struct, omit_defaults=True):
     creator: str = ""
     expires: int = 0
 
-config = Config()
+config = None
+conffile = Path.home() / ".local/share/cista/db.toml"
 
 def derived_secret(*params, len=8) -> bytes:
     """Used to derive secret keys from the main secret"""
@@ -51,10 +53,10 @@ def dec_hook(typ, obj):
         return Path(obj)
     raise TypeError
 
-conffile = Path.cwd() / ".cista.toml"
-
 def config_update(modify):
     global config
+    if not conffile.exists():
+        conffile.parent.mkdir(parents=True, exist_ok=True)
     tmpname = conffile.with_suffix(".tmp")
     try:
         f = tmpname.open("xb")
@@ -68,8 +70,12 @@ def config_update(modify):
             old = conffile.read_bytes()
             c = msgspec.toml.decode(old, type=Config, dec_hook=dec_hook)
         except FileNotFoundError:
+            # No existing config file, make sure we have a folder...
+            confdir = conffile.parent
+            confdir.mkdir(parents=True, exist_ok=True)
+            confdir.chmod(0o700)
             old = b""
-            c = Config()  # Initialize with defaults
+            c = None
         c = modify(c)
         new = msgspec.toml.encode(c, enc_hook=enc_hook)
         if old == new:
@@ -98,12 +104,14 @@ def modifies_config(modify):
         return c
     return wrapper
 
-@modifies_config
-def droppy_import(config: Config) -> Config:
-    p = Path.home() / ".droppy/config"
-    cf = msgspec.json.decode((p / "config.json").read_bytes())
-    db = msgspec.json.decode((p / "db.json").read_bytes())
-    return msgspec.convert(cf | db, Config)
+def load_config():
+    global config
+    config = msgspec.toml.decode(conffile.read_bytes(), type=Config, dec_hook=dec_hook)
 
-# Load/initialize config file
-print(conffile, config_update(lambda c: c))
+@modifies_config
+def update_config(config: Config, changes: dict) -> Config:
+    """Create/update the config with new values, respecting changes done by others."""
+    # Encode into dict, update values with new, convert to Config
+    settings = {} if config is None else msgspec.to_builtins(config, enc_hook=enc_hook)
+    settings.update(changes)
+    return msgspec.convert(settings, Config, dec_hook=dec_hook)

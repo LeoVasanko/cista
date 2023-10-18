@@ -8,8 +8,7 @@ import msgspec
 from html5tagger import Document
 from sanic import Blueprint, html, json, redirect
 
-from . import session
-from .config import User, config
+from . import config, session
 
 _argon = argon2.PasswordHasher()
 _droppyhash = re.compile(r'^([a-f0-9]{64})\$([a-f0-9]{8})$')
@@ -21,7 +20,7 @@ def login(username: str, password: str):
     un = _pwnorm(username)
     pw = _pwnorm(password)
     try:
-        u = config.users[un.decode()]
+        u = config.config.users[un.decode()]
     except KeyError:
         raise ValueError("Invalid username")
     # Verify password
@@ -44,12 +43,12 @@ def login(username: str, password: str):
             need_rehash = True
     # Login successful
     if need_rehash:
-        u.set_password(password)
+        set_password(u, password)
     now = int(time())
     u.lastSeen = now
     return u
 
-def set_password(user: User, password: str):
+def set_password(user: config.User, password: str):
     user.hash = _argon.hash(_pwnorm(password))
 
 class LoginResponse(msgspec.Struct):
@@ -90,7 +89,6 @@ async def login_post(request):
         username = request.json["username"]
         password = request.json["password"]
     else:
-        print(request.form)
         username = request.form["username"][0]
         password = request.form["password"][0]
     if not username or not password:
@@ -105,7 +103,7 @@ async def login_post(request):
         })
     else:
         res = redirect("/")
-        res.cookies.add_cookie("flash", "Logged in",     host_prefix=True, max_age=5)
+        res.cookies.add_cookie("flash", "Logged in", host_prefix=True, max_age=5)
     session.create(res, username)
     return res
 
@@ -113,5 +111,5 @@ async def login_post(request):
 async def logout_post(request):
     res = redirect("/")
     session.delete(res)
-    res.cookies.add_cookie("flash", "Logged out",host_prefix=True, max_age=5)
+    res.cookies.add_cookie("flash", "Logged out", host_prefix=True, max_age=5)
     return res

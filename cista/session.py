@@ -4,12 +4,12 @@ import jwt
 
 from .config import derived_secret
 
-session_secret = derived_secret("session")
+session_secret = lambda: derived_secret("session")
 max_age = 60  # Seconds since last login
 
 def get(request):
     try:
-        return jwt.decode(request.cookies.s, session_secret, algorithms=["HS256"])
+        return jwt.decode(request.cookies.s, session_secret(), algorithms=["HS256"])
     except Exception as e:
         s = None
         return False if "s" in request.cookies else None
@@ -20,12 +20,12 @@ def create(res, username, **kwargs):
         "username": username,
         **kwargs,
     }
-    s = jwt.encode(data, session_secret)
+    s = jwt.encode(data, session_secret())
     res.cookies.add_cookie("s", s, host_prefix=True, httponly=True, max_age=max_age)
 
 def update(res, s, **kwargs):
     s.update(kwargs)
-    s = jwt.encode(s, session_secret)
+    s = jwt.encode(s, session_secret())
     res.cookies.add_cookie("s", s, host_prefix=True, httponly=True, max_age=max(1, s["exp"] - int(time())))
 
 def delete(res):

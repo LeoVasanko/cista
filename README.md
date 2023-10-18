@@ -2,9 +2,7 @@
 
 Run directly from repository with Hatch (or use pip install as usual):
 ```sh
-hatch run sanic cista --reload --dev
+hatch run cista -l :3000 /path/to/files
 ```
 
-Configuration file is created `.cista.toml` in current directory, which is also shared by default. Edit while the server is not running to set share path and other parameters.
-
-No authentication yet, so implement access control externally or be careful with your files.
+Settings incl. these arguments are stored to config file on the first startup and later `hatch run cista` is sufficient. If the `cista` script is missing, consider `pip install -e .` (within `hatch shell`) or some other trickery (known issue with installs made prior to adding the startup script).

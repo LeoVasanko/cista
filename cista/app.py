@@ -6,10 +6,9 @@ from sanic import Sanic, redirect
 from sanic.log import logger
 from sanic.response import html
 
-from . import session, watching
+from . import config, session, watching
 from .auth import authbp
-from .config import config
-from .fileio import ROOT, FileServer
+from .fileio import FileServer
 from .protocol import ErrorMsg, FileRange, StatusMsg
 
 app = Sanic("cista")
@@ -22,6 +21,9 @@ def asend(ws, msg):
 
 @app.before_server_start
 async def start_fileserver(app, _):
+    config.load_config()  # Main process may have loaded it but we haven't
+    app.static("/files", config.config.path, use_content_range=True, stream_large_files=True, directory_view=True)
+
     await fileserver.start()
 
 @app.after_server_stop
@@ -30,8 +32,7 @@ async def stop_fileserver(app, _):
 
 @app.get("/")
 async def index_page(request):
-    s = config.public or session.get(request)
-    print("Main session", s)
+    s = config.config.public or session.get(request)
     if not s:
         return redirect("/login")
     index = files("cista").joinpath("static", "index.html").read_text()
@@ -39,8 +40,6 @@ async def index_page(request):
     if flash:
         index += str(E.div(flash, id="flash"))
     return html(index)
-
-app.static("/files", ROOT, use_content_range=True, stream_large_files=True, directory_view=True)
 
 @app.websocket('/api/upload')
 async def upload(request, ws):
