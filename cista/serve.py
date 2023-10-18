@@ -17,6 +17,8 @@ def run(dev=False):
         # Run plain HTTP redirect/acme server on port 80
         from . import httpredir
         httpredir.app.prepare(port=80, motd=False)
+        domain = opts["host"]
+        opts["ssl"] = str(config.conffile.parent / domain)
     app.prepare(**opts, motd=False, dev=dev, auto_reload=dev)
     Sanic.serve()
 
@@ -27,7 +29,7 @@ def parse_listen(listen):
             raise ValueError(f"Directory for unix socket does not exist: {unix.parent}/")
         return "http://localhost", {"unix": unix}
     elif re.fullmatch(r"(\w+(-\w+)*\.)+\w{2,}", listen, re.UNICODE):
-        return f"https://{listen}", {"host": listen, "ssl": True}
+        return f"https://{listen}", {"host": listen, "port": 443, "ssl": True}
     else:
         try:
             addr, _port = listen.split(":", 1)
