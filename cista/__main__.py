@@ -4,7 +4,7 @@ from pathlib import Path
 
 from docopt import docopt
 
-from . import app, config, droppy, serve, httpredir
+from . import app, config, droppy, httpredir, pwgen, serve
 from ._version import version
 
 app, httpredir.app   # Needed for Sanic multiprocessing
@@ -13,6 +13,7 @@ doc = f"""Cista {version} - A file storage for the web.
 
 Usage:
   cista [-c <confdir>] [-l <host>] [--import-droppy] [--dev] [<path>]
+  cista [-c <confdir>] --user <name> [--privileged] [--password]
 
 Options:
   -c CONFDIR        Custom config directory
@@ -26,6 +27,11 @@ Options:
 
 Listen address, path and imported options are preserved in config, and only
 custom config dir and dev mode need to be specified on subsequent runs.
+
+User management:
+  --user NAME       Create or modify user
+  --privileged      Give the user full admin rights
+  --password        Reset password
 """
 
 def main():
@@ -41,6 +47,8 @@ def main():
 
 def _main():
     args = docopt(doc)
+    if args["--user"]:
+        return _user(args)
     listen = args["-l"]
     # Validate arguments first
     if args["<path>"]:
@@ -49,15 +57,7 @@ def _main():
             raise ValueError(f"No such directory: {path}")
     else:
         path = None
-    if args["-c"]:
-        # Custom config directory
-        confdir = Path(args["-c"]).resolve()
-        if confdir.exists() and not confdir.is_dir():
-            if confdir.name != config.conffile.name:
-                raise ValueError("Config path is not a directory")
-            # Accidentally pointed to the cista.toml, use parent
-            confdir = confdir.parent
-        config.conffile = config.conffile.with_parent(confdir)
+    _confdir(args)
     exists = config.conffile.exists()
     import_droppy = args["--import-droppy"]
     necessary_opts = exists or import_droppy or path and listen
@@ -87,6 +87,41 @@ def _main():
     print(f"Serving {config.config.path} at {url}{extra}")
     # Run the server
     serve.run(dev=dev)
+
+def _confdir(args):
+    if args["-c"]:
+        # Custom config directory
+        confdir = Path(args["-c"]).resolve()
+        if confdir.exists() and not confdir.is_dir():
+            if confdir.name != config.conffile.name:
+                raise ValueError("Config path is not a directory")
+            # Accidentally pointed to the cista.toml, use parent
+            confdir = confdir.parent
+        config.conffile = config.conffile.with_parent(confdir)
+
+def _user(args):
+    _confdir(args)
+    config.load_config()
+    name = args["--user"]
+    if not name or not name.isidentifier():
+        raise ValueError("Invalid username")
+    config.load_config()
+    u = config.config.users.get(name)
+    info = f"User {name}" if u else f"New user {name}"
+    changes = {}
+    oldadmin = u and u.privileged
+    if args["--privileged"]:
+        changes["privileged"] = True
+        info += " (already admin)" if oldadmin else " (made admin)"
+    else:
+        info += " (admin)" if oldadmin else ""
+    if args["--password"] or not u:
+        changes["password"] = pw = pwgen.generate()
+        info += f"\n  Password: {pw}"
+    res = config.update_user(args["--user"], changes)
+    print(info)
+    if res == "read":
+        print("  No changes")
 
 if __name__ == "__main__":
     sys.exit(main())

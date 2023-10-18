@@ -109,9 +109,34 @@ def load_config():
     config = msgspec.toml.decode(conffile.read_bytes(), type=Config, dec_hook=dec_hook)
 
 @modifies_config
-def update_config(config: Config, changes: dict) -> Config:
+def update_config(conf: Config, changes: dict) -> Config:
     """Create/update the config with new values, respecting changes done by others."""
     # Encode into dict, update values with new, convert to Config
-    settings = {} if config is None else msgspec.to_builtins(config, enc_hook=enc_hook)
+    settings = {} if conf is None else msgspec.to_builtins(conf, enc_hook=enc_hook)
     settings.update(changes)
     return msgspec.convert(settings, Config, dec_hook=dec_hook)
+
+@modifies_config
+def update_user(conf: Config, name: str, changes: dict) -> Config:
+    """Create/update a user with new values, respecting changes done by others."""
+    # Encode into dict, update values with new, convert to Config
+    try:
+        u = conf.users[name].__copy__()
+    except KeyError:
+        u = User()
+    if "password" in changes:
+        from . import auth
+        auth.set_password(u, changes["password"])
+        del changes["password"]
+    udict = msgspec.to_builtins(u, enc_hook=enc_hook)
+    udict.update(changes)
+    settings = msgspec.to_builtins(conf, enc_hook=enc_hook)
+    settings["users"][name] = msgspec.convert(udict, User, dec_hook=dec_hook)
+    return msgspec.convert(settings, Config, dec_hook=dec_hook)
+
+@modifies_config
+def del_user(conf: Config, name: str) -> Config:
+    """Delete named user account."""
+    ret = conf.__copy__()
+    ret.users.pop(name)
+    return ret
