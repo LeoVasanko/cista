@@ -39,6 +39,9 @@ async def index_page(request):
     flash = request.cookies.flash
     if flash:
         index += str(E.div(flash, id="flash"))
+        res = html(index)
+        res.cookies.delete_cookie("flash")
+        return res
     return html(index)
 
 @app.websocket('/api/upload')
