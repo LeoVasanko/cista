@@ -4,10 +4,10 @@ from pathlib import Path
 
 from docopt import docopt
 
-from . import app, config, droppy, serve
+from . import app, config, droppy, serve, httpredir
 from ._version import version
 
-app   # Needed for Sanic multiprocessing
+app, httpredir.app   # Needed for Sanic multiprocessing
 
 doc = f"""Cista {version} - A file storage for the web.
 

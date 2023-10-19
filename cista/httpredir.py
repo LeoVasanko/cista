@@ -11,7 +11,7 @@ def redirect_everything_else(request, exception):
     return response.text("Bad Request. Please use HTTPS!", status=400)
 
 # ACME challenge for LetsEncrypt
-app.get("/.well-known/acme-challenge/<challenge>")
+@app.get("/.well-known/acme-challenge/<challenge>")
 async def letsencrypt(request, challenge):
     try:
         return response.text(acme_challenges[challenge])
