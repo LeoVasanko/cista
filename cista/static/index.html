@@ -54,9 +54,11 @@ function createWatchSocket() {
 createWatchSocket()
 
 function tree_update(msg) {
+  console.log("Tree update", msg)
   let node = files
   for (const elem of msg) {
     if (elem.deleted) {
+      const p = node.dir[elem.name].path
       delete node.dir[elem.name]
       delete flatfiles[p]
       break

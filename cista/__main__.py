@@ -52,7 +52,7 @@ def _main():
     listen = args["-l"]
     # Validate arguments first
     if args["<path>"]:
-        path = Path(args["<path>"])
+        path = Path(args["<path>"]).resolve()
         if not path.is_dir():
             raise ValueError(f"No such directory: {path}")
     else:

@@ -16,12 +16,12 @@ classifiers = [
 dependencies = [
     "argon2-cffi",
     "docopt",
+    "inotify",
     "msgspec",
     "pathvalidate",
     "pyjwt",
     "sanic",
     "tomli_w",
-    "watchdog",
 ]
 
 [project.urls]

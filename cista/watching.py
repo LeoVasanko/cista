@@ -1,16 +1,47 @@
 import asyncio
-import secrets
 import threading
+import time
 from pathlib import Path, PurePosixPath
+from socket import timeout
 
+import inotify.adapters
 import msgspec
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
 
 from . import config
 from .protocol import DirEntry, FileEntry, UpdateEntry
 
 pubsub = {}
+tree = {"": None}
+tree_lock = threading.Lock()
+rootpath = None
+quit = False
+modified_flags = "IN_CREATE", "IN_DELETE", "IN_DELETE_SELF", "IN_MODIFY", "IN_MOVE_SELF", "IN_MOVED_FROM", "IN_MOVED_TO"
+
+def watcher_thread(loop):
+    while True:
+        i = inotify.adapters.InotifyTree(rootpath.as_posix())
+        old = refresh() if tree[""] else None
+        with tree_lock:
+            # Initialize the tree from filesystem
+            tree[""] = walk(rootpath)
+        msg = refresh()
+        if msg != old:
+            asyncio.run_coroutine_threadsafe(broadcast(msg), loop)
+
+        # The watching is not entirely reliable, so do a full refresh every minute
+        refreshdl = time.monotonic() + 60.0
+
+        for event in i.event_gen():
+            if quit: return
+            if time.monotonic() > refreshdl: break
+            if event is None: continue
+            _, flags, path, filename = event
+            if not any(f in modified_flags for f in flags):
+                continue
+            path = PurePosixPath(path) / filename
+            #print(path, flags)
+            update(path.relative_to(rootpath), loop)
+        i = None  # Free the inotify object
 
 def walk(path: Path) -> DirEntry | FileEntry | None:
     try:
@@ -32,10 +63,6 @@ def walk(path: Path) -> DirEntry | FileEntry | None:
         print("OS error walking path", path, e)
         return None
 
-tree = {"": None}
-tree_lock = threading.Lock()
-rootpath = None
-
 def refresh():
     root = tree[""]
     return msgspec.json.encode({"update": [
@@ -49,7 +76,6 @@ def update(relpath: Path, loop):
         update = update_internal(relpath, new)
         if not update: return  # No changes
         msg = msgspec.json.encode({"update": update}).decode()
-        print(msg)
         asyncio.run_coroutine_threadsafe(broadcast(msg), loop)
 
 def update_internal(relpath: PurePosixPath, new: DirEntry | FileEntry | None) -> list[UpdateEntry]:
@@ -88,7 +114,6 @@ def update_internal(relpath: PurePosixPath, new: DirEntry | FileEntry | None) ->
             u.mtime = entry.mtime = mt
         update.append(u)
     # The last element is the one that changed
-    print([e[0] for e in elems])
     name, entry = elems[-1]
     parent = elems[-2][1] if len(elems) > 1 else tree
     u = UpdateEntry(name)
@@ -113,27 +138,24 @@ def register(app, url):
     async def start_watcher(app, loop):
         global rootpath
         config.load_config()
-        # Initialize the tree from filesystem
         rootpath = config.config.path
-        tree[""] = walk(rootpath)
-        class Handler(FileSystemEventHandler):
-            def on_any_event(self, event):
-                update(Path(event.src_path).relative_to(rootpath), loop)
-        app.ctx.observer = Observer()
-        app.ctx.observer.schedule(Handler(), str(rootpath), recursive=True)
-        app.ctx.observer.start()
+        app.ctx.watcher = threading.Thread(target=watcher_thread, args=[loop])
+        app.ctx.watcher.start()
 
     @app.after_server_stop
     async def stop_watcher(app, _):
-        app.ctx.observer.stop()
-        app.ctx.observer.join()
+        global quit
+        quit = True
+        app.ctx.watcher.join()
 
     @app.websocket(url)
     async def watch(request, ws):
         try:
             with tree_lock:
                 q = pubsub[ws] = asyncio.Queue()
+                # Init with full tree
                 await ws.send(refresh())
+            # Send updates
             while True:
                 await ws.send(await q.get())
         finally:
