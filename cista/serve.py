@@ -19,7 +19,7 @@ def run(dev=False):
         httpredir.app.prepare(port=80, motd=False)
         domain = opts["host"]
         opts["ssl"] = str(config.conffile.parent / domain)
-    app.prepare(**opts, motd=False, dev=dev, auto_reload=dev)
+    app.prepare(**opts, motd=False, dev=dev, auto_reload=dev, access_log=True)
     Sanic.serve()
 
 def parse_listen(listen):

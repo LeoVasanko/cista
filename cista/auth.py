@@ -6,7 +6,7 @@ from unicodedata import normalize
 import argon2
 import msgspec
 from html5tagger import Document
-from sanic import Blueprint, html, json, redirect
+from sanic import BadRequest, Blueprint, html, json, redirect
 
 from . import config, session
 
@@ -74,6 +74,7 @@ async def login_page(request):
                 doc.input(type="submit", value=f"Logout {name}")
     flash = request.cookies.flash
     if flash:
+        print("flash", flash)
         doc.p(flash)
     res = html(doc)
     if flash:
@@ -85,15 +86,30 @@ async def login_page(request):
 @authbp.post("/login")
 async def login_post(request):
     json_format = request.headers.content_type == "application/json"
-    if json_format:
-        username = request.json["username"]
-        password = request.json["password"]
-    else:
-        username = request.form["username"][0]
-        password = request.form["password"][0]
-    if not username or not password:
-        raise ValueError("Missing username or password")
-    user = login(username, password)
+    try:
+        if json_format:
+            username = request.json["username"]
+            password = request.json["password"]
+        else:
+            username = request.form["username"][0]
+            password = request.form["password"][0]
+        if not username or not password:
+            raise KeyError
+    except KeyError:
+        raise BadRequest("Missing username or password")
+    try:
+        user = login(username, password)
+    except ValueError as e:
+        if json_format:
+            res = json({
+                "status": "error",
+                "error": str(e),
+            })
+        else:
+            res = redirect("/login")
+            res.cookies.add_cookie("flash", str(e), max_age=5)
+            print("Login error:", res.cookies)
+        return res
 
     if json_format:
         res = json({
@@ -103,7 +119,7 @@ async def login_post(request):
         })
     else:
         res = redirect("/")
-        res.cookies.add_cookie("flash", "Logged in", host_prefix=True, max_age=5)
+        res.cookies.add_cookie("flash", "Logged in", max_age=5)
     session.create(res, username)
     return res
 
@@ -111,5 +127,5 @@ async def login_post(request):
 async def logout_post(request):
     res = redirect("/")
     session.delete(res)
-    res.cookies.add_cookie("flash", "Logged out", host_prefix=True, max_age=5)
+    res.cookies.add_cookie("flash", "Logged out", max_age=5)
     return res

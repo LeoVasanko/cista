@@ -21,12 +21,12 @@ def create(res, username, **kwargs):
         **kwargs,
     }
     s = jwt.encode(data, session_secret())
-    res.cookies.add_cookie("s", s, host_prefix=True, httponly=True, max_age=max_age)
+    res.cookies.add_cookie("s", s, httponly=True, max_age=max_age)
 
 def update(res, s, **kwargs):
     s.update(kwargs)
     s = jwt.encode(s, session_secret())
-    res.cookies.add_cookie("s", s, host_prefix=True, httponly=True, max_age=max(1, s["exp"] - int(time())))
+    res.cookies.add_cookie("s", s, httponly=True, max_age=max(1, s["exp"] - int(time())))
 
 def delete(res):
-    res.cookies.delete_cookie("s", host_prefix=True)
+    res.cookies.delete_cookie("s")
