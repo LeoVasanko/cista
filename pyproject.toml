@@ -30,6 +30,11 @@ Homepage = ""
 [project.scripts]
 cista = "cista.__main__:main"
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
 [tool.hatch.version]
 source = "vcs"
 
@@ -42,4 +47,14 @@ version_tuple = {version_tuple!r}
 """
 targets.sdist.include = [
     "/cista",
+]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+    "--verbosity=-1",
+    "-p no:warnings",
+]
+testpaths = [
+    "tests",
 ]

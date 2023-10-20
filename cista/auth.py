@@ -6,7 +6,7 @@ from unicodedata import normalize
 import argon2
 import msgspec
 from html5tagger import Document
-from sanic import BadRequest, Blueprint, html, json, redirect
+from sanic import BadRequest, Blueprint, Forbidden, html, json, redirect
 
 from . import config, session
 
@@ -64,18 +64,17 @@ async def login_page(request):
     with doc.div(id="login"):
         with doc.form(method="POST", autocomplete="on"):
             doc.h1("Login")
-            doc.input(name="username", placeholder="Username", autocomplete="username").br
-            doc.input(type="password", name="password", placeholder="Password", autocomplete="current-password").br
+            doc.input(name="username", placeholder="Username", autocomplete="username", required=True).br
+            doc.input(type="password", name="password", placeholder="Password", autocomplete="current-password", required=True).br
             doc.input(type="submit", value="Login")
         s = session.get(request)
         if s:
             name = s["username"]
             with doc.form(method="POST", action="/logout"):
                 doc.input(type="submit", value=f"Logout {name}")
-    flash = request.cookies.flash
+    flash = request.cookies.message
     if flash:
-        print("flash", flash)
-        doc.p(flash)
+        doc.dialog(flash, id="flash", open=True, style="position: fixed; top: 0; left: 0; width: 100%; opacity: .8")
     res = html(doc)
     if flash:
         res.cookies.delete_cookie("flash")
@@ -85,9 +84,8 @@ async def login_page(request):
 
 @authbp.post("/login")
 async def login_post(request):
-    json_format = request.headers.content_type == "application/json"
     try:
-        if json_format:
+        if request.headers.content_type == "application/json":
             username = request.json["username"]
             password = request.json["password"]
         else:
@@ -96,36 +94,28 @@ async def login_post(request):
         if not username or not password:
             raise KeyError
     except KeyError:
-        raise BadRequest("Missing username or password")
+        raise BadRequest("Missing username or password", context={"redirect": "/login"})
     try:
         user = login(username, password)
     except ValueError as e:
-        if json_format:
-            res = json({
-                "status": "error",
-                "error": str(e),
-            })
-        else:
-            res = redirect("/login")
-            res.cookies.add_cookie("flash", str(e), max_age=5)
-            print("Login error:", res.cookies)
-        return res
+        raise Forbidden(str(e), context={"redirect": "/login"})
 
-    if json_format:
-        res = json({
-            "status": "authenticated",
-            "user": username,
-            "privileged": user.privileged,
-        })
-    else:
+    if "text/html" in request.headers.accept:
         res = redirect("/")
-        res.cookies.add_cookie("flash", "Logged in", max_age=5)
+        session.flash(res, "Logged in")
+    else:
+        res = json({"data": {"username": username, "privileged": user.privileged}})
     session.create(res, username)
     return res
 
 @authbp.post("/logout")
 async def logout_post(request):
-    res = redirect("/")
+    s = request.ctx.session
+    msg = "Logged out" if s else "Not logged in"
+    if "text/html" in request.headers.accept:
+        res = redirect("/login")
+        res.cookies.add_cookie("flash", msg, max_age=5)
+    else:
+        res = json({"message": msg})
     session.delete(res)
-    res.cookies.add_cookie("flash", "Logged out", max_age=5)
     return res

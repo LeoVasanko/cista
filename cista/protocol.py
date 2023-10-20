@@ -1,8 +1,66 @@
 from __future__ import annotations
+import shutil
 
-from typing import Dict, Tuple, Union
+from sanic import BadRequest
+from cista import config
+from cista.fileio import sanitize_filename
 
 import msgspec
+
+## Control commands
+
+class ControlBase(msgspec.Struct, tag_field="op", tag=str.lower):
+    def __call__(self):
+        raise NotImplementedError
+
+class MkDir(ControlBase):
+    path: str
+    def __call__(self):
+        path = config.config.path / sanitize_filename(self.path)
+        path.mkdir(parents=False, exist_ok=False)
+
+class Rename(ControlBase):
+    path: str
+    to: str
+    def __call__(self):
+        to = sanitize_filename(self.to)
+        if "/" in to:
+            raise BadRequest("Rename 'to' name should only contain filename, not path")
+        path = config.config.path / sanitize_filename(self.path)
+        path.rename(path.with_name(to))
+
+class Rm(ControlBase):
+    sel: list[str]
+    def __call__(self):
+        root = config.config.path
+        sel = [root / sanitize_filename(p) for p in self.sel]
+        for p in sel:
+            shutil.rmtree(p, ignore_errors=True)
+
+class Mv(ControlBase):
+    sel: list[str]
+    dst: str
+    def __call__(self):
+        root = config.config.path
+        sel = [root / sanitize_filename(p) for p in self.sel]
+        dst = root / sanitize_filename(self.dst)
+        if not dst.is_dir():
+            raise BadRequest("The destination must be a directory")
+        for p in sel:
+            shutil.move(p, dst)
+
+class Cp(ControlBase):
+    sel: list[str]
+    dst: str
+    def __call__(self):
+        root = config.config.path
+        sel = [root / sanitize_filename(p) for p in self.sel]
+        dst = root / sanitize_filename(self.dst)
+        if not dst.is_dir():
+            raise BadRequest("The destination must be a directory")
+        for p in sel:
+            # Note: copies as dst rather than in dst unless name is appended.
+            shutil.copytree(p, dst / p.name, dirs_exist_ok=True, ignore_dangling_symlinks=True)
 
 ## File uploads and downloads
 
@@ -52,7 +110,7 @@ class DirEntry(msgspec.Struct):
             if k != "dir"
         }
 
-DirList = dict[str, Union[FileEntry, DirEntry]]
+DirList = dict[str, FileEntry | DirEntry]
 
 
 class UpdateEntry(msgspec.Struct, omit_defaults=True):

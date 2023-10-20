@@ -5,7 +5,7 @@ from pathlib import Path, PurePosixPath
 
 from pathvalidate import sanitize_filepath
 
-from . import config
+from . import config, protocol
 from .asynclink import AsyncLink
 from .lrucache import LRUCache
 
@@ -80,6 +80,8 @@ class FileServer:
         try:
             for req in slink:
                 with req as (command, *args):
+                    if command == "control":
+                        self.control(*args)
                     if command == "upload":
                         req.set_result(self.upload(*args))
                     elif command == "download":

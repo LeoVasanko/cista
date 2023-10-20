@@ -30,3 +30,10 @@ def update(res, s, **kwargs):
 
 def delete(res):
     res.cookies.delete_cookie("s")
+
+
+def flash(res, message: str | None):
+    if message is None:
+        res.cookies.delete_cookie("message")
+    else:
+        res.cookies.add_cookie("message", message, max_age=5)
