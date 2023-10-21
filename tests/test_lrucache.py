@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from cista.lrucache import LRUCache  # Replace with actual import
+from cista.util.lrucache import LRUCache  # Replace with actual import
 
 
 def mock_open(key):

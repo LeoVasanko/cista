@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 import shutil
 
+import msgspec
 from sanic import BadRequest
+
 from cista import config
 from cista.fileio import sanitize_filename
-
-import msgspec
 
 ## Control commands
 

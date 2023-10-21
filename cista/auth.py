@@ -8,7 +8,7 @@ import msgspec
 from html5tagger import Document
 from sanic import BadRequest, Blueprint, Forbidden, html, json, redirect
 
-from . import config, session
+from cista import config, session
 
 _argon = argon2.PasswordHasher()
 _droppyhash = re.compile(r'^([a-f0-9]{64})\$([a-f0-9]{8})$')

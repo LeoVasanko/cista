@@ -7,11 +7,10 @@ from sanic import Forbidden, Sanic, SanicException, errorpages
 from sanic.log import logger
 from sanic.response import html, json, redirect
 
-from . import config, session, watching
-from .auth import authbp
-from .fileio import FileServer
-from .protocol import ControlBase, ErrorMsg, FileRange, StatusMsg
-
+from cista import config, session, watching
+from cista.auth import authbp
+from cista.fileio import FileServer
+from cista.protocol import ControlBase, ErrorMsg, FileRange, StatusMsg
 
 app = Sanic("cista")
 fileserver = FileServer()

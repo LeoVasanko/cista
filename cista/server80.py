@@ -1,6 +1,6 @@
 from sanic import Sanic, exceptions, response
 
-app = Sanic("http_redirect")
+app = Sanic("server80")
 
 # Send all HTTP users to HTTPS
 @app.exception(exceptions.NotFound, exceptions.MethodNotSupported)

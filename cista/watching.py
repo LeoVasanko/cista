@@ -2,13 +2,12 @@ import asyncio
 import threading
 import time
 from pathlib import Path, PurePosixPath
-from socket import timeout
 
 import inotify.adapters
 import msgspec
 
-from . import config
-from .protocol import DirEntry, FileEntry, UpdateEntry
+from cista import config
+from cista.protocol import DirEntry, FileEntry, UpdateEntry
 
 pubsub = {}
 tree = {"": None}

@@ -1,13 +1,13 @@
-import re
 import sys
 from pathlib import Path
 
 from docopt import docopt
 
-from . import app, config, droppy, httpredir, pwgen, serve
-from ._version import version
+from cista import app, config, droppy, serve, server80
+from cista._version import version
+from cista.util import pwgen
 
-app, httpredir.app   # Needed for Sanic multiprocessing
+app, server80.app   # Needed for Sanic multiprocessing
 
 doc = f"""Cista {version} - A file storage for the web.
 

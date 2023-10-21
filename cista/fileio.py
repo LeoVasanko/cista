@@ -1,13 +1,13 @@
 import asyncio
 import os
 import unicodedata
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 
 from pathvalidate import sanitize_filepath
 
-from . import config, protocol
-from .asynclink import AsyncLink
-from .lrucache import LRUCache
+from cista import config
+from cista.util.asynclink import AsyncLink
+from cista.util.lrucache import LRUCache
 
 
 def fuid(stat) -> str:
