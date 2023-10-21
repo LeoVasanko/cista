@@ -11,3 +11,15 @@ Create your user account:
 ```sh
 hatch run cista --user admin --privileged
 ```
+
+## Build frontend
+
+Prebuilt frontend is provided in repository but for any changes it will need to be manually rebuilt:
+
+```sh
+cd cista-front
+npm install
+npm run build
+```
+
+This will place the front in `cista/wwwroot` from where the backend server delivers it, and that also gets included in the Python package built via `hatch build`.

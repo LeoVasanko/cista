@@ -3,14 +3,17 @@ from importlib.resources import files
 
 import msgspec
 from html5tagger import E
-from sanic import Forbidden, Sanic, SanicException, errorpages
+from sanic import Forbidden, Sanic, SanicException, errorpages, raw
 from sanic.log import logger
 from sanic.response import html, json, redirect
+import mimetypes
 
 from cista import config, session, watching
+from cista.util import filename
 from cista.auth import authbp
 from cista.fileio import FileServer
 from cista.protocol import ControlBase, ErrorMsg, FileRange, StatusMsg
+from urllib.parse import unquote
 
 app = Sanic("cista")
 fileserver = FileServer()
@@ -62,19 +65,15 @@ async def start_fileserver(app, _):
 async def stop_fileserver(app, _):
     await fileserver.stop()
 
-@app.get("/")
-async def index_page(request):
-    s = config.config.public or session.get(request)
-    if not s:
-        return redirect("/login")
-    index = files("cista").joinpath("static", "index.html").read_text()
-    flash = request.cookies.message
-    if flash:
-        index += str(E.dialog(flash, id="flash", open=True, style="position: fixed; top: 0; left: 0; width: 100%; opacity: .8"))
-        res = html(index)
-        session.flash(res, None)
-        return res
-    return html(index)
+@app.get("/<path:path>")
+async def wwwroot(request, path=""):
+    name = filename.sanitize(unquote(path)) if path else "index.html"
+    try:
+        index = files("cista").joinpath("wwwroot", name).read_bytes()
+    except OSError as e:
+        raise NotFound(f"File not found: /{path}", extra={"name": name, "exception": repr(e)})
+    mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    return raw(index, content_type=mime)
 
 @app.websocket('/api/upload')
 async def upload(request, ws):

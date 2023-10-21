@@ -6,7 +6,7 @@ import msgspec
 from sanic import BadRequest
 
 from cista import config
-from cista.fileio import sanitize_filename
+from cista.util import filename
 
 ## Control commands
 
@@ -17,24 +17,24 @@ class ControlBase(msgspec.Struct, tag_field="op", tag=str.lower):
 class MkDir(ControlBase):
     path: str
     def __call__(self):
-        path = config.config.path / sanitize_filename(self.path)
+        path = config.config.path / filename.sanitize(self.path)
         path.mkdir(parents=False, exist_ok=False)
 
 class Rename(ControlBase):
     path: str
     to: str
     def __call__(self):
-        to = sanitize_filename(self.to)
+        to = filename.sanitize(self.to)
         if "/" in to:
             raise BadRequest("Rename 'to' name should only contain filename, not path")
-        path = config.config.path / sanitize_filename(self.path)
+        path = config.config.path / filename.sanitize(self.path)
         path.rename(path.with_name(to))
 
 class Rm(ControlBase):
     sel: list[str]
     def __call__(self):
         root = config.config.path
-        sel = [root / sanitize_filename(p) for p in self.sel]
+        sel = [root / filename.sanitize(p) for p in self.sel]
         for p in sel:
             shutil.rmtree(p, ignore_errors=True)
 
@@ -43,8 +43,8 @@ class Mv(ControlBase):
     dst: str
     def __call__(self):
         root = config.config.path
-        sel = [root / sanitize_filename(p) for p in self.sel]
-        dst = root / sanitize_filename(self.dst)
+        sel = [root / filename.sanitize(p) for p in self.sel]
+        dst = root / filename.sanitize(self.dst)
         if not dst.is_dir():
             raise BadRequest("The destination must be a directory")
         for p in sel:
@@ -55,8 +55,8 @@ class Cp(ControlBase):
     dst: str
     def __call__(self):
         root = config.config.path
-        sel = [root / sanitize_filename(p) for p in self.sel]
-        dst = root / sanitize_filename(self.dst)
+        sel = [root / filename.sanitize(p) for p in self.sel]
+        dst = root / filename.sanitize(self.dst)
         if not dst.is_dir():
             raise BadRequest("The destination must be a directory")
         for p in sel:

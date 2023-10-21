@@ -3,9 +3,8 @@ import os
 import unicodedata
 from pathlib import PurePosixPath
 
-from pathvalidate import sanitize_filepath
-
 from cista import config
+from cista.util import filename
 from cista.util.asynclink import AsyncLink
 from cista.util.lrucache import LRUCache
 
@@ -13,14 +12,6 @@ from cista.util.lrucache import LRUCache
 def fuid(stat) -> str:
     """Unique file ID. Stays the same on renames and modification."""
     return config.derived_secret("filekey-inode", stat.st_dev, stat.st_ino).hex()
-
-def sanitize_filename(filename: str) -> str:
-    filename = unicodedata.normalize("NFC", filename)
-    # UNIX filenames can contain backslashes but for compatibility we replace them with dashes
-    filename = filename.replace("\\", "-")
-    filename = sanitize_filepath(filename)
-    filename = filename.strip("/")
-    return PurePosixPath(filename).as_posix()
 
 class File:
     def __init__(self, filename):
@@ -92,12 +83,12 @@ class FileServer:
             self.cache.close()
 
     def upload(self, name, pos, data, file_size):
-        name = sanitize_filename(name)
+        name = filename.sanitize(name)
         f = self.cache[name]
         f.write(pos, data, file_size=file_size)
         return len(data)
 
     def download(self, name, start, end):
-        name = sanitize_filename(name)
+        name = filename.sanitize(name)
         f = self.cache[name]
         return f[start: end]

@@ -3,13 +3,13 @@ from pathlib import Path
 
 from docopt import docopt
 
+import cista
 from cista import app, config, droppy, serve, server80
-from cista._version import version
 from cista.util import pwgen
 
 app, server80.app   # Needed for Sanic multiprocessing
 
-doc = f"""Cista {version} - A file storage for the web.
+doc = f"""Cista {cista.__version__} - A file storage for the web.
 
 Usage:
   cista [-c <confdir>] [-l <host>] [--import-droppy] [--dev] [<path>]
