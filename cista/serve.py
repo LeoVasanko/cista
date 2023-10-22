@@ -4,7 +4,7 @@ from pathlib import Path
 
 from sanic import Sanic
 
-from cista import config
+from cista import config, server80
 
 
 def run(dev=False):
@@ -15,11 +15,10 @@ def run(dev=False):
     os.environ["SANIC_IGNORE_PRODUCTION_WARNING"] = "1"
     if opts.get("ssl"):
         # Run plain HTTP redirect/acme server on port 80
-        from . import server80
         server80.app.prepare(port=80, motd=False)
         domain = opts["host"]
-        opts["ssl"] = str(config.conffile.parent / domain)
-    app.prepare(**opts, motd=False, dev=dev, auto_reload=dev, access_log=True)
+        opts["ssl"] = str(config.conffile.parent / domain)  # type: ignore
+    app.prepare(**opts, motd=False, dev=dev, auto_reload=dev, access_log=True)  # type: ignore
     Sanic.serve()
 
 def parse_listen(listen):

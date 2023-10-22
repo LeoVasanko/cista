@@ -6,7 +6,8 @@ from unicodedata import normalize
 import argon2
 import msgspec
 from html5tagger import Document
-from sanic import BadRequest, Blueprint, Forbidden, html, json, redirect
+from sanic import Blueprint, html, json, redirect
+from sanic.exceptions import BadRequest, Forbidden, Unauthorized
 
 from cista import config, session
 
@@ -56,9 +57,18 @@ class LoginResponse(msgspec.Struct):
     privileged: bool = False
     error: str = ""
 
-authbp = Blueprint("auth")
+def verify(request, privileged=False):
+    """Raise Unauthorized or Forbidden if the request is not authorized"""
+    if privileged:
+        if request.ctx.user:
+            if request.ctx.user.privileged: return
+            raise Forbidden("Access Forbidden: Only for privileged users")
+    elif config.config.public or request.ctx.user: return
+    raise Unauthorized("Login required", "cookie", context={"redirect": "/login"})
 
-@authbp.get("/login")
+bp = Blueprint("auth")
+
+@bp.get("/login")
 async def login_page(request):
     doc = Document("Cista Login")
     with doc.div(id="login"):
@@ -82,7 +92,7 @@ async def login_page(request):
         session.delete(res)
     return res
 
-@authbp.post("/login")
+@bp.post("/login")
 async def login_post(request):
     try:
         if request.headers.content_type == "application/json":
@@ -108,7 +118,7 @@ async def login_post(request):
     session.create(res, username)
     return res
 
-@authbp.post("/logout")
+@bp.post("/logout")
 async def logout_post(request):
     s = request.ctx.session
     msg = "Logged out" if s else "Not logged in"

@@ -26,7 +26,8 @@ def create(res, username, **kwargs):
 def update(res, s, **kwargs):
     s.update(kwargs)
     s = jwt.encode(s, session_secret())
-    res.cookies.add_cookie("s", s, httponly=True, max_age=max(1, s["exp"] - int(time())))
+    max_age = max(1, s["exp"] - int(time()))  # type: ignore
+    res.cookies.add_cookie("s", s, httponly=True, max_age=max_age)
 
 def delete(res):
     res.cookies.delete_cookie("s")

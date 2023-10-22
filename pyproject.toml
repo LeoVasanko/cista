@@ -62,3 +62,8 @@ addopts = [
 testpaths = [
     "tests",
 ]
+
+[tool.isort]
+#src_paths = ["cista", "tests"]
+line_length = 120
+multi_line_output = 5

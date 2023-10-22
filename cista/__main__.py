@@ -7,7 +7,7 @@ import cista
 from cista import app, config, droppy, serve, server80
 from cista.util import pwgen
 
-app, server80.app   # Needed for Sanic multiprocessing
+del app, server80.app   # Only import needed, for Sanic multiprocessing
 
 doc = f"""Cista {cista.__version__} - A file storage for the web.
 

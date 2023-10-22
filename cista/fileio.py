@@ -30,6 +30,7 @@ class File:
         self.writable = True
 
     def write(self, pos, buffer, *, file_size=None):
+        assert self.fd is not None
         if not self.writable:
             # Create/open file
             self.open_rw()
@@ -39,6 +40,7 @@ class File:
         os.write(self.fd, buffer)
 
     def __getitem__(self, slice):
+        assert self.fd is not None
         if self.fd is None:
             self.open_ro()
         os.lseek(self.fd, slice.start, os.SEEK_SET)
@@ -71,8 +73,6 @@ class FileServer:
         try:
             for req in slink:
                 with req as (command, *args):
-                    if command == "control":
-                        self.control(*args)
                     if command == "upload":
                         req.set_result(self.upload(*args))
                     elif command == "download":

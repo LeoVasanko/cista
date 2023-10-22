@@ -1,6 +1,8 @@
-from pathvalidate import sanitize_filepath
 import unicodedata
 from pathlib import PurePosixPath
+
+from pathvalidate import sanitize_filepath
+
 
 def sanitize(filename: str) -> str:
     filename = unicodedata.normalize("NFC", filename)

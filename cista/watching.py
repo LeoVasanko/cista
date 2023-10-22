@@ -8,6 +8,7 @@ import msgspec
 
 from cista import config
 from cista.protocol import DirEntry, FileEntry, UpdateEntry
+from cista.util.apphelpers import websocket_wrapper
 
 pubsub = {}
 tree = {"": None}
@@ -132,30 +133,14 @@ async def broadcast(msg):
     for queue in pubsub.values():
         await queue.put_nowait(msg)
 
-def register(app, url):
-    @app.before_server_start
-    async def start_watcher(app, loop):
-        global rootpath
-        config.load_config()
-        rootpath = config.config.path
-        app.ctx.watcher = threading.Thread(target=watcher_thread, args=[loop])
-        app.ctx.watcher.start()
+async def start(app, loop):
+    global rootpath
+    config.load_config()
+    rootpath = config.config.path
+    app.ctx.watcher = threading.Thread(target=watcher_thread, args=[loop])
+    app.ctx.watcher.start()
 
-    @app.after_server_stop
-    async def stop_watcher(app, _):
-        global quit
-        quit = True
-        app.ctx.watcher.join()
-
-    @app.websocket(url)
-    async def watch(request, ws):
-        try:
-            with tree_lock:
-                q = pubsub[ws] = asyncio.Queue()
-                # Init with full tree
-                await ws.send(refresh())
-            # Send updates
-            while True:
-                await ws.send(await q.get())
-        finally:
-            del pubsub[ws]
+async def stop(app, loop):
+    global quit
+    quit = True
+    app.ctx.watcher.join()

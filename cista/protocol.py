@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from typing import Any
 
 import msgspec
 from sanic import BadRequest
@@ -71,14 +72,12 @@ class FileRange(msgspec.Struct):
     start: int
     end: int
 
-class ErrorMsg(msgspec.Struct):
-    error: str
-    req: FileRange
-
 class StatusMsg(msgspec.Struct):
     status: str
     req: FileRange
 
+class ErrorMsg(msgspec.Struct):
+    error: dict[str, Any]
 
 ## Directory listings
 
