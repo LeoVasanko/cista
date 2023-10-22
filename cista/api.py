@@ -77,8 +77,9 @@ async def watch(req, ws):
     try:
         with watching.tree_lock:
             q = watching.pubsub[ws] = asyncio.Queue()
-            # Init with full tree
-            await ws.send(watching.refresh())
+            # Init with disk usage and full tree
+            await ws.send(watching.format_du())
+            await ws.send(watching.format_tree())
         # Send updates
         while True:
             await ws.send(await q.get())

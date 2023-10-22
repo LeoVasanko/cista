@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 import threading
 import time
 from pathlib import Path, PurePosixPath
@@ -8,7 +9,6 @@ import msgspec
 
 from cista import config
 from cista.protocol import DirEntry, FileEntry, UpdateEntry
-from cista.util.apphelpers import websocket_wrapper
 
 pubsub = {}
 tree = {"": None}
@@ -16,15 +16,18 @@ tree_lock = threading.Lock()
 rootpath = None
 quit = False
 modified_flags = "IN_CREATE", "IN_DELETE", "IN_DELETE_SELF", "IN_MODIFY", "IN_MOVE_SELF", "IN_MOVED_FROM", "IN_MOVED_TO"
+disk_usage = None
 
 def watcher_thread(loop):
+    global disk_usage
+
     while True:
         i = inotify.adapters.InotifyTree(rootpath.as_posix())
-        old = refresh() if tree[""] else None
+        old = format_tree() if tree[""] else None
         with tree_lock:
             # Initialize the tree from filesystem
             tree[""] = walk(rootpath)
-        msg = refresh()
+        msg = format_tree()
         if msg != old:
             asyncio.run_coroutine_threadsafe(broadcast(msg), loop)
 
@@ -33,6 +36,10 @@ def watcher_thread(loop):
 
         for event in i.event_gen():
             if quit: return
+            du = shutil.disk_usage(rootpath)
+            if du != disk_usage:
+                disk_usage = du
+                asyncio.run_coroutine_threadsafe(broadcast(format_du()), loop)
             if time.monotonic() > refreshdl: break
             if event is None: continue
             _, flags, path, filename = event
@@ -42,6 +49,20 @@ def watcher_thread(loop):
             #print(path, flags)
             update(path.relative_to(rootpath), loop)
         i = None  # Free the inotify object
+
+def format_du():
+    return msgspec.json.encode({"space": {
+        "disk": disk_usage.total,
+        "used": disk_usage.used,
+        "free": disk_usage.free,
+        "storage": tree[""].size,
+    }}).decode()
+
+def format_tree():
+    root = tree[""]
+    return msgspec.json.encode({"update": [
+        UpdateEntry(size=root.size, mtime=root.mtime, dir=root.dir)
+    ]}).decode()
 
 def walk(path: Path) -> DirEntry | FileEntry | None:
     try:
@@ -62,12 +83,6 @@ def walk(path: Path) -> DirEntry | FileEntry | None:
     except OSError as e:
         print("OS error walking path", path, e)
         return None
-
-def refresh():
-    root = tree[""]
-    return msgspec.json.encode({"update": [
-        UpdateEntry(size=root.size, mtime=root.mtime, dir=root.dir)
-    ]}).decode()
 
 def update(relpath: Path, loop):
     """Called by inotify updates, check the filesystem and broadcast any changes."""
