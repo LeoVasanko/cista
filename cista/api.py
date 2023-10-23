@@ -2,11 +2,11 @@ import asyncio
 import typing
 
 import msgspec
-from sanic import Blueprint, SanicException
+from sanic import Blueprint
 
 from cista import watching
 from cista.fileio import FileServer
-from cista.protocol import ControlBase, ErrorMsg, FileRange, StatusMsg
+from cista.protocol import ControlBase, FileRange, StatusMsg
 from cista.util.apphelpers import asend, websocket_wrapper
 
 bp = Blueprint("api", url_prefix="/api")

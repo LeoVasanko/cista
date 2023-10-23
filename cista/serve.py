@@ -1,6 +1,6 @@
 import os
 import re
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from sanic import Sanic
 
@@ -13,13 +13,22 @@ def run(dev=False):
     url, opts = parse_listen(config.config.listen)
     # Silence Sanic's warning about running in production rather than debug
     os.environ["SANIC_IGNORE_PRODUCTION_WARNING"] = "1"
+    confdir = config.conffile.parent
+    wwwroot = PurePath(__file__).parent / "wwwroot"
     if opts.get("ssl"):
         # Run plain HTTP redirect/acme server on port 80
         server80.app.prepare(port=80, motd=False)
         domain = opts["host"]
-        opts["ssl"] = str(config.conffile.parent / domain)  # type: ignore
-    app.prepare(**opts, motd=False, dev=dev, auto_reload=dev, access_log=True)  # type: ignore
+        check_cert(confdir / domain, domain)
+        opts["ssl"] = str(confdir / domain)  # type: ignore
+    app.prepare(**opts, motd=False, dev=dev, auto_reload=dev, reload_dir={confdir, wwwroot}, access_log=True)  # type: ignore
     Sanic.serve()
+
+def check_cert(certdir, domain):
+    if (certdir / "privkey.pem").exist() and (certdir / "fullchain.pem").exists():
+        return
+    # TODO: Use certbot to fetch a cert
+    raise ValueError(f"TLS certificate files privkey.pem and fullchain.pem needed in {certdir}")
 
 def parse_listen(listen):
     if listen.startswith("/"):

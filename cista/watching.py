@@ -13,7 +13,7 @@ from cista.protocol import DirEntry, FileEntry, UpdateEntry
 pubsub = {}
 tree = {"": None}
 tree_lock = threading.Lock()
-rootpath = None
+rootpath: Path = None  # type: ignore
 quit = False
 modified_flags = "IN_CREATE", "IN_DELETE", "IN_DELETE_SELF", "IN_MODIFY", "IN_MOVE_SELF", "IN_MOVED_FROM", "IN_MOVED_TO"
 disk_usage = None
@@ -22,6 +22,7 @@ def watcher_thread(loop):
     global disk_usage
 
     while True:
+        rootpath = config.config.path
         i = inotify.adapters.InotifyTree(rootpath.as_posix())
         old = format_tree() if tree[""] else None
         with tree_lock:
@@ -36,18 +37,25 @@ def watcher_thread(loop):
 
         for event in i.event_gen():
             if quit: return
+            # Disk usage update
             du = shutil.disk_usage(rootpath)
             if du != disk_usage:
                 disk_usage = du
                 asyncio.run_coroutine_threadsafe(broadcast(format_du()), loop)
+                break
+            # Do a full refresh?
             if time.monotonic() > refreshdl: break
             if event is None: continue
             _, flags, path, filename = event
             if not any(f in modified_flags for f in flags):
                 continue
+            # Update modified path
             path = PurePosixPath(path) / filename
-            #print(path, flags)
-            update(path.relative_to(rootpath), loop)
+            try:
+                update(path.relative_to(rootpath), loop)
+            except Exception as e:
+                print("Watching error", e)
+                break
         i = None  # Free the inotify object
 
 def format_du():
@@ -84,7 +92,7 @@ def walk(path: Path) -> DirEntry | FileEntry | None:
         print("OS error walking path", path, e)
         return None
 
-def update(relpath: Path, loop):
+def update(relpath: PurePosixPath, loop):
     """Called by inotify updates, check the filesystem and broadcast any changes."""
     new = walk(rootpath / relpath)
     with tree_lock:
@@ -149,9 +157,7 @@ async def broadcast(msg):
         await queue.put_nowait(msg)
 
 async def start(app, loop):
-    global rootpath
     config.load_config()
-    rootpath = config.config.path
     app.ctx.watcher = threading.Thread(target=watcher_thread, args=[loop])
     app.ctx.watcher.start()
 
