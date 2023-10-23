@@ -5,7 +5,7 @@ import jwt
 from cista.config import derived_secret
 
 session_secret = lambda: derived_secret("session")
-max_age = 60  # Seconds since last login
+max_age = 365 * 86400  # Seconds since last login
 
 def get(request):
     try:
