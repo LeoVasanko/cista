@@ -29,7 +29,7 @@ async def main_stop(app, loop):
 async def use_session(req):
     req.ctx.session = session.get(req)
     try:
-        req.ctx.user = config.config.users[req.ctx.session["user"]]  # type: ignore
+        req.ctx.user = config.config.users[req.ctx.session["username"]]  # type: ignore
     except (AttributeError, KeyError, TypeError):
         req.ctx.user = None
     # CSRF protection
