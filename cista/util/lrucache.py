@@ -11,6 +11,7 @@ class LRUCache:
         maxage (float): Max age for items in cache in seconds.
         cache (list): Internal list storing the cache items.
     """
+
     def __init__(self, open: callable, *, capacity: int, maxage: float):
         """
         Initialize LRUCache.

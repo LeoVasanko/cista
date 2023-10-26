@@ -17,26 +17,28 @@ class Config(msgspec.Struct):
     users: dict[str, User] = {}
     links: dict[str, Link] = {}
 
+
 class User(msgspec.Struct, omit_defaults=True):
     privileged: bool = False
     hash: str = ""
     lastSeen: int = 0
+
 
 class Link(msgspec.Struct, omit_defaults=True):
     location: str
     creator: str = ""
     expires: int = 0
 
+
 config = None
 conffile = Path.home() / ".local/share/cista/db.toml"
+
 
 def derived_secret(*params, len=8) -> bytes:
     """Used to derive secret keys from the main secret"""
     # Each part is made the same length by hashing first
     combined = b"".join(
-        sha256(
-            p if isinstance(p, bytes) else f"{p}".encode()
-        ).digest()
+        sha256(p if isinstance(p, bytes) else f"{p}".encode()).digest()
         for p in [config.secret, *params]
     )
     # Output a bytes of the desired length
@@ -48,10 +50,12 @@ def enc_hook(obj):
         return obj.as_posix()
     raise TypeError
 
+
 def dec_hook(typ, obj):
     if typ is Path:
         return Path(obj)
     raise TypeError
+
 
 def config_update(modify):
     global config
@@ -93,20 +97,27 @@ def config_update(modify):
     config = c
     return "modified" if old else "created"
 
+
 def modifies_config(modify):
     """Decorator for functions that modify the config file"""
+
     @wraps(modify)
     def wrapper(*args, **kwargs):
-        m = lambda c: modify(c, *args, **kwargs)
+        def m(c):
+            return modify(c, *args, **kwargs)
+
         # Retry modification in case of write collision
         while (c := config_update(m)) == "collision":
             time.sleep(0.01)
         return c
+
     return wrapper
+
 
 def load_config():
     global config
     config = msgspec.toml.decode(conffile.read_bytes(), type=Config, dec_hook=dec_hook)
+
 
 @modifies_config
 def update_config(conf: Config, changes: dict) -> Config:
@@ -115,6 +126,7 @@ def update_config(conf: Config, changes: dict) -> Config:
     settings = {} if conf is None else msgspec.to_builtins(conf, enc_hook=enc_hook)
     settings.update(changes)
     return msgspec.convert(settings, Config, dec_hook=dec_hook)
+
 
 @modifies_config
 def update_user(conf: Config, name: str, changes: dict) -> Config:
@@ -126,6 +138,7 @@ def update_user(conf: Config, name: str, changes: dict) -> Config:
         u = User()
     if "password" in changes:
         from . import auth
+
         auth.set_password(u, changes["password"])
         del changes["password"]
     udict = msgspec.to_builtins(u, enc_hook=enc_hook)
@@ -133,6 +146,7 @@ def update_user(conf: Config, name: str, changes: dict) -> Config:
     settings = msgspec.to_builtins(conf, enc_hook=enc_hook)
     settings["users"][name] = msgspec.convert(udict, User, dec_hook=dec_hook)
     return msgspec.convert(settings, Config, dec_hook=dec_hook)
+
 
 @modifies_config
 def del_user(conf: Config, name: str) -> Config:

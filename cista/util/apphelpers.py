@@ -14,9 +14,11 @@ def asend(ws, msg):
     """Send JSON message or bytes to a websocket"""
     return ws.send(msg if isinstance(msg, bytes) else msgspec.json.encode(msg).decode())
 
+
 def jres(data, **kwargs):
     """JSON Sanic response, using msgspec encoding"""
     return raw(msgspec.json.encode(data), content_type="application/json", **kwargs)
+
 
 async def handle_sanic_exception(request, e):
     logger.exception(e)
@@ -30,7 +32,9 @@ async def handle_sanic_exception(request, e):
     message = f"⚠️ {message}" if code < 500 else f"🛑 {message}"
     # Non-browsers get JSON errors
     if "text/html" not in request.headers.accept:
-        return jres(ErrorMsg({"code": code, "message": message, **context}), status=code)
+        return jres(
+            ErrorMsg({"code": code, "message": message, **context}), status=code
+        )
     # Redirections flash the error message via cookies
     if "redirect" in context:
         res = redirect(context["redirect"])
@@ -39,8 +43,10 @@ async def handle_sanic_exception(request, e):
     # Otherwise use Sanic's default error page
     return errorpages.HTMLRenderer(request, e, debug=request.app.debug).full()
 
+
 def websocket_wrapper(handler):
     """Decorator for websocket handlers that catches exceptions and sends them back to the client"""
+
     @wraps(handler)
     async def wrapper(request, ws, *args, **kwargs):
         try:
@@ -55,4 +61,5 @@ def websocket_wrapper(handler):
             message = f"⚠️ {message}" if code < 500 else f"🛑 {message}"
             await asend(ws, ErrorMsg({"code": code, "message": message, **context}))
             raise
+
     return wrapper

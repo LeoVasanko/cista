@@ -7,7 +7,7 @@ import cista
 from cista import app, config, droppy, serve, server80
 from cista.util import pwgen
 
-del app, server80.app   # Only import needed, for Sanic multiprocessing
+del app, server80.app  # Only import needed, for Sanic multiprocessing
 
 doc = f"""Cista {cista.__version__} - A file storage for the web.
 
@@ -34,6 +34,7 @@ User management:
   --password        Reset password
 """
 
+
 def main():
     # Dev mode doesn't catch exceptions
     if "--dev" in sys.argv:
@@ -44,6 +45,7 @@ def main():
     except Exception as e:
         print("Error:", e)
         return 1
+
 
 def _main():
     args = docopt(doc)
@@ -64,19 +66,25 @@ def _main():
     if not necessary_opts:
         # Maybe run without arguments
         print(doc)
-        print("No config file found! Get started with:\n  cista -l :8000 /path/to/files, or\n  cista -l example.com --import-droppy  # Uses Droppy files\n")
+        print(
+            "No config file found! Get started with:\n  cista -l :8000 /path/to/files, or\n  cista -l example.com --import-droppy  # Uses Droppy files\n"
+        )
         return 1
     settings = {}
     if import_droppy:
         if exists:
-            raise ValueError(f"Importing Droppy: First remove the existing configuration:\n  rm {config.conffile}")
+            raise ValueError(
+                f"Importing Droppy: First remove the existing configuration:\n  rm {config.conffile}"
+            )
         settings = droppy.readconf()
-    if path: settings["path"] = path
-    if listen: settings["listen"] = listen
+    if path:
+        settings["path"] = path
+    if listen:
+        settings["listen"] = listen
     operation = config.update_config(settings)
     print(f"Config {operation}: {config.conffile}")
     # Prepare to serve
-    domain = unix = port = None
+    unix = None
     url, _ = serve.parse_listen(config.config.listen)
     if not config.config.path.is_dir():
         raise ValueError(f"No such directory: {config.config.path}")
@@ -88,6 +96,7 @@ def _main():
     # Run the server
     serve.run(dev=dev)
 
+
 def _confdir(args):
     if args["-c"]:
         # Custom config directory
@@ -98,6 +107,7 @@ def _confdir(args):
             # Accidentally pointed to the cista.toml, use parent
             confdir = confdir.parent
         config.conffile = config.conffile.with_parent(confdir)
+
 
 def _user(args):
     _confdir(args)
@@ -122,6 +132,7 @@ def _user(args):
     print(info)
     if res == "read":
         print("  No changes")
+
 
 if __name__ == "__main__":
     sys.exit(main())

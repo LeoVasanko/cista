@@ -11,19 +11,24 @@ from cista.util import filename
 
 ## Control commands
 
+
 class ControlBase(msgspec.Struct, tag_field="op", tag=str.lower):
     def __call__(self):
         raise NotImplementedError
 
+
 class MkDir(ControlBase):
     path: str
+
     def __call__(self):
         path = config.config.path / filename.sanitize(self.path)
         path.mkdir(parents=False, exist_ok=False)
 
+
 class Rename(ControlBase):
     path: str
     to: str
+
     def __call__(self):
         to = filename.sanitize(self.to)
         if "/" in to:
@@ -31,17 +36,21 @@ class Rename(ControlBase):
         path = config.config.path / filename.sanitize(self.path)
         path.rename(path.with_name(to))
 
+
 class Rm(ControlBase):
     sel: list[str]
+
     def __call__(self):
         root = config.config.path
         sel = [root / filename.sanitize(p) for p in self.sel]
         for p in sel:
             shutil.rmtree(p, ignore_errors=True)
 
+
 class Mv(ControlBase):
     sel: list[str]
     dst: str
+
     def __call__(self):
         root = config.config.path
         sel = [root / filename.sanitize(p) for p in self.sel]
@@ -51,9 +60,11 @@ class Mv(ControlBase):
         for p in sel:
             shutil.move(p, dst)
 
+
 class Cp(ControlBase):
     sel: list[str]
     dst: str
+
     def __call__(self):
         root = config.config.path
         sel = [root / filename.sanitize(p) for p in self.sel]
@@ -62,9 +73,13 @@ class Cp(ControlBase):
             raise BadRequest("The destination must be a directory")
         for p in sel:
             # Note: copies as dst rather than in dst unless name is appended.
-            shutil.copytree(p, dst / p.name, dirs_exist_ok=True, ignore_dangling_symlinks=True)
+            shutil.copytree(
+                p, dst / p.name, dirs_exist_ok=True, ignore_dangling_symlinks=True
+            )
+
 
 ## File uploads and downloads
+
 
 class FileRange(msgspec.Struct):
     name: str
@@ -72,18 +87,23 @@ class FileRange(msgspec.Struct):
     start: int
     end: int
 
+
 class StatusMsg(msgspec.Struct):
     status: str
     req: FileRange
 
+
 class ErrorMsg(msgspec.Struct):
     error: dict[str, Any]
 
+
 ## Directory listings
+
 
 class FileEntry(msgspec.Struct):
     size: int
     mtime: int
+
 
 class DirEntry(msgspec.Struct):
     size: int
@@ -104,22 +124,21 @@ class DirEntry(msgspec.Struct):
 
     @property
     def props(self):
-        return {
-            k: v
-            for k, v in self.__struct_fields__
-            if k != "dir"
-        }
+        return {k: v for k, v in self.__struct_fields__ if k != "dir"}
+
 
 DirList = dict[str, FileEntry | DirEntry]
 
 
 class UpdateEntry(msgspec.Struct, omit_defaults=True):
     """Updates the named entry in the tree. Fields that are set replace old values. A list of entries recurses directories."""
+
     name: str = ""
     deleted: bool = False
     size: int | None = None
     mtime: int | None = None
     dir: DirList | None = None
+
 
 def make_dir_data(root):
     if len(root) == 2:

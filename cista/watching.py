@@ -15,8 +15,17 @@ tree = {"": None}
 tree_lock = threading.Lock()
 rootpath: Path = None  # type: ignore
 quit = False
-modified_flags = "IN_CREATE", "IN_DELETE", "IN_DELETE_SELF", "IN_MODIFY", "IN_MOVE_SELF", "IN_MOVED_FROM", "IN_MOVED_TO"
+modified_flags = (
+    "IN_CREATE",
+    "IN_DELETE",
+    "IN_DELETE_SELF",
+    "IN_MODIFY",
+    "IN_MOVE_SELF",
+    "IN_MOVED_FROM",
+    "IN_MOVED_TO",
+)
 disk_usage = None
+
 
 def watcher_thread(loop):
     global disk_usage
@@ -36,7 +45,8 @@ def watcher_thread(loop):
         refreshdl = time.monotonic() + 60.0
 
         for event in i.event_gen():
-            if quit: return
+            if quit:
+                return
             # Disk usage update
             du = shutil.disk_usage(rootpath)
             if du != disk_usage:
@@ -44,8 +54,10 @@ def watcher_thread(loop):
                 asyncio.run_coroutine_threadsafe(broadcast(format_du()), loop)
                 break
             # Do a full refresh?
-            if time.monotonic() > refreshdl: break
-            if event is None: continue
+            if time.monotonic() > refreshdl:
+                break
+            if event is None:
+                continue
             _, flags, path, filename = event
             if not any(f in modified_flags for f in flags):
                 continue
@@ -58,19 +70,26 @@ def watcher_thread(loop):
                 break
         i = None  # Free the inotify object
 
+
 def format_du():
-    return msgspec.json.encode({"space": {
-        "disk": disk_usage.total,
-        "used": disk_usage.used,
-        "free": disk_usage.free,
-        "storage": tree[""].size,
-    }}).decode()
+    return msgspec.json.encode(
+        {
+            "space": {
+                "disk": disk_usage.total,
+                "used": disk_usage.used,
+                "free": disk_usage.free,
+                "storage": tree[""].size,
+            }
+        }
+    ).decode()
+
 
 def format_tree():
     root = tree[""]
-    return msgspec.json.encode({"update": [
-        UpdateEntry(size=root.size, mtime=root.mtime, dir=root.dir)
-    ]}).decode()
+    return msgspec.json.encode(
+        {"update": [UpdateEntry(size=root.size, mtime=root.mtime, dir=root.dir)]}
+    ).decode()
+
 
 def walk(path: Path) -> DirEntry | FileEntry | None:
     try:
@@ -79,7 +98,12 @@ def walk(path: Path) -> DirEntry | FileEntry | None:
         if path.is_file():
             return FileEntry(s.st_size, mtime)
 
-        tree = {p.name: v for p in path.iterdir() if not p.name.startswith('.') if (v := walk(p)) is not None}
+        tree = {
+            p.name: v
+            for p in path.iterdir()
+            if not p.name.startswith(".")
+            if (v := walk(p)) is not None
+        }
         if tree:
             size = sum(v.size for v in tree.values())
             mtime = max(mtime, max(v.mtime for v in tree.values()))
@@ -92,16 +116,21 @@ def walk(path: Path) -> DirEntry | FileEntry | None:
         print("OS error walking path", path, e)
         return None
 
+
 def update(relpath: PurePosixPath, loop):
     """Called by inotify updates, check the filesystem and broadcast any changes."""
     new = walk(rootpath / relpath)
     with tree_lock:
         update = update_internal(relpath, new)
-        if not update: return  # No changes
+        if not update:
+            return  # No changes
         msg = msgspec.json.encode({"update": update}).decode()
         asyncio.run_coroutine_threadsafe(broadcast(msg), loop)
 
-def update_internal(relpath: PurePosixPath, new: DirEntry | FileEntry | None) -> list[UpdateEntry]:
+
+def update_internal(
+    relpath: PurePosixPath, new: DirEntry | FileEntry | None
+) -> list[UpdateEntry]:
     path = "", *relpath.parts
     old = tree
     elems = []
@@ -142,24 +171,30 @@ def update_internal(relpath: PurePosixPath, new: DirEntry | FileEntry | None) ->
     u = UpdateEntry(name)
     if new:
         parent[name] = new
-        if u.size != new.size: u.size = new.size
-        if u.mtime != new.mtime: u.mtime = new.mtime
+        if u.size != new.size:
+            u.size = new.size
+        if u.mtime != new.mtime:
+            u.mtime = new.mtime
         if isinstance(new, DirEntry):
-            if u.dir == new.dir: u.dir = new.dir
+            if u.dir == new.dir:
+                u.dir = new.dir
     else:
         del parent[name]
         u.deleted = True
     update.append(u)
     return update
 
+
 async def broadcast(msg):
     for queue in pubsub.values():
         await queue.put_nowait(msg)
+
 
 async def start(app, loop):
     config.load_config()
     app.ctx.watcher = threading.Thread(target=watcher_thread, args=[loop])
     app.ctx.watcher.start()
+
 
 async def stop(app, loop):
     global quit

@@ -6,6 +6,7 @@ def generate(n=4):
     wl = list(words)
     return ".".join(wl.pop(secrets.randbelow(len(wl))) for i in range(n))
 
+
 # A custom list of 1024 common 3-6 letter words, with unique 3-prefixes and no prefix words, entropy 2.1b/letter 10b/word
 words: list = """
 able about absent abuse access acid across act adapt add adjust admit adult advice affair afraid again age agree ahead

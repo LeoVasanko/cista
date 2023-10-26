@@ -11,6 +11,7 @@ def readconf() -> dict:
     cf["listen"] = _droppy_listeners(cf)
     return cf | db
 
+
 def _droppy_listeners(cf):
     """Convert Droppy listeners to our format, for typical cases but not in full."""
     for listener in cf["listeners"]:
@@ -20,15 +21,19 @@ def _droppy_listeners(cf):
                 continue
             socket = listener.get("socket")
             if socket:
-                if isinstance(socket, list): socket = socket[0]
+                if isinstance(socket, list):
+                    socket = socket[0]
                 return f"{socket}"
             port = listener["port"]
-            if isinstance(port, list): port = port[0]
+            if isinstance(port, list):
+                port = port[0]
             host = listener["host"]
-            if isinstance(host, list): host = host[0]
-            if host in ("127.0.0.1", "::", "localhost"): return f":{port}"
+            if isinstance(host, list):
+                host = host[0]
+            if host in ("127.0.0.1", "::", "localhost"):
+                return f":{port}"
             return f"{host}:{port}"
         except (KeyError, IndexError):
             continue
     # If none matched, fallback to Droppy default
-    return f"0.0.0.0:8989"
+    return "0.0.0.0:8989"

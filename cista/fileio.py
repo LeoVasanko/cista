@@ -1,7 +1,5 @@
 import asyncio
 import os
-import unicodedata
-from pathlib import PurePosixPath
 
 from cista import config
 from cista.util import filename
@@ -12,6 +10,7 @@ from cista.util.lrucache import LRUCache
 def fuid(stat) -> str:
     """Unique file ID. Stays the same on renames and modification."""
     return config.derived_secret("filekey-inode", stat.st_dev, stat.st_ino).hex()
+
 
 class File:
     def __init__(self, filename):
@@ -30,23 +29,24 @@ class File:
         self.writable = True
 
     def write(self, pos, buffer, *, file_size=None):
-        assert self.fd is not None
         if not self.writable:
             # Create/open file
             self.open_rw()
+        assert self.fd is not None
         if file_size is not None:
             os.ftruncate(self.fd, file_size)
         os.lseek(self.fd, pos, os.SEEK_SET)
         os.write(self.fd, buffer)
 
     def __getitem__(self, slice):
-        assert self.fd is not None
         if self.fd is None:
             self.open_ro()
+        assert self.fd is not None
         os.lseek(self.fd, slice.start, os.SEEK_SET)
-        l = slice.stop - slice.start
-        data = os.read(self.fd, l)
-        if len(data) < l: raise EOFError("Error reading requested range")
+        size = slice.stop - slice.start
+        data = os.read(self.fd, size)
+        if len(data) < size:
+            raise EOFError("Error reading requested range")
         return data
 
     def close(self):
@@ -59,10 +59,11 @@ class File:
 
 
 class FileServer:
-
     async def start(self):
         self.alink = AsyncLink()
-        self.worker = asyncio.get_event_loop().run_in_executor(None, self.worker_thread, self.alink.to_sync)
+        self.worker = asyncio.get_event_loop().run_in_executor(
+            None, self.worker_thread, self.alink.to_sync
+        )
         self.cache = LRUCache(File, capacity=10, maxage=5.0)
 
     async def stop(self):
@@ -91,4 +92,4 @@ class FileServer:
     def download(self, name, start, end):
         name = filename.sanitize(name)
         f = self.cache[name]
-        return f[start: end]
+        return f[start:end]

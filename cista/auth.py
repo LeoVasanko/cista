@@ -12,10 +12,12 @@ from sanic.exceptions import BadRequest, Forbidden, Unauthorized
 from cista import config, session
 
 _argon = argon2.PasswordHasher()
-_droppyhash = re.compile(r'^([a-f0-9]{64})\$([a-f0-9]{8})$')
+_droppyhash = re.compile(r"^([a-f0-9]{64})\$([a-f0-9]{8})$")
+
 
 def _pwnorm(password):
-    return normalize('NFC', password).strip().encode()
+    return normalize("NFC", password).strip().encode()
+
 
 def login(username: str, password: str):
     un = _pwnorm(username)
@@ -49,24 +51,31 @@ def login(username: str, password: str):
     u.lastSeen = now
     return u
 
+
 def set_password(user: config.User, password: str):
     user.hash = _argon.hash(_pwnorm(password))
+
 
 class LoginResponse(msgspec.Struct):
     user: str = ""
     privileged: bool = False
     error: str = ""
 
+
 def verify(request, privileged=False):
     """Raise Unauthorized or Forbidden if the request is not authorized"""
     if privileged:
         if request.ctx.user:
-            if request.ctx.user.privileged: return
+            if request.ctx.user.privileged:
+                return
             raise Forbidden("Access Forbidden: Only for privileged users")
-    elif config.config.public or request.ctx.user: return
+    elif config.config.public or request.ctx.user:
+        return
     raise Unauthorized("Login required", "cookie", context={"redirect": "/login"})
 
+
 bp = Blueprint("auth")
+
 
 @bp.get("/login")
 async def login_page(request):
@@ -74,8 +83,19 @@ async def login_page(request):
     with doc.div(id="login"):
         with doc.form(method="POST", autocomplete="on"):
             doc.h1("Login")
-            doc.input(name="username", placeholder="Username", autocomplete="username", required=True).br
-            doc.input(type="password", name="password", placeholder="Password", autocomplete="current-password", required=True).br
+            doc.input(
+                name="username",
+                placeholder="Username",
+                autocomplete="username",
+                required=True,
+            ).br
+            doc.input(
+                type="password",
+                name="password",
+                placeholder="Password",
+                autocomplete="current-password",
+                required=True,
+            ).br
             doc.input(type="submit", value="Login")
         s = session.get(request)
         if s:
@@ -84,13 +104,19 @@ async def login_page(request):
                 doc.input(type="submit", value=f"Logout {name}")
     flash = request.cookies.message
     if flash:
-        doc.dialog(flash, id="flash", open=True, style="position: fixed; top: 0; left: 0; width: 100%; opacity: .8")
+        doc.dialog(
+            flash,
+            id="flash",
+            open=True,
+            style="position: fixed; top: 0; left: 0; width: 100%; opacity: .8",
+        )
     res = html(doc)
     if flash:
         res.cookies.delete_cookie("flash")
     if s is False:
         session.delete(res)
     return res
+
 
 @bp.post("/login")
 async def login_post(request):
@@ -117,6 +143,7 @@ async def login_post(request):
         res = json({"data": {"username": username, "privileged": user.privileged}})
     session.create(res, username)
     return res
+
 
 @bp.post("/logout")
 async def logout_post(request):
