@@ -7,22 +7,27 @@ name = "cista"
 dynamic = ["version"]
 description = "Dropbox-like file server with modern web interface"
 readme = "README.md"
-license = ""
 authors = [
     { name = "Vasanko" },
 ]
 classifiers = [
 ]
+requires-python = ">=3.11"
 dependencies = [
     "argon2-cffi",
+    "blake3",
+    "brotli",
     "docopt",
     "inotify",
     "msgspec",
+    "natsort",
     "pathvalidate",
     "pyjwt",
     "sanic",
+    "stream-zip",
     "tomli_w",
 ]
+requires-python = ">=3.10"
 
 [project.urls]
 Homepage = ""
@@ -33,6 +38,7 @@ cista = "cista.__main__:main"
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "ruff",
 ]
 
 [tool.hatchling]
@@ -63,7 +69,36 @@ testpaths = [
     "tests",
 ]
 
-[tool.isort]
-#src_paths = ["cista", "tests"]
-line_length = 120
-multi_line_output = 5
+[tool.ruff]
+select = ["ALL"]
+ignore = [
+    "A0",
+    "ARG001",
+    "ANN",
+    "B018",
+    "BLE001",
+    "C901",
+    "COM812",  # conflicts with ruff format
+    "D",
+    "E501",
+    "EM1",
+    "FIX002",
+    "ISC001",  # conflicts with ruff format
+    "PGH003",
+    "PLR0912",
+    "PLR2004",
+    "PLW0603",
+    "S101",
+    "SLF001",
+    "T201",
+    "TD0",
+    "TRY",
+]
+show-source = true
+show-fixes = true
+
+[tool.ruff.isort]
+known-first-party = ["cista"]
+
+[tool.ruff.per-file-ignores]
+"tests/*" = ["S", "ANN", "D", "INP"]

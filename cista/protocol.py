@@ -22,7 +22,8 @@ class MkDir(ControlBase):
 
     def __call__(self):
         path = config.config.path / filename.sanitize(self.path)
-        path.mkdir(parents=False, exist_ok=False)
+        path.mkdir(parents=True, exist_ok=False)
+
 
 
 class Rename(ControlBase):
@@ -44,7 +45,11 @@ class Rm(ControlBase):
         root = config.config.path
         sel = [root / filename.sanitize(p) for p in self.sel]
         for p in sel:
-            shutil.rmtree(p, ignore_errors=True)
+            if p.is_dir():
+                shutil.rmtree(p)
+            else:
+                p.unlink()
+
 
 
 class Mv(ControlBase):
@@ -72,10 +77,19 @@ class Cp(ControlBase):
         if not dst.is_dir():
             raise BadRequest("The destination must be a directory")
         for p in sel:
-            # Note: copies as dst rather than in dst unless name is appended.
-            shutil.copytree(
-                p, dst / p.name, dirs_exist_ok=True, ignore_dangling_symlinks=True
-            )
+            if p.is_dir():
+                # Note: copies as dst rather than in dst unless name is appended.
+                shutil.copytree(
+                    p,
+                    dst / p.name,
+                    dirs_exist_ok=True,
+                    ignore_dangling_symlinks=True,
+                )
+            else:
+                shutil.copy2(p, dst)
+
+
+ControlTypes = MkDir | Rename | Rm | Mv | Cp
 
 
 ## File uploads and downloads
@@ -101,11 +115,13 @@ class ErrorMsg(msgspec.Struct):
 
 
 class FileEntry(msgspec.Struct):
+    key: str
     size: int
     mtime: int
 
 
 class DirEntry(msgspec.Struct):
+    key: str
     size: int
     mtime: int
     dir: DirList
@@ -133,7 +149,8 @@ DirList = dict[str, FileEntry | DirEntry]
 class UpdateEntry(msgspec.Struct, omit_defaults=True):
     """Updates the named entry in the tree. Fields that are set replace old values. A list of entries recurses directories."""
 
-    name: str = ""
+    name: str
+    key: str
     deleted: bool = False
     size: int | None = None
     mtime: int | None = None
@@ -141,12 +158,12 @@ class UpdateEntry(msgspec.Struct, omit_defaults=True):
 
 
 def make_dir_data(root):
-    if len(root) == 2:
+    if len(root) == 3:
         return FileEntry(*root)
-    size, mtime, listing = root
+    id_, size, mtime, listing = root
     converted = {}
     for name, data in listing.items():
         converted[name] = make_dir_data(data)
     sz = sum(x.size for x in converted.values())
     mt = max(x.mtime for x in converted.values())
-    return DirEntry(sz, max(mt, mtime), converted)
+    return DirEntry(id_, sz, max(mt, mtime), converted)

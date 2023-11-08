@@ -30,10 +30,12 @@ def _droppy_listeners(cf):
             host = listener["host"]
             if isinstance(host, list):
                 host = host[0]
+        except (KeyError, IndexError):
+            continue
+        else:
             if host in ("127.0.0.1", "::", "localhost"):
                 return f":{port}"
             return f"{host}:{port}"
-        except (KeyError, IndexError):
-            continue
+
     # If none matched, fallback to Droppy default
     return "0.0.0.0:8989"

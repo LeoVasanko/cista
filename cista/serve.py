@@ -7,7 +7,7 @@ from sanic import Sanic
 from cista import config, server80
 
 
-def run(dev=False):
+def run(*, dev=False):
     """Run Sanic main process that spawns worker processes to serve HTTP requests."""
     from .app import app
 
@@ -30,7 +30,11 @@ def run(dev=False):
         reload_dir={confdir, wwwroot},
         access_log=True,
     )  # type: ignore
-    Sanic.serve()
+    if dev:
+        Sanic.serve()
+    else:
+        Sanic.serve_single()
+
 
 
 def check_cert(certdir, domain):
@@ -38,7 +42,7 @@ def check_cert(certdir, domain):
         return
     # TODO: Use certbot to fetch a cert
     raise ValueError(
-        f"TLS certificate files privkey.pem and fullchain.pem needed in {certdir}"
+        f"TLS certificate files privkey.pem and fullchain.pem needed in {certdir}",
     )
 
 
@@ -47,15 +51,14 @@ def parse_listen(listen):
         unix = Path(listen).resolve()
         if not unix.parent.exists():
             raise ValueError(
-                f"Directory for unix socket does not exist: {unix.parent}/"
+                f"Directory for unix socket does not exist: {unix.parent}/",
             )
         return "http://localhost", {"unix": unix}
-    elif re.fullmatch(r"(\w+(-\w+)*\.)+\w{2,}", listen, re.UNICODE):
+    if re.fullmatch(r"(\w+(-\w+)*\.)+\w{2,}", listen, re.UNICODE):
         return f"https://{listen}", {"host": listen, "port": 443, "ssl": True}
-    else:
-        try:
-            addr, _port = listen.split(":", 1)
-            port = int(_port)
-        except Exception:
-            raise ValueError(f"Invalid listen address: {listen}")
-        return f"http://localhost:{port}", {"host": addr, "port": port}
+    try:
+        addr, _port = listen.split(":", 1)
+        port = int(_port)
+    except Exception:
+        raise ValueError(f"Invalid listen address: {listen}") from None
+    return f"http://localhost:{port}", {"host": addr, "port": port}

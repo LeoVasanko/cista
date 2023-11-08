@@ -33,7 +33,8 @@ async def handle_sanic_exception(request, e):
     # Non-browsers get JSON errors
     if "text/html" not in request.headers.accept:
         return jres(
-            ErrorMsg({"code": code, "message": message, **context}), status=code
+            ErrorMsg({"code": code, "message": message, **context}),
+            status=code,
         )
     # Redirections flash the error message via cookies
     if "redirect" in context:

@@ -62,7 +62,9 @@ class FileServer:
     async def start(self):
         self.alink = AsyncLink()
         self.worker = asyncio.get_event_loop().run_in_executor(
-            None, self.worker_thread, self.alink.to_sync
+            None,
+            self.worker_thread,
+            self.alink.to_sync,
         )
         self.cache = LRUCache(File, capacity=10, maxage=5.0)
 

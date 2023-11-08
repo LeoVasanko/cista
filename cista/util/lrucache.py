@@ -41,7 +41,7 @@ class LRUCache:
             The corresponding item's handle.
         """
         # Take from cache or open a new one
-        for i, (k, f, ts) in enumerate(self.cache):
+        for i, (k, f, _ts) in enumerate(self.cache):  # noqa: B007
             if k == key:
                 self.cache.pop(i)
                 break

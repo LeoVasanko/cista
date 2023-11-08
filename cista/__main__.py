@@ -67,14 +67,14 @@ def _main():
         # Maybe run without arguments
         print(doc)
         print(
-            "No config file found! Get started with:\n  cista -l :8000 /path/to/files, or\n  cista -l example.com --import-droppy  # Uses Droppy files\n"
+            "No config file found! Get started with:\n  cista -l :8000 /path/to/files, or\n  cista -l example.com --import-droppy  # Uses Droppy files\n",
         )
         return 1
     settings = {}
     if import_droppy:
         if exists:
             raise ValueError(
-                f"Importing Droppy: First remove the existing configuration:\n  rm {config.conffile}"
+                f"Importing Droppy: First remove the existing configuration:\n  rm {config.conffile}",
             )
         settings = droppy.readconf()
     if path:
@@ -95,6 +95,8 @@ def _main():
     print(f"Serving {config.config.path} at {url}{extra}")
     # Run the server
     serve.run(dev=dev)
+    return 0
+
 
 
 def _confdir(args):

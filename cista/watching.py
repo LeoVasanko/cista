@@ -1,13 +1,15 @@
 import asyncio
 import shutil
+import sys
 import threading
 import time
 from pathlib import Path, PurePosixPath
 
-import inotify.adapters
 import msgspec
+from sanic.log import logging
 
 from cista import config
+from cista.fileio import fuid
 from cista.protocol import DirEntry, FileEntry, UpdateEntry
 
 pubsub = {}
@@ -28,7 +30,8 @@ disk_usage = None
 
 
 def watcher_thread(loop):
-    global disk_usage
+    global disk_usage, rootpath
+    import inotify.adapters
 
     while True:
         rootpath = config.config.path
@@ -66,9 +69,31 @@ def watcher_thread(loop):
             try:
                 update(path.relative_to(rootpath), loop)
             except Exception as e:
-                print("Watching error", e)
-                break
+                print("Watching error", e, path, rootpath)
+                raise
         i = None  # Free the inotify object
+
+
+def watcher_thread_poll(loop):
+    global disk_usage, rootpath
+
+    while not quit:
+        rootpath = config.config.path
+        old = format_tree() if tree[""] else None
+        with tree_lock:
+            # Initialize the tree from filesystem
+            tree[""] = walk(rootpath)
+        msg = format_tree()
+        if msg != old:
+            asyncio.run_coroutine_threadsafe(broadcast(msg), loop)
+
+        # Disk usage update
+        du = shutil.disk_usage(rootpath)
+        if du != disk_usage:
+            disk_usage = du
+            asyncio.run_coroutine_threadsafe(broadcast(format_du()), loop)
+
+        time.sleep(1.0)
 
 
 def format_du():
@@ -79,24 +104,24 @@ def format_du():
                 "used": disk_usage.used,
                 "free": disk_usage.free,
                 "storage": tree[""].size,
-            }
-        }
+            },
+        },
     ).decode()
 
 
 def format_tree():
     root = tree[""]
-    return msgspec.json.encode(
-        {"update": [UpdateEntry(size=root.size, mtime=root.mtime, dir=root.dir)]}
-    ).decode()
+    return msgspec.json.encode({"root": root}).decode()
 
 
 def walk(path: Path) -> DirEntry | FileEntry | None:
     try:
         s = path.stat()
+        key = fuid(s)
+        assert key, repr(key)
         mtime = int(s.st_mtime)
         if path.is_file():
-            return FileEntry(s.st_size, mtime)
+            return FileEntry(key, s.st_size, mtime)
 
         tree = {
             p.name: v
@@ -106,10 +131,10 @@ def walk(path: Path) -> DirEntry | FileEntry | None:
         }
         if tree:
             size = sum(v.size for v in tree.values())
-            mtime = max(mtime, max(v.mtime for v in tree.values()))
+            mtime = max(mtime, *(v.mtime for v in tree.values()))
         else:
             size = 0
-        return DirEntry(size, mtime, tree)
+        return DirEntry(key, size, mtime, tree)
     except FileNotFoundError:
         return None
     except OSError as e:
@@ -119,6 +144,8 @@ def walk(path: Path) -> DirEntry | FileEntry | None:
 
 def update(relpath: PurePosixPath, loop):
     """Called by inotify updates, check the filesystem and broadcast any changes."""
+    if rootpath is None or relpath is None:
+        print("ERROR", rootpath, relpath)
     new = walk(rootpath / relpath)
     with tree_lock:
         update = update_internal(relpath, new)
@@ -129,7 +156,8 @@ def update(relpath: PurePosixPath, loop):
 
 
 def update_internal(
-    relpath: PurePosixPath, new: DirEntry | FileEntry | None
+    relpath: PurePosixPath,
+    new: DirEntry | FileEntry | None,
 ) -> list[UpdateEntry]:
     path = "", *relpath.parts
     old = tree
@@ -158,7 +186,7 @@ def update_internal(
     # Update parents
     update = []
     for name, entry in elems[:-1]:
-        u = UpdateEntry(name)
+        u = UpdateEntry(name, entry.key)
         if szdiff:
             entry.size += szdiff
             u.size = entry.size
@@ -168,16 +196,15 @@ def update_internal(
     # The last element is the one that changed
     name, entry = elems[-1]
     parent = elems[-2][1] if len(elems) > 1 else tree
-    u = UpdateEntry(name)
+    u = UpdateEntry(name, new.key if new else entry.key)
     if new:
         parent[name] = new
         if u.size != new.size:
             u.size = new.size
         if u.mtime != new.mtime:
             u.mtime = new.mtime
-        if isinstance(new, DirEntry):
-            if u.dir == new.dir:
-                u.dir = new.dir
+        if isinstance(new, DirEntry) and u.dir != new.dir:
+            u.dir = new.dir
     else:
         del parent[name]
         u.deleted = True
@@ -186,13 +213,21 @@ def update_internal(
 
 
 async def broadcast(msg):
-    for queue in pubsub.values():
-        await queue.put_nowait(msg)
+    try:
+        for queue in pubsub.values():
+            queue.put_nowait(msg)
+    except Exception:
+        # Log because asyncio would silently eat the error
+        logging.exception("Broadcast error")
+
 
 
 async def start(app, loop):
     config.load_config()
-    app.ctx.watcher = threading.Thread(target=watcher_thread, args=[loop])
+    app.ctx.watcher = threading.Thread(
+        target=watcher_thread if sys.platform == "linux" else watcher_thread_poll,
+        args=[loop],
+    )
     app.ctx.watcher.start()
 
 

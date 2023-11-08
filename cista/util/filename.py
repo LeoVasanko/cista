@@ -10,4 +10,7 @@ def sanitize(filename: str) -> str:
     filename = filename.replace("\\", "-")
     filename = sanitize_filepath(filename)
     filename = filename.strip("/")
-    return PurePosixPath(filename).as_posix()
+    p = PurePosixPath(filename)
+    if any(n.startswith(".") for n in p.parts):
+        raise ValueError("Filenames starting with dot are not allowed")
+    return p.as_posix()

@@ -1,12 +1,13 @@
 import asyncio
 import typing
+from secrets import token_bytes
 
 import msgspec
 from sanic import Blueprint
 
-from cista import watching
+from cista import __version__, config, watching
 from cista.fileio import FileServer
-from cista.protocol import ControlBase, FileRange, StatusMsg
+from cista.protocol import ControlTypes, FileRange, StatusMsg
 from cista.util.apphelpers import asend, websocket_wrapper
 
 bp = Blueprint("api", url_prefix="/api")
@@ -32,7 +33,7 @@ async def upload(req, ws):
         text = await ws.recv()
         if not isinstance(text, str):
             raise ValueError(
-                f"Expected JSON control, got binary len(data) = {len(text)}"
+                f"Expected JSON control, got binary len(data) = {len(text)}",
             )
         req = msgspec.json.decode(text, type=FileRange)
         pos = req.start
@@ -45,8 +46,8 @@ async def upload(req, ws):
             raise ValueError(f"Expected {req.end - pos} more bytes, got {d}")
         # Report success
         res = StatusMsg(status="ack", req=req)
+        print("ack", res)
         await asend(ws, res)
-        # await ws.drain()
 
 
 @bp.websocket("download")
@@ -58,7 +59,7 @@ async def download(req, ws):
         text = await ws.recv()
         if not isinstance(text, str):
             raise ValueError(
-                f"Expected JSON control, got binary len(data) = {len(text)}"
+                f"Expected JSON control, got binary len(data) = {len(text)}",
             )
         req = msgspec.json.decode(text, type=FileRange)
         pos = req.start
@@ -70,23 +71,42 @@ async def download(req, ws):
         # Report success
         res = StatusMsg(status="ack", req=req)
         await asend(ws, res)
-        # await ws.drain()
 
 
 @bp.websocket("control")
 @websocket_wrapper
 async def control(req, ws):
-    cmd = msgspec.json.decode(await ws.recv(), type=ControlBase)
-    await asyncio.to_thread(cmd)
-    await asend(ws, StatusMsg(status="ack", req=cmd))
+    while True:
+        cmd = msgspec.json.decode(await ws.recv(), type=ControlTypes)
+        await asyncio.to_thread(cmd)
+        await asend(ws, StatusMsg(status="ack", req=cmd))
+
 
 
 @bp.websocket("watch")
 @websocket_wrapper
 async def watch(req, ws):
+    await ws.send(
+        msgspec.json.encode(
+            {
+                "server": {
+                    "name": "Cista",  # Should be configurable
+                    "version": __version__,
+                    "public": config.config.public,
+                },
+                "user": {
+                    "username": req.ctx.username,
+                    "privileged": req.ctx.user.privileged,
+                }
+                if req.ctx.user
+                else None,
+            }
+        ).decode()
+    )
+    uuid = token_bytes(16)
     try:
         with watching.tree_lock:
-            q = watching.pubsub[ws] = asyncio.Queue()
+            q = watching.pubsub[uuid] = asyncio.Queue()
             # Init with disk usage and full tree
             await ws.send(watching.format_du())
             await ws.send(watching.format_tree())
@@ -94,4 +114,4 @@ async def watch(req, ws):
         while True:
             await ws.send(await q.get())
     finally:
-        del watching.pubsub[ws]
+        del watching.pubsub[uuid]

@@ -21,7 +21,8 @@ class Config(msgspec.Struct):
 class User(msgspec.Struct, omit_defaults=True):
     privileged: bool = False
     hash: str = ""
-    lastSeen: int = 0
+    lastSeen: int = 0  # noqa: N815
+
 
 
 class Link(msgspec.Struct, omit_defaults=True):

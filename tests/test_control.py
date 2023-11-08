@@ -2,12 +2,11 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from cista import config
 from cista.protocol import Cp, MkDir, Mv, Rename, Rm
 
 
-@pytest.fixture
+@pytest.fixture()
 def setup_temp_dir():
     with tempfile.TemporaryDirectory() as tmpdirname:
         config.config = config.Config(path=Path(tmpdirname), listen=":0")

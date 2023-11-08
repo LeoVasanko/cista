@@ -25,7 +25,7 @@ def login(username: str, password: str):
     try:
         u = config.config.users[un.decode()]
     except KeyError:
-        raise ValueError("Invalid username")
+        raise ValueError("Invalid username") from None
     # Verify password
     need_rehash = False
     if not u.hash:
@@ -41,7 +41,7 @@ def login(username: str, password: str):
         try:
             _argon.verify(u.hash, pw)
         except Exception:
-            raise ValueError("Invalid password")
+            raise ValueError("Invalid password") from None
         if _argon.check_needs_rehash(u.hash):
             need_rehash = True
     # Login successful
@@ -62,7 +62,7 @@ class LoginResponse(msgspec.Struct):
     error: str = ""
 
 
-def verify(request, privileged=False):
+def verify(request, *, privileged=False):
     """Raise Unauthorized or Forbidden if the request is not authorized"""
     if privileged:
         if request.ctx.user:
@@ -71,7 +71,8 @@ def verify(request, privileged=False):
             raise Forbidden("Access Forbidden: Only for privileged users")
     elif config.config.public or request.ctx.user:
         return
-    raise Unauthorized("Login required", "cookie", context={"redirect": "/login"})
+    raise Unauthorized("Login required", "cookie")
+
 
 
 bp = Blueprint("auth")
@@ -130,11 +131,14 @@ async def login_post(request):
         if not username or not password:
             raise KeyError
     except KeyError:
-        raise BadRequest("Missing username or password", context={"redirect": "/login"})
+        raise BadRequest(
+            "Missing username or password",
+            context={"redirect": "/login"},
+        ) from None
     try:
         user = login(username, password)
     except ValueError as e:
-        raise Forbidden(str(e), context={"redirect": "/login"})
+        raise Forbidden(str(e), context={"redirect": "/login"}) from e
 
     if "text/html" in request.headers.accept:
         res = redirect("/")

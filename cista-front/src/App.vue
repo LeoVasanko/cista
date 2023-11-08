@@ -1,85 +1,121 @@
-<script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
+  <LoginModal />
   <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
-      </nav>
-    </div>
+    <HeaderMain ref="headerMain" :path="path.pathList">
+      <HeaderSelected :path="path.pathList" />
+    </HeaderMain>
+    <BreadCrumb :path="path.pathList" tabindex="-1"/>
   </header>
-
-  <RouterView />
+  <main>
+    <RouterView :path="path.pathList" />
+  </main>
 </template>
 
-<style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
-}
+<script setup lang="ts">
+import { RouterView } from 'vue-router'
+import type { ComputedRef } from 'vue'
+import type HeaderMain from '@/components/HeaderMain.vue'
+import { onMounted, onUnmounted, ref } from 'vue'
+import { watchConnect, watchDisconnect } from '@/repositories/WS'
+import { useDocumentStore } from '@/stores/documents'
 
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
+import { computed } from 'vue'
+import Router from '@/router/index'
 
-nav {
-  width: 100%;
-  font-size: 12px;
-  text-align: center;
-  margin-top: 2rem;
+interface Path {
+  path: string
+  pathList: string[]
 }
-
-nav a.router-link-exact-active {
-  color: var(--color-text);
-}
-
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
-}
-
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
-}
-
-nav a:first-of-type {
-  border: 0;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
+const documentStore = useDocumentStore()
+const path: ComputedRef<Path> = computed(() => {
+  const p = decodeURIComponent(Router.currentRoute.value.path)
+  const pathList = p.split('/').filter(value => value !== '')
+  return {
+    path: p,
+    pathList
   }
-
-  .logo {
-    margin: 0 2rem 0 0;
+})
+onMounted(watchConnect)
+onUnmounted(watchDisconnect)
+// Update human-readable x seconds ago messages from mtimes
+setInterval(documentStore.updateModified, 1000)
+const headerMain = ref<typeof HeaderMain | null>(null)
+let vert = 0
+let timer: any = null
+const globalShortcutHandler = (event: KeyboardEvent) => {
+  const fileExplorer = documentStore.fileExplorer as any
+  if (!fileExplorer) return
+  const c = fileExplorer.isCursor()
+  const keyup = event.type === 'keyup'
+  if (event.repeat) {
+    if (
+      event.key === 'ArrowUp' ||
+      event.key === 'ArrowDown' ||
+      (c && event.code === 'Space')
+    ) {
+      event.preventDefault()
+    }
+    return
   }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
+  //console.log("key pressed", event)
+  // For up/down implement custom fast repeat
+  if (event.key === 'ArrowUp') vert = keyup ? 0 : event.altKey ? -10 : -1
+  else if (event.key === 'ArrowDown') vert = keyup ? 0 : event.altKey ? 10 : 1
+  // Find: process on keydown so that we can bypass the built-in search hotkey
+  else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
+    headerMain.value!.toggleSearchInput()
   }
-
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
-
-    padding: 1rem 0;
-    margin-top: 1rem;
+  // Select all (toggle); keydown to prevent builtin
+  else if (!keyup && event.key === 'a' && (event.ctrlKey || event.metaKey)) {
+    fileExplorer.toggleSelectAll()
+  }
+  // Keys 1-3 to sort columns
+  else if (
+    c &&
+    keyup &&
+    (event.key === '1' || event.key === '2' || event.key === '3')
+  ) {
+    fileExplorer.toggleSortColumn(+event.key)
+  }
+  // Rename
+  else if (c && keyup && !event.ctrlKey && (event.key === 'F2' || event.key === 'r')) {
+    fileExplorer.cursorRename()
+  }
+  // Toggle selections on file explorer; ignore all spaces to prevent scrolling built-in hotkey
+  else if (c && event.code === 'Space') {
+    if (keyup && !event.altKey && !event.ctrlKey)
+      fileExplorer.cursorSelect()
+  } else return
+  event.preventDefault()
+  if (!vert) {
+    if (timer) {
+      clearTimeout(timer) // Good for either timeout or interval
+      timer = null
+    }
+    return
+  }
+  if (!timer) {
+    // Initial move, then t0 delay until repeats at tr intervals
+    const select = event.shiftKey
+    fileExplorer.cursorMove(vert, select)
+    const t0 = 200,
+      tr = 30
+    timer = setTimeout(
+      () =>
+        (timer = setInterval(() => {
+          fileExplorer.cursorMove(vert, select)
+        }, tr)),
+      t0 - tr
+    )
   }
 }
-</style>
+onMounted(() => {
+  window.addEventListener('keydown', globalShortcutHandler)
+  window.addEventListener('keyup', globalShortcutHandler)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', globalShortcutHandler)
+  window.removeEventListener('keyup', globalShortcutHandler)
+})
+export type { Path }
+</script>

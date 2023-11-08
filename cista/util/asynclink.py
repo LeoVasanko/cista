@@ -80,8 +80,9 @@ class SyncRequest:
         if exc:
             self.set_exception(exc)
             return True
-        elif not self.done:
+        if not self.done:
             self.set_result(None)
+        return None
 
     def set_result(self, value):
         """Set result value; mark as done."""
