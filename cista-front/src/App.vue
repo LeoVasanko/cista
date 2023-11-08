@@ -15,7 +15,7 @@
 import { RouterView } from 'vue-router'
 import type { ComputedRef } from 'vue'
 import type HeaderMain from '@/components/HeaderMain.vue'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import { watchConnect, watchDisconnect } from '@/repositories/WS'
 import { useDocumentStore } from '@/stores/documents'
 
@@ -34,6 +34,9 @@ const path: ComputedRef<Path> = computed(() => {
     path: p,
     pathList
   }
+})
+watchEffect(() => {
+  document.title = path.value.path.replace(/\/$/, '').split('/').pop() || documentStore.server.name || 'Cista Storage'
 })
 onMounted(watchConnect)
 onUnmounted(watchDisconnect)

@@ -33,6 +33,7 @@ export const useDocumentStore = defineStore({
     fileExplorer: null,
     error: '' as string,
     connected: false,
+    server: {} as Record<string, any>,
     user: {
       username: '',
       privileged: false,

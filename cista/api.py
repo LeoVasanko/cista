@@ -89,7 +89,7 @@ async def watch(req, ws):
         msgspec.json.encode(
             {
                 "server": {
-                    "name": "Cista",  # Should be configurable
+                    "name": config.config.name or config.config.path.name,
                     "version": __version__,
                     "public": config.config.public,
                 },

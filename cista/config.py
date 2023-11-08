@@ -14,6 +14,7 @@ class Config(msgspec.Struct):
     listen: str
     secret: str = secrets.token_hex(12)
     public: bool = False
+    name: str = ""
     users: dict[str, User] = {}
     links: dict[str, Link] = {}
 

@@ -42,6 +42,7 @@ export const watchConnect = () => {
     }
     if ("server" in msg) {
       console.log('Connected to backend', msg)
+      store.server = msg.server
       store.connected = true
       reconnectDuration = 500
       store.error = ''
