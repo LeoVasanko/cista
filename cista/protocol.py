@@ -25,7 +25,6 @@ class MkDir(ControlBase):
         path.mkdir(parents=True, exist_ok=False)
 
 
-
 class Rename(ControlBase):
     path: str
     to: str
@@ -49,7 +48,6 @@ class Rm(ControlBase):
                 shutil.rmtree(p)
             else:
                 p.unlink()
-
 
 
 class Mv(ControlBase):

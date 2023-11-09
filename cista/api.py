@@ -82,7 +82,6 @@ async def control(req, ws):
         await asend(ws, StatusMsg(status="ack", req=cmd))
 
 
-
 @bp.websocket("watch")
 @websocket_wrapper
 async def watch(req, ws):

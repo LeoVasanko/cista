@@ -39,12 +39,10 @@ async def main_start(app, loop):
     app.ctx.threadexec = ThreadPoolExecutor(max_workers=8)
 
 
-
 @app.after_server_stop
 async def main_stop(app, loop):
     await watching.stop(app, loop)
     app.ctx.threadexec.shutdown()
-
 
 
 @app.on_request

@@ -24,7 +24,6 @@ class User(msgspec.Struct, omit_defaults=True):
     lastSeen: int = 0  # noqa: N815
 
 
-
 class Link(msgspec.Struct, omit_defaults=True):
     location: str
     creator: str = ""

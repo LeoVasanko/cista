@@ -98,7 +98,6 @@ def _main():
     return 0
 
 
-
 def _confdir(args):
     if args["-c"]:
         # Custom config directory

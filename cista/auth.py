@@ -74,7 +74,6 @@ def verify(request, *, privileged=False):
     raise Unauthorized("Login required", "cookie")
 
 
-
 bp = Blueprint("auth")
 
 

@@ -27,7 +27,6 @@ dependencies = [
     "stream-zip",
     "tomli_w",
 ]
-requires-python = ">=3.10"
 
 [project.urls]
 Homepage = ""

@@ -221,7 +221,6 @@ async def broadcast(msg):
         logging.exception("Broadcast error")
 
 
-
 async def start(app, loop):
     config.load_config()
     app.ctx.watcher = threading.Thread(

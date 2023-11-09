@@ -36,7 +36,6 @@ def run(*, dev=False):
         Sanic.serve_single()
 
 
-
 def check_cert(certdir, domain):
     if (certdir / "privkey.pem").exist() and (certdir / "fullchain.pem").exists():
         return
