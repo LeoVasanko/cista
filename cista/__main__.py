@@ -106,9 +106,9 @@ def _confdir(args):
         if confdir.exists() and not confdir.is_dir():
             if confdir.name != config.conffile.name:
                 raise ValueError("Config path is not a directory")
-            # Accidentally pointed to the cista.toml, use parent
+            # Accidentally pointed to the db.toml, use parent
             confdir = confdir.parent
-        config.conffile = config.conffile.with_parent(confdir)
+        config.conffile = confdir / config.conffile.name
 
 
 def _user(args):
