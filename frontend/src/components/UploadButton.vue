@@ -11,29 +11,38 @@ const props = defineProps({
   path: Array<string>
 })
 
+type CloudFile = {
+  file: File
+  cloudName: string
+  cloudPos: number
+}
 
 function uploadHandler(event: Event) {
   event.preventDefault()
   event.stopPropagation()
   // @ts-ignore
-  let infiles = Array.from(event.dataTransfer?.files || event.target.files) as File[]
+  const infiles = Array.from(event.dataTransfer?.files || event.target.files) as File[]
   if (!infiles.length) return
   const loc = props.path!.join('/')
-  for (const f of infiles) {
-    f.cloudName = loc + '/' + (f.webkitRelativePath || f.name)
-    f.cloudPos = 0
+  let files = []
+  for (const file of infiles) {
+    files.push({
+      file,
+      cloudName: loc + '/' + (file.webkitRelativePath || file.name),
+      cloudPos: 0,
+    })
   }
-  const dotfiles = infiles.filter(f => f.cloudName.includes('/.'))
+  const dotfiles = files.filter(f => f.cloudName.includes('/.'))
   if (dotfiles.length) {
     documentStore.error = "Won't upload dotfiles"
     console.log("Dotfiles omitted", dotfiles)
-    infiles = infiles.filter(f => !f.cloudName.includes('/.'))
+    files = files.filter(f => !f.cloudName.includes('/.'))
   }
-  if (!infiles.length) return
-  infiles.sort((a, b) => collator.compare(a.cloudName, b.cloudName))
+  if (!files.length) return
+  files.sort((a, b) => collator.compare(a.cloudName, b.cloudName))
   // @ts-ignore
-  upqueue = upqueue.concat(infiles)
-  statsAdd(infiles)
+  upqueue = [...upqueue, ...files]
+  statsAdd(files)
   startWorker()
 }
 
@@ -49,13 +58,14 @@ const uprogress_init = {
   tlast: 0,
   statbytes: 0,
   statdur: 0,
-  files: [],
+  files: [] as CloudFile[],
   filestart: 0,
   fileidx: 0,
   filecount: 0,
   filename: '',
   filesize: 0,
   filepos: 0,
+  status: 'idle',
 }
 const uprogress = reactive({...uprogress_init})
 const percent = computed(() => uprogress.uploaded / uprogress.total * 100)
@@ -78,7 +88,7 @@ setInterval(() => {
     uprogress.statdur *= .9
   }
 }, 100)
-const statUpdate = ({name, size, start, end}) => {
+const statUpdate = ({name, size, start, end}: {name: string, size: number, start: number, end: number}) => {
   if (name !== uprogress.filename) return  // If stats have been reset
   const now = Date.now()
   uprogress.uploaded = uprogress.filestart + end
@@ -97,7 +107,7 @@ const statNextFile = () => {
   const f = uprogress.files.shift()
   if (!f) return statReset()
   uprogress.filepos = 0
-  uprogress.filesize = f.size
+  uprogress.filesize = f.file.size
   uprogress.filename = f.cloudName
 }
 const statReset = () => {
@@ -105,14 +115,14 @@ const statReset = () => {
   uprogress.t0 = Date.now()
   uprogress.tlast = uprogress.t0 + 1
 }
-const statsAdd = (f: Array<File>) => {
+const statsAdd = (f: CloudFile[]) => {
   if (uprogress.files.length === 0) statReset()
-  uprogress.total += f.reduce((a, b) => a + b.size, 0)
+  uprogress.total += f.reduce((a, b) => a + b.file.size, 0)
   uprogress.filecount += f.length
-  uprogress.files = uprogress.files.concat(f)
+  uprogress.files = [...uprogress.files, ...f]
   statNextFile()
 }
-let upqueue = [] as File[]
+let upqueue = [] as CloudFile[]
 
 // TODO: Rewrite as WebSocket class
 const WSCreate = async () => await new Promise<WebSocket>(resolve => {
@@ -155,17 +165,19 @@ const worker = async () => {
   const ws = await WSCreate()
   while (upqueue.length) {
     const f = upqueue[0]
-    if (f.cloudPos === f.size) {
+    if (f.cloudPos === f.file.size) {
       upqueue.shift()
       continue
     }
     const start = f.cloudPos
-    const end = Math.min(f.size, start + (1<<20))
-    const control = { name: f.cloudName, size: f.size, start, end }
-    const data = f.slice(start, end)
+    const end = Math.min(f.file.size, start + (1<<20))
+    const control = { name: f.cloudName, size: f.file.size, start, end }
+    const data = f.file.slice(start, end)
     f.cloudPos = end
     // Note: files may get modified during I/O
+    // @ts-ignore FIXME proper WebSocket class, avoid attaching functions to WebSocket object
     ws.sendMsg(control)
+    // @ts-ignore
     await ws.sendData(data)
   }
   if (upqueue.length) startWorker()

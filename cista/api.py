@@ -104,11 +104,11 @@ async def watch(req, ws):
     )
     uuid = token_bytes(16)
     try:
-        with watching.tree_lock:
+        with watching.state.lock:
             q = watching.pubsub[uuid] = asyncio.Queue()
             # Init with disk usage and full tree
-            await ws.send(watching.format_du())
-            await ws.send(watching.format_tree())
+            await ws.send(watching.format_space(watching.state.space))
+            await ws.send(watching.format_root(watching.state.root))
         # Send updates
         while True:
             await ws.send(await q.get())

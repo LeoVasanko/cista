@@ -16,17 +16,17 @@ import { needleFormat, localeIncludes, collator } from '@/utils';
 
 const documentStore = useDocumentStore()
 const fileExplorer = ref()
-const props = defineProps({
+const props = defineProps<{
   path: Array<string>
-})
+  query: string
+}>()
 const documents = computed(() => {
-  if (!props.path) return []
   const loc = props.path.join('/')
+  const query = props.query
   // List the current location
-  if (!documentStore.search) return documentStore.document.filter(doc => doc.loc === loc)
+  if (!query) return documentStore.document.filter(doc => doc.loc === loc)
   // Find up to 100 newest documents that match the search
-  const search = documentStore.search
-  const needle = needleFormat(search)
+  const needle = needleFormat(query)
   let limit = 100
   let docs = []
   for (const doc of documentStore.recentDocuments) {
@@ -46,7 +46,7 @@ const documents = computed(() => {
     // @ts-ignore
     (a.type === 'file') - (b.type === 'file') ||
     // @ts-ignore
-    b.name.includes(search) - a.name.includes(search) ||
+    b.name.includes(query) - a.name.includes(query) ||
     collator.compare(a.name, b.name)
   ))
   return docs

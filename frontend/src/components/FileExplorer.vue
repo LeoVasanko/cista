@@ -3,34 +3,11 @@
     <thead>
       <tr>
         <th class="selection">
-          <input
-            type="checkbox"
-            tabindex="-1"
-            v-model="allSelected"
-            :indeterminate="selectionIndeterminate"
-          />
+          <input type="checkbox" tabindex="-1" v-model="allSelected" :indeterminate="selectionIndeterminate">
         </th>
-        <th
-          class="sortcolumn"
-          :class="{ sortactive: sort === 'name' }"
-          @click="toggleSort('name')"
-        >
-          Name
-        </th>
-        <th
-          class="sortcolumn modified right"
-          :class="{ sortactive: sort === 'modified' }"
-          @click="toggleSort('modified')"
-        >
-          Modified
-        </th>
-        <th
-          class="sortcolumn size right"
-          :class="{ sortactive: sort === 'size' }"
-          @click="toggleSort('size')"
-        >
-          Size
-        </th>
+        <th class="sortcolumn" :class="{ sortactive: sort === 'name' }" @click="toggleSort('name')">Name</th>
+        <th class="sortcolumn modified right" :class="{ sortactive: sort === 'modified' }" @click="toggleSort('modified')">Modified</th>
+        <th class="sortcolumn size right" :class="{ sortactive: sort === 'size' }" @click="toggleSort('size')">Size</th>
         <th class="menu"></th>
       </tr>
     </thead>
@@ -38,27 +15,13 @@
       <tr v-if="editing?.key === 'new'" class="folder">
         <td class="selection"></td>
         <td class="name">
-          <FileRenameInput
-            :doc="editing"
-            :rename="mkdir"
-            :exit="
-              () => {
-                editing = null
-              }
-            "
-          />
+          <FileRenameInput :doc="editing" :rename="mkdir" :exit="() => {editing = null}" />
         </td>
-        <td class="modified right">
-          <time :datetime="new Date(editing.mtime).toISOString().replace('.000', '')">{{
-            editing.modified
-          }}</time>
-        </td>
-        <td class="size right">{{ editing.sizedisp }}</td>
+        <FileModified :doc=editing />
+        <FileSize :doc=editing />
         <td class="menu"></td>
       </tr>
-      <template
-        v-for="(doc, index) in sortedDocuments"
-        :key="doc.key">
+      <template v-for="(doc, index) in sortedDocuments" :key="doc.key">
         <tr class="folder-change" v-if="showFolderBreadcrumb(index)">
           <th colspan="5"><BreadCrumb :path="doc.loc ? doc.loc.split('/') : []" /></th>
         </tr>
@@ -82,16 +45,9 @@
             />
           </td>
           <td class="name">
-            <template v-if="editing === doc"
-              ><FileRenameInput
-                :doc="doc"
-                :rename="rename"
-                :exit="
-                  () => {
-                    editing = null
-                  }
-                "
-            /></template>
+            <template v-if="editing === doc">
+              <FileRenameInput :doc="doc" :rename="rename" :exit="() => {editing = null}" />
+            </template>
             <template v-else>
               <a
                 :href="url_for(doc)"
@@ -102,29 +58,13 @@
                 @keyup.right.stop="ev => { if (doc.dir) (ev.target as HTMLElement).click() }"
                 >{{ doc.name }}</a
               >
-              <button
-                v-if="cursor == doc"
-                class="rename-button"
-                @click="() => (editing = doc)"
-              >
-                🖊️
-              </button>
+              <button v-if="cursor == doc" class="rename-button" @click="() => (editing = doc)">🖊️</button>
             </template>
           </td>
-          <td class="modified right">
-            <time
-              :data-tooltip="new Date(1000 * doc.mtime).toISOString().replace('T', '\n').replace('.000Z', ' UTC')"
-              >{{ doc.modified }}</time
-            >
-          </td>
-          <td class="size right">{{ doc.sizedisp }}</td>
+          <FileModified :doc=doc />
+          <FileSize :doc=doc />
           <td class="menu">
-            <button
-              tabindex="-1"
-              @click.stop="contextMenu($event, doc)"
-            >
-              ⋮
-            </button>
+            <button tabindex="-1" @click.stop="contextMenu($event, doc)">⋮</button>
           </td>
         </tr>
       </template>
@@ -147,13 +87,10 @@ import { connect, controlUrl } from '@/repositories/WS'
 import { collator, formatSize, formatUnixDate } from '@/utils'
 import { useRouter } from 'vue-router'
 
-const props = withDefaults(
-  defineProps<{
-    path: Array<string>
-    documents: Document[]
-  }>(),
-  {}
-)
+const props = defineProps<{
+  path: Array<string>
+  documents: Document[]
+}>()
 const documentStore = useDocumentStore()
 const router = useRouter()
 const url_for = (doc: Document) => {
@@ -309,7 +246,7 @@ const mkdir = (doc: Document, name: string) => {
         editing.value = null
       } else {
         console.log('mkdir', msg)
-        router.push(`/${doc.loc}/${name}/`)
+        router.push(doc.loc ? `/${doc.loc}/${name}/` : `/${name}/`)
       }
     }
   })
@@ -400,7 +337,7 @@ table .selection {
   text-overflow: clip;
 }
 table .modified {
-  width: 8em;
+  width: 9em;
 }
 table .size {
   width: 5em;

@@ -46,8 +46,11 @@ const isCurrent = (index: number) => index == props.path.length ? 'location' : u
 const navigate = (index: number) => {
   const link = links[index]
   if (!link) throw Error(`No link at index ${index} (path: ${props.path})`)
+  const url = `/${longest.value.slice(0, index).join('/')}/`
+  const here = `/${longest.value.join('/')}/`
   link.focus()
-  router.replace(`/${longest.value.slice(0, index).join('/')}`)
+  if (here.startsWith(location.hash.slice(1))) router.replace(url)
+  else router.push(url)
 }
 
 const move = (dir: number) => {

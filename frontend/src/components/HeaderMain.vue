@@ -9,7 +9,7 @@
       <SvgButton
         name="create-folder"
         data-tooltip="New folder"
-        @click="() => documentStore.fileExplorer.newFolder()"
+        @click="() => documentStore.fileExplorer!.newFolder()"
       />
       <slot></slot>
       <div class="spacer smallgap"></div>
@@ -17,7 +17,9 @@
         <input
           ref="search"
           type="search"
-          v-model="documentStore.search"
+          :value="query"
+          @blur="ev => { if (!query) closeSearch(ev) }"
+          @input="updateSearch"
           placeholder="Search words"
           class="margin-input"
           @keyup.escape="closeSearch"
@@ -31,30 +33,42 @@
 
 <script setup lang="ts">
 import { useDocumentStore } from '@/stores/documents'
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watchEffect } from 'vue'
 import ContextMenu from '@imengyu/vue3-context-menu'
+import router from '@/router';
 
 const documentStore = useDocumentStore()
 const showSearchInput = ref<boolean>(false)
 const search = ref<HTMLInputElement | null>()
 const searchButton = ref<HTMLButtonElement | null>()
 
-const closeSearch = () => {
+const closeSearch = (ev: Event) => {
   if (!showSearchInput.value) return  // Already closing
   showSearchInput.value = false
-  documentStore.search = ''
   const breadcrumb = document.querySelector('.breadcrumb') as HTMLElement
   breadcrumb.focus()
+  updateSearch(ev)
 }
-const toggleSearchInput = () => {
+const updateSearch = (ev: Event) => {
+  const q = (ev.target as HTMLInputElement).value
+  let p = props.path.join('/')
+  p = p ? `/${p}` : ''
+  const url = q ? `${p}//${q}` : (p || '/')
+  console.log("Update search", url)
+  if (!props.query && q) router.push(url)
+  else router.replace(url)
+}
+const toggleSearchInput = (ev: Event) => {
   showSearchInput.value = !showSearchInput.value
-  if (!showSearchInput.value) return closeSearch()
+  if (!showSearchInput.value) return closeSearch(ev)
   nextTick(() => {
     const input = search.value
     if (input) input.focus()
   })
 }
-
+watchEffect(() => {
+  if (props.query) showSearchInput.value = true
+})
 const settingsMenu = (e: Event) => {
   // show the context menu
   const items = []
@@ -69,9 +83,10 @@ const settingsMenu = (e: Event) => {
     items,
   })
 }
-const props = defineProps({
+const props = defineProps<{
   path: Array<string>
-})
+  query: string
+}>()
 
 defineExpose({
   toggleSearchInput,

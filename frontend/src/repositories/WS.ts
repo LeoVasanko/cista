@@ -1,13 +1,28 @@
 import { useDocumentStore } from "@/stores/documents"
-import type { DirEntry, UpdateEntry, errorEvent } from "./Document"
+import type { FileEntry, UpdateEntry, errorEvent } from "./Document"
 
 export const controlUrl = '/api/control'
 export const uploadUrl = '/api/upload'
 export const watchUrl = '/api/watch'
 
-let tree = null as DirEntry | null
+let tree = [] as FileEntry[]
 let reconnectDuration = 500
 let wsWatch = null as WebSocket | null
+
+export const loadSession = () => {
+  const store = useDocumentStore()
+  try {
+    tree = JSON.parse(sessionStorage["cista-files"])
+    store.updateRoot(tree)
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
+const saveSession = () => {
+  sessionStorage["cista-files"] = JSON.stringify(tree)
+}
 
 export const connect = (path: string, handlers: Partial<Record<keyof WebSocketEventMap, any>>) => {
   const webSocket = new WebSocket(new URL(path, location.origin.replace(/^http/, 'ws')))
@@ -94,34 +109,36 @@ const handleWatchMessage = (event: MessageEvent) => {
   }
 }
 
-function handleRootMessage({ root }: { root: DirEntry }) {
+function handleRootMessage({ root }: { root: FileEntry[] }) {
   const store = useDocumentStore()
   console.log('Watch root', root)
   store.updateRoot(root)
   tree = root
+  saveSession()
 }
 
 function handleUpdateMessage(updateData: { update: UpdateEntry[] }) {
   const store = useDocumentStore()
-  console.log('Watch update', updateData.update)
+  const update = updateData.update
+  console.log('Watch update', update)
   if (!tree) return console.error('Watch update before root')
-  let node: DirEntry = tree
-  for (const elem of updateData.update) {
-    if (elem.deleted) {
-      delete node.dir[elem.name]
-      break // Deleted elements can't have further children
+  let newtree = []
+  let oidx = 0
+
+  for (const [action, arg] of update) {
+    if (action === 'k') {
+      newtree.push(...tree.slice(oidx, oidx + arg))
+      oidx += arg
     }
-    if (elem.name) {
-      // @ts-ignore
-      console.log(node, elem.name)
-      node = node.dir[elem.name] ||= {}
-    }
-    if (elem.key !== undefined) node.key = elem.key
-    if (elem.size !== undefined) node.size = elem.size
-    if (elem.mtime !== undefined) node.mtime = elem.mtime
-    if (elem.dir !== undefined) node.dir = elem.dir
+    else if (action === 'd') oidx += arg
+    else if (action === 'i') newtree.push(...arg)
+    else console.log("Unknown update action", action, arg)
   }
-  store.updateRoot(tree)
+  if (oidx != tree.length)
+    throw Error(`Tree update out of sync, number of entries mismatch: got ${oidx}, expected ${tree.length}, new tree ${newtree.length}`)
+  store.updateRoot(newtree)
+  tree = newtree
+  saveSession()
 }
 
 function handleError(msg: errorEvent) {

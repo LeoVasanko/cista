@@ -22,29 +22,16 @@ export type errorEvent = {
 
 // Raw types the backend /api/watch sends us
 
-export type FileEntry = {
-  key: FUID
-  size: number
-  mtime: number
-}
+export type FileEntry = [
+  number,  // level
+  string,  // name
+  FUID,
+  number, //mtime
+  number, // size
+  number, // isfile
+]
 
-export type DirEntry = {
-  key: FUID
-  size: number
-  mtime: number
-  dir: DirList
-}
-
-export type DirList = Record<string, FileEntry | DirEntry>
-
-export type UpdateEntry = {
-  name: string
-  deleted?: boolean
-  key?: FUID
-  size?: number
-  mtime?: number
-  dir?: DirList
-}
+export type UpdateEntry = ['k', number] | ['d', number] | ['i', Array<FileEntry>]
 
 // Helper structure for selections
 export interface SelectedItems {

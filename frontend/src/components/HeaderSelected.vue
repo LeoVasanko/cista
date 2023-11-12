@@ -34,7 +34,7 @@ const op = (op: string, dst?: string) => {
   // @ts-ignore
   if (dst !== undefined) msg.dst = dst
   const control = connect(controlUrl, {
-    message(ev: WebSocmetMessageEvent) {
+    message(ev: MessageEvent) {
       const res = JSON.parse(ev.data)
       if ('error' in res) {
         console.error('Control socket error', msg, res.error)

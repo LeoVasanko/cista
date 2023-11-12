@@ -1,13 +1,13 @@
 <template>
   <LoginModal />
   <header>
-    <HeaderMain ref="headerMain" :path="path.pathList">
+    <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query">
       <HeaderSelected :path="path.pathList" />
     </HeaderMain>
     <BreadCrumb :path="path.pathList" tabindex="-1"/>
   </header>
   <main>
-    <RouterView :path="path.pathList" />
+    <RouterView :path="path.pathList" :query="path.query" />
   </main>
 </template>
 
@@ -16,7 +16,7 @@ import { RouterView } from 'vue-router'
 import type { ComputedRef } from 'vue'
 import type HeaderMain from '@/components/HeaderMain.vue'
 import { onMounted, onUnmounted, ref, watchEffect } from 'vue'
-import { watchConnect, watchDisconnect } from '@/repositories/WS'
+import { loadSession, watchConnect, watchDisconnect } from '@/repositories/WS'
 import { useDocumentStore } from '@/stores/documents'
 
 import { computed } from 'vue'
@@ -25,19 +25,23 @@ import Router from '@/router/index'
 interface Path {
   path: string
   pathList: string[]
+  query: string
 }
 const documentStore = useDocumentStore()
 const path: ComputedRef<Path> = computed(() => {
-  const p = decodeURIComponent(Router.currentRoute.value.path)
-  const pathList = p.split('/').filter(value => value !== '')
+  const p = decodeURIComponent(Router.currentRoute.value.path).split('//')
+  const pathList = p[0].split('/').filter(value => value !== '')
+  const query = p.slice(1).join('//')
   return {
-    path: p,
-    pathList
+    path: p[0],
+    pathList,
+    query
   }
 })
 watchEffect(() => {
   document.title = path.value.path.replace(/\/$/, '').split('/').pop() || documentStore.server.name || 'Cista Storage'
 })
+onMounted(loadSession)
 onMounted(watchConnect)
 onUnmounted(watchDisconnect)
 // Update human-readable x seconds ago messages from mtimes

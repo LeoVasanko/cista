@@ -1,10 +1,4 @@
-import type {
-  Document,
-  DirEntry,
-  FileEntry,
-  FUID,
-  SelectedItems
-} from '@/repositories/Document'
+import type { Document, FileEntry, FUID, SelectedItems } from '@/repositories/Document'
 import { formatSize, formatUnixDate, haystackFormat } from '@/utils'
 import { defineStore } from 'pinia'
 import { collator } from '@/utils'
@@ -26,11 +20,8 @@ export const useDocumentStore = defineStore({
   id: 'documents',
   state: () => ({
     document: [] as Document[],
-    search: "" as string,
     selected: new Set<FUID>(),
-    uploadingDocuments: [],
-    uploadCount: 0 as number,
-    fileExplorer: null,
+    fileExplorer: null as any,
     error: '' as string,
     connected: false,
     server: {} as Record<string, any>,
@@ -41,47 +32,29 @@ export const useDocumentStore = defineStore({
       isOpenLoginModal: false
     } as User
   }),
-  persist: {
-    storage: sessionStorage,
-    paths: ['document'],
-  },
   actions: {
-    updateRoot(root: DirEntry | null = null) {
-      if (!root) {
-        this.document = []
-        return
-      }
-      // Transform tree data to flat documents array
-      let loc = ""
-      const mapper = ([name, attr]: [string, FileEntry | DirEntry]) => ({
-        ...attr,
-        loc,
-        name,
-        sizedisp: formatSize(attr.size),
-        modified: formatUnixDate(attr.mtime),
-        haystack: haystackFormat(name),
-      })
-      const queue = [...Object.entries(root.dir ?? {}).map(mapper)]
+    updateRoot(root: FileEntry[]) {
       const docs = []
-      for (let doc; (doc = queue.shift()) !== undefined;) {
-        docs.push(doc)
-        if ("dir" in doc) {
-          // Recurse but replace recursive structure with boolean
-          loc = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
-          queue.push(...Object.entries(doc.dir).map(mapper))
-          // @ts-ignore
-          doc.dir = true
-        }
-        // @ts-ignore
-        else doc.dir = false
+      let loc = [] as string[]
+      for (const [level, name, key, mtime, size, isfile] of root) {
+        loc = loc.slice(0, level - 1)
+        docs.push({
+          name,
+          loc: level ? loc.join('/') : '/',
+          key,
+          size,
+          sizedisp: formatSize(size),
+          mtime,
+          modified: formatUnixDate(mtime),
+          haystack: haystackFormat(name),
+          dir: !isfile,
+        })
+        loc.push(name)
       }
-      // Pre sort directory entries folders first then files, names in natural ordering
-      docs.sort((a, b) =>
-        // @ts-ignore
-        b.dir - a.dir ||
-        collator.compare(a.name, b.name)
-      )
       this.document = docs as Document[]
+    },
+    updateModified() {
+      for (const doc of this.document) doc.modified = formatUnixDate(doc.mtime)
     },
     login(username: string, privileged: boolean) {
       this.user.username = username

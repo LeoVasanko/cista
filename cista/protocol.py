@@ -112,47 +112,43 @@ class ErrorMsg(msgspec.Struct):
 ## Directory listings
 
 
-class FileEntry(msgspec.Struct):
-    key: str
-    size: int
-    mtime: int
-
-
-class DirEntry(msgspec.Struct):
-    key: str
-    size: int
-    mtime: int
-    dir: DirList
-
-    def __getitem__(self, name):
-        return self.dir[name]
-
-    def __setitem__(self, name, value):
-        self.dir[name] = value
-
-    def __contains__(self, name):
-        return name in self.dir
-
-    def __delitem__(self, name):
-        del self.dir[name]
-
-    @property
-    def props(self):
-        return {k: v for k, v in self.__struct_fields__ if k != "dir"}
-
-
-DirList = dict[str, FileEntry | DirEntry]
-
-
-class UpdateEntry(msgspec.Struct, omit_defaults=True):
-    """Updates the named entry in the tree. Fields that are set replace old values. A list of entries recurses directories."""
-
+class FileEntry(msgspec.Struct, array_like=True):
+    level: int
     name: str
     key: str
-    deleted: bool = False
-    size: int | None = None
-    mtime: int | None = None
-    dir: DirList | None = None
+    mtime: int
+    size: int
+    isfile: int
+
+    def __repr__(self):
+        return self.key or "FileEntry()"
+
+
+class Update(msgspec.Struct, array_like=True):
+    ...
+
+
+class UpdKeep(Update, tag="k"):
+    count: int
+
+
+class UpdDel(Update, tag="d"):
+    count: int
+
+
+class UpdIns(Update, tag="i"):
+    items: list[FileEntry]
+
+
+class UpdateMessage(msgspec.Struct):
+    update: list[UpdKeep | UpdDel | UpdIns]
+
+
+class Space(msgspec.Struct):
+    disk: int
+    free: int
+    usage: int
+    storage: int
 
 
 def make_dir_data(root):

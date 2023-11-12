@@ -1,10 +1,8 @@
 import asyncio
 import datetime
 import mimetypes
-from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from importlib.resources import files
-from pathlib import Path
+from pathlib import Path, PurePath, PurePosixPath
 from stat import S_IFDIR, S_IFREG
 from urllib.parse import unquote
 from wsgiref.handlers import format_date_time
@@ -12,15 +10,13 @@ from wsgiref.handlers import format_date_time
 import brotli
 import sanic.helpers
 from blake3 import blake3
-from natsort import natsorted, ns
 from sanic import Blueprint, Sanic, empty, raw
-from sanic.exceptions import Forbidden, NotFound
+from sanic.exceptions import Forbidden, NotFound, ServerError
 from sanic.log import logging
 from stream_zip import ZIP_AUTO, stream_zip
 
 from cista import auth, config, session, watching
 from cista.api import bp
-from cista.protocol import DirEntry
 from cista.util.apphelpers import handle_sanic_exception
 
 # Workaround until Sanic PR #2824 is merged
@@ -36,7 +32,9 @@ app.exception(Exception)(handle_sanic_exception)
 async def main_start(app, loop):
     config.load_config()
     await watching.start(app, loop)
-    app.ctx.threadexec = ThreadPoolExecutor(max_workers=8)
+    app.ctx.threadexec = ThreadPoolExecutor(
+        max_workers=8, thread_name_prefix="cista-ioworker"
+    )
 
 
 @app.after_server_stop
@@ -49,8 +47,8 @@ async def main_stop(app, loop):
 async def use_session(req):
     req.ctx.session = session.get(req)
     try:
-        req.ctx.username = req.ctx.session["username"]
-        req.ctx.user = config.config.users[req.ctx.session["username"]]  # type: ignore
+        req.ctx.username = req.ctx.session["username"]  # type: ignore
+        req.ctx.user = config.config.users[req.ctx.username]
     except (AttributeError, KeyError, TypeError):
         req.ctx.username = None
         req.ctx.user = None
@@ -81,22 +79,16 @@ def http_fileserver(app, _):
 www = {}
 
 
-@app.before_server_start
-async def load_wwwroot(*_ignored):
-    global www
-    www = await asyncio.get_event_loop().run_in_executor(None, _load_wwwroot, www)
-
-
 def _load_wwwroot(www):
     wwwnew = {}
-    base = files("cista") / "wwwroot"
-    paths = ["."]
+    base = Path(__file__).with_name("wwwroot")
+    paths = [PurePath()]
     while paths:
         path = paths.pop(0)
         current = base / path
         for p in current.iterdir():
             if p.is_dir():
-                paths.append(current / p.parts[-1])
+                paths.append(p.relative_to(base))
                 continue
             name = p.relative_to(base).as_posix()
             mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
@@ -127,15 +119,35 @@ def _load_wwwroot(www):
             if len(br) >= len(data):
                 br = False
             wwwnew[name] = data, br, headers
+    if not wwwnew:
+        raise ServerError(
+            "Web frontend missing. Did you forget npm run build?",
+            extra={"wwwroot": str(base)},
+            quiet=True,
+        )
     return wwwnew
 
 
-@app.add_task
+@app.before_server_start
+async def start(app):
+    await load_wwwroot(app)
+    if app.debug:
+        app.add_task(refresh_wwwroot())
+
+
+async def load_wwwroot(app):
+    global www
+    www = await asyncio.get_event_loop().run_in_executor(
+        app.ctx.threadexec, _load_wwwroot, www
+    )
+
+
 async def refresh_wwwroot():
     while True:
+        await asyncio.sleep(0.5)
         try:
             wwwold = www
-            await load_wwwroot()
+            await load_wwwroot(app)
             changes = ""
             for name in sorted(www):
                 attr = www[name]
@@ -151,7 +163,6 @@ async def refresh_wwwroot():
             print("Error loading wwwroot", e)
         if not app.debug:
             return
-        await asyncio.sleep(0.5)
 
 
 @app.route("/<path:path>", methods=["GET", "HEAD"])
@@ -166,66 +177,70 @@ async def wwwroot(req, path=""):
         return empty(304, headers=headers)
     # Brotli compressed?
     if br and "br" in req.headers.accept_encoding.split(", "):
-        headers = {
-            **headers,
-            "content-encoding": "br",
-        }
+        headers = {**headers, "content-encoding": "br"}
         data = br
     return raw(data, headers=headers)
+
+
+def get_files(wanted: set) -> list[tuple[PurePosixPath, Path]]:
+    loc = PurePosixPath()
+    idx = 0
+    ret = []
+    level: int | None = None
+    parent: PurePosixPath | None = None
+    with watching.state.lock:
+        root = watching.state.root
+        while idx < len(root):
+            f = root[idx]
+            loc = PurePosixPath(*loc.parts[: f.level - 1]) / f.name
+            if parent is not None and f.level <= level:
+                level = parent = None
+            if f.key in wanted:
+                level, parent = f.level, loc.parent
+            if parent is not None:
+                wanted.discard(f.key)
+                ret.append((loc.relative_to(parent), watching.rootpath / loc))
+            idx += 1
+    return ret
 
 
 @app.get("/zip/<keys>/<zipfile:ext=zip>")
 async def zip_download(req, keys, zipfile, ext):
     """Download a zip archive of the given keys"""
+
     wanted = set(keys.split("+"))
-    with watching.tree_lock:
-        q = deque([([], None, watching.tree[""].dir)])
-        files = []
-        while q:
-            locpar, relpar, d = q.pop()
-            for name, attr in d.items():
-                loc = [*locpar, name]
-                rel = None
-                if relpar or attr.key in wanted:
-                    rel = [*relpar, name] if relpar else [name]
-                    wanted.discard(attr.key)
-                isdir = isinstance(attr, DirEntry)
-                if isdir:
-                    q.append((loc, rel, attr.dir))
-                if rel:
-                    files.append(
-                        ("/".join(rel), Path(watching.rootpath.joinpath(*loc)))
-                    )
+    files = get_files(wanted)
 
     if not files:
         raise NotFound(
             "No files found",
-            context={"keys": keys, "zipfile": zipfile, "wanted": wanted},
+            context={"keys": keys, "zipfile": f"{zipfile}.{ext}", "wanted": wanted},
         )
     if wanted:
         raise NotFound("Files not found", context={"missing": wanted})
-
-    files = natsorted(files, key=lambda f: f[0], alg=ns.IGNORECASE)
 
     def local_files(files):
         for rel, p in files:
             s = p.stat()
             size = s.st_size
             modified = datetime.datetime.fromtimestamp(s.st_mtime, datetime.UTC)
+            name = rel.as_posix()
             if p.is_dir():
-                yield rel, modified, S_IFDIR | 0o755, ZIP_AUTO(size), b""
+                yield f"{name}/", modified, S_IFDIR | 0o755, ZIP_AUTO(size), iter(b"")
             else:
-                yield rel, modified, S_IFREG | 0o644, ZIP_AUTO(size), contents(p)
+                yield name, modified, S_IFREG | 0o644, ZIP_AUTO(size), contents(p, size)
 
-    def contents(name):
+    def contents(name, size):
         with name.open("rb") as f:
-            while chunk := f.read(65536):
+            while size > 0 and (chunk := f.read(min(size, 1 << 20))):
+                size -= len(chunk)
                 yield chunk
+        assert size == 0
 
     def worker():
         try:
             for chunk in stream_zip(local_files(files)):
-                asyncio.run_coroutine_threadsafe(queue.put(chunk), loop)
+                asyncio.run_coroutine_threadsafe(queue.put(chunk), loop).result()
         except Exception:
             logging.exception("Error streaming ZIP")
             raise
@@ -238,7 +253,10 @@ async def zip_download(req, keys, zipfile, ext):
     thread = loop.run_in_executor(app.ctx.threadexec, worker)
 
     # Stream the response
-    res = await req.respond(content_type="application/zip")
+    res = await req.respond(
+        content_type="application/zip",
+        headers={"cache-control": "no-store"},
+    )
     while chunk := await queue.get():
         await res.send(chunk)
 
