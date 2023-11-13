@@ -37,16 +37,23 @@ async def upload(req, ws):
             )
         req = msgspec.json.decode(text, type=FileRange)
         pos = req.start
-        data = None
-        while pos < req.end and (data := await ws.recv()) and isinstance(data, bytes):
+        while True:
+            data = await ws.recv()
+            if not isinstance(data, bytes):
+                break
+            if len(data) > req.end - pos:
+                raise ValueError(
+                    f"Expected up to {req.end - pos} bytes, got {len(data)} bytes"
+                )
             sentsize = await alink(("upload", req.name, pos, data, req.size))
             pos += typing.cast(int, sentsize)
+            if pos >= req.end:
+                break
         if pos != req.end:
             d = f"{len(data)} bytes" if isinstance(data, bytes) else data
             raise ValueError(f"Expected {req.end - pos} more bytes, got {d}")
         # Report success
         res = StatusMsg(status="ack", req=req)
-        print("ack", res)
         await asend(ws, res)
 
 

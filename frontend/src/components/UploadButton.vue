@@ -166,10 +166,6 @@ const worker = async () => {
   const ws = await WSCreate()
   while (upqueue.length) {
     const f = upqueue[0]
-    if (f.cloudPos === f.file.size) {
-      upqueue.shift()
-      continue
-    }
     const start = f.cloudPos
     const end = Math.min(f.file.size, start + (1<<20))
     const control = { name: f.cloudName, size: f.file.size, start, end }
@@ -180,6 +176,7 @@ const worker = async () => {
     ws.sendMsg(control)
     // @ts-ignore
     await ws.sendData(data)
+    if (f.cloudPos === f.file.size) upqueue.shift()
   }
   if (upqueue.length) startWorker()
   uprogress.status = "idle"

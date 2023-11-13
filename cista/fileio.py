@@ -34,9 +34,11 @@ class File:
             self.open_rw()
         assert self.fd is not None
         if file_size is not None:
+            assert pos + len(buffer) <= file_size
             os.ftruncate(self.fd, file_size)
-        os.lseek(self.fd, pos, os.SEEK_SET)
-        os.write(self.fd, buffer)
+        if buffer:
+            os.lseek(self.fd, pos, os.SEEK_SET)
+            os.write(self.fd, buffer)
 
     def __getitem__(self, slice):
         if self.fd is None:
