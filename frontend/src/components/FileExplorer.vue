@@ -234,7 +234,7 @@ let modifiedTimer: any = null
 const updateModified = () => {
   for (const doc of props.documents) doc.modified = formatUnixDate(doc.mtime)
 }
-onMounted(() => { modifiedTimer = setInterval(updateModified, 1000) })
+onMounted(() => { updateModified(); modifiedTimer = setInterval(updateModified, 1000) })
 onUnmounted(() => { clearInterval(modifiedTimer) })
 const mkdir = (doc: Document, name: string) => {
   const control = connect(controlUrl, {
