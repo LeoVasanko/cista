@@ -17,7 +17,7 @@ import type { ComputedRef } from 'vue'
 import type HeaderMain from '@/components/HeaderMain.vue'
 import { onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import { loadSession, watchConnect, watchDisconnect } from '@/repositories/WS'
-import { useDocumentStore } from '@/stores/documents'
+import { useMainStore } from '@/stores/main'
 
 import { computed } from 'vue'
 import Router from '@/router/index'
@@ -27,7 +27,7 @@ interface Path {
   pathList: string[]
   query: string
 }
-const documentStore = useDocumentStore()
+const store = useMainStore()
 const path: ComputedRef<Path> = computed(() => {
   const p = decodeURIComponent(Router.currentRoute.value.path).split('//')
   const pathList = p[0].split('/').filter(value => value !== '')
@@ -39,7 +39,7 @@ const path: ComputedRef<Path> = computed(() => {
   }
 })
 watchEffect(() => {
-  document.title = path.value.path.replace(/\/$/, '').split('/').pop() || documentStore.server.name || 'Cista Storage'
+  document.title = path.value.path.replace(/\/$/, '').split('/').pop() || store.server.name || 'Cista Storage'
 })
 onMounted(loadSession)
 onMounted(watchConnect)
@@ -48,7 +48,7 @@ const headerMain = ref<typeof HeaderMain | null>(null)
 let vert = 0
 let timer: any = null
 const globalShortcutHandler = (event: KeyboardEvent) => {
-  const fileExplorer = documentStore.fileExplorer as any
+  const fileExplorer = store.fileExplorer as any
   if (!fileExplorer) return
   const c = fileExplorer.isCursor()
   const keyup = event.type === 'keyup'
@@ -124,3 +124,4 @@ onUnmounted(() => {
 })
 export type { Path }
 </script>
+@/stores/main

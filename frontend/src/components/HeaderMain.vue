@@ -1,15 +1,15 @@
 <template>
   <nav class="headermain">
     <div class="buttons">
-      <template v-if="documentStore.error">
-        <div class="error-message" @click="documentStore.error = ''">{{ documentStore.error }}</div>
+      <template v-if="store.error">
+        <div class="error-message" @click="store.error = ''">{{ store.error }}</div>
         <div class="smallgap"></div>
       </template>
       <UploadButton :path="props.path" />
       <SvgButton
         name="create-folder"
         data-tooltip="New folder"
-        @click="() => documentStore.fileExplorer!.newFolder()"
+        @click="() => store.fileExplorer!.newFolder()"
       />
       <slot></slot>
       <div class="spacer smallgap"></div>
@@ -18,7 +18,6 @@
           ref="search"
           type="search"
           :value="query"
-          @blur="ev => { if (!query) closeSearch(ev) }"
           @input="updateSearch"
           placeholder="Search words"
           class="margin-input"
@@ -32,15 +31,19 @@
 </template>
 
 <script setup lang="ts">
-import { useDocumentStore } from '@/stores/documents'
+import { useMainStore } from '@/stores/main'
 import { ref, nextTick, watchEffect } from 'vue'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import router from '@/router';
 
-const documentStore = useDocumentStore()
+const store = useMainStore()
 const showSearchInput = ref<boolean>(false)
 const search = ref<HTMLInputElement | null>()
 const searchButton = ref<HTMLButtonElement | null>()
+  const props = defineProps<{
+  path: Array<string>
+  query: string
+}>()
 
 const closeSearch = (ev: Event) => {
   if (!showSearchInput.value) return  // Already closing
@@ -54,9 +57,9 @@ const updateSearch = (ev: Event) => {
   let p = props.path.join('/')
   p = p ? `/${p}` : ''
   const url = q ? `${p}//${q}` : (p || '/')
-  console.log("Update search", url)
-  if (!props.query && q) router.push(url)
-  else router.replace(url)
+  const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
+  if (!props.query && q) router.push(u)
+  else router.replace(u)
 }
 const toggleSearchInput = (ev: Event) => {
   showSearchInput.value = !showSearchInput.value
@@ -72,10 +75,10 @@ watchEffect(() => {
 const settingsMenu = (e: Event) => {
   // show the context menu
   const items = []
-  if (documentStore.user.isLoggedIn) {
-    items.push({ label: `Logout ${documentStore.user.username ?? ''}`, onClick: () => documentStore.logout() })
+  if (store.user.isLoggedIn) {
+    items.push({ label: `Logout ${store.user.username ?? ''}`, onClick: () => store.logout() })
   } else {
-    items.push({ label: 'Login', onClick: () => documentStore.loginDialog() })
+    items.push({ label: 'Login', onClick: () => store.loginDialog() })
   }
   ContextMenu.showContextMenu({
     // @ts-ignore
@@ -83,11 +86,6 @@ const settingsMenu = (e: Event) => {
     items,
   })
 }
-const props = defineProps<{
-  path: Array<string>
-  query: string
-}>()
-
 defineExpose({
   toggleSearchInput,
   closeSearch,
@@ -116,3 +114,4 @@ input[type='search'] {
   max-width: 30vw;
 }
 </style>
+@/stores/main

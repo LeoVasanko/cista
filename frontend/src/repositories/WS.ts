@@ -1,4 +1,4 @@
-import { useDocumentStore } from "@/stores/documents"
+import { useMainStore } from "@/stores/main"
 import type { FileEntry, UpdateEntry, errorEvent } from "./Document"
 
 export const controlUrl = '/api/control'
@@ -12,7 +12,7 @@ let wsWatch = null as WebSocket | null
 export const loadSession = () => {
   const s = localStorage['cista-files']
   if (!s) return false
-  const store = useDocumentStore()
+  const store = useMainStore()
   try {
     tree = JSON.parse(s)
     store.updateRoot(tree)
@@ -39,7 +39,7 @@ export const watchConnect = () => {
     clearTimeout(watchTimeout)
     watchTimeout = null
   }
-  const store = useDocumentStore()
+  const store = useMainStore()
   if (store.error !== 'Reconnecting...') store.error = 'Connecting...'
   console.log(store.error)
 
@@ -81,7 +81,7 @@ export const watchDisconnect = () => {
 let watchTimeout: any = null
 
 const watchReconnect = (event: MessageEvent) => {
-  const store = useDocumentStore()
+  const store = useMainStore()
   if (store.connected) {
     console.warn("Disconnected from server", event)
     store.connected = false
@@ -114,7 +114,7 @@ const handleWatchMessage = (event: MessageEvent) => {
 }
 
 function handleRootMessage({ root }: { root: FileEntry[] }) {
-  const store = useDocumentStore()
+  const store = useMainStore()
   console.log('Watch root', root)
   store.updateRoot(root)
   tree = root
@@ -122,7 +122,7 @@ function handleRootMessage({ root }: { root: FileEntry[] }) {
 }
 
 function handleUpdateMessage(updateData: { update: UpdateEntry[] }) {
-  const store = useDocumentStore()
+  const store = useMainStore()
   const update = updateData.update
   console.log('Watch update', update)
   if (!tree) return console.error('Watch update before root')
@@ -146,7 +146,7 @@ function handleUpdateMessage(updateData: { update: UpdateEntry[] }) {
 }
 
 function handleError(msg: errorEvent) {
-  const store = useDocumentStore()
+  const store = useMainStore()
   if (msg.error.code === 401) {
     store.user.isOpenLoginModal = true
     store.user.isLoggedIn = false

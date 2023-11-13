@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { connect, uploadUrl } from '@/repositories/WS';
-import { useDocumentStore } from '@/stores/documents'
+import { useMainStore } from '@/stores/main'
 import { collator } from '@/utils';
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 const fileInput = ref()
 const folderInput = ref()
-const documentStore = useDocumentStore()
+const store = useMainStore()
 const props = defineProps({
   path: Array<string>
 })
@@ -75,7 +75,7 @@ const uploadFiles = (infiles: File[]) => {
 const uploadCloudFiles = (files: CloudFile[]) => {
   const dotfiles = files.filter(f => f.cloudName.includes('/.'))
   if (dotfiles.length) {
-    documentStore.error = "Won't upload dotfiles"
+    store.error = "Won't upload dotfiles"
     console.log("Dotfiles omitted", dotfiles)
     files = files.filter(f => !f.cloudName.includes('/.'))
   }
@@ -171,13 +171,13 @@ const WSCreate = async () => await new Promise<WebSocket>(resolve => {
     open(ev: Event) { resolve(ws) },
     error(ev: Event) {
       console.error('Upload socket error', ev)
-      documentStore.error = 'Upload socket error'
+      store.error = 'Upload socket error'
     },
     message(ev: MessageEvent) {
       const res = JSON.parse(ev!.data)
       if ('error' in res) {
         console.error('Upload socket error', res.error)
-        documentStore.error = res.error.message
+        store.error = res.error.message
         return
       }
       if (res.status === 'ack') {
@@ -302,3 +302,4 @@ span {
 .position { min-width: 4em }
 .speed { min-width: 4em }
 </style>
+@/stores/main

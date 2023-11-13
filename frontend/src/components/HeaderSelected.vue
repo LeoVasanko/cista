@@ -1,29 +1,29 @@
 <template>
-  <template v-if="documentStore.selected.size">
+  <template v-if="store.selected.size">
     <div class="smallgap"></div>
-    <p class="select-text">{{ documentStore.selected.size }} selected ➤</p>
+    <p class="select-text">{{ store.selected.size }} selected ➤</p>
     <SvgButton name="download" data-tooltip="Download" @click="download" />
     <SvgButton name="copy" data-tooltip="Copy here" @click="op('cp', dst)" />
     <SvgButton name="paste" data-tooltip="Move here" @click="op('mv', dst)" />
     <SvgButton name="trash" data-tooltip="Delete ⚠️" @click="op('rm')" />
-    <button class="action-button unselect" data-tooltip="Unselect all" @click="documentStore.selected.clear()">❌</button>
+    <button class="action-button unselect" data-tooltip="Unselect all" @click="store.selected.clear()">❌</button>
   </template>
 </template>
 
 <script setup lang="ts">
 import {connect, controlUrl} from '@/repositories/WS'
-import { useDocumentStore } from '@/stores/documents'
+import { useMainStore } from '@/stores/main'
 import { computed } from 'vue'
 import type { SelectedItems } from '@/repositories/Document'
 
-const documentStore = useDocumentStore()
+const store = useMainStore()
 const props = defineProps({
   path: Array<string>
 })
 
 const dst = computed(() => props.path!.join('/'))
 const op = (op: string, dst?: string) => {
-  const sel = documentStore.selectedFiles
+  const sel = store.selectedFiles
   const msg = {
     op,
     sel: sel.keys.map(key => {
@@ -38,12 +38,12 @@ const op = (op: string, dst?: string) => {
       const res = JSON.parse(ev.data)
       if ('error' in res) {
         console.error('Control socket error', msg, res.error)
-        documentStore.error = res.error.message
+        store.error = res.error.message
         return
       } else if (res.status === 'ack') {
         console.log('Control ack OK', res)
         control.close()
-        documentStore.selected.clear()
+        store.selected.clear()
         return
       } else console.log('Unknown control response', msg, res)
     }
@@ -108,17 +108,17 @@ const filesystemdl = async (sel: SelectedItems, handle: FileSystemDirectoryHandl
 }
 
 const download = async () => {
-  const sel = documentStore.selectedFiles
+  const sel = store.selectedFiles
   console.log('Download', sel)
   if (sel.keys.length === 0) {
     console.warn('Attempted download but no files found. Missing selected keys:', sel.missing)
-    documentStore.selected.clear()
+    store.selected.clear()
     return
   }
   // Plain old a href download if only one file (ignoring any folders)
   const files = sel.recursive.filter(([rel, full, doc]) => !doc.dir)
   if (files.length === 1) {
-    documentStore.selected.clear()
+    store.selected.clear()
     return linkdl(`/files/${files[0][1]}`)
   }
   // Use FileSystem API if multiple files and the browser supports it
@@ -130,7 +130,7 @@ const download = async () => {
         mode: 'readwrite'
       })
       filesystemdl(sel, handle).then(() => {
-        documentStore.selected.clear()
+        store.selected.clear()
       })
       return
     } catch (e) {
@@ -140,7 +140,7 @@ const download = async () => {
   // Otherwise, zip and download
   const name = sel.keys.length === 1 ? sel.docs[sel.keys[0]].name : 'download'
   linkdl(`/zip/${Array.from(sel.keys).join('+')}/${name}.zip`)
-  documentStore.selected.clear()
+  store.selected.clear()
 }
 </script>
 
@@ -152,3 +152,4 @@ const download = async () => {
   text-overflow: ellipsis;
 }
 </style>
+@/stores/main

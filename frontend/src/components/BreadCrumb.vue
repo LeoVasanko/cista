@@ -4,7 +4,7 @@
     aria-label="Breadcrumb"
     @keyup.left.stop="move(-1)"
     @keyup.right.stop="move(1)"
-    @focus="move(0)"
+    @keyup.enter="move(0)"
   >
     <a href="#/"
       :ref="el => setLinkRef(0, el)"
@@ -48,9 +48,11 @@ const navigate = (index: number) => {
   if (!link) throw Error(`No link at index ${index} (path: ${props.path})`)
   const url = `/${longest.value.slice(0, index).join('/')}/`
   const here = `/${longest.value.join('/')}/`
+  const current = decodeURIComponent(location.hash.slice(1).split('//')[0])
+  const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
+  if (here.startsWith(current)) router.replace(u)
+  else router.push(u)
   link.focus()
-  if (here.startsWith(location.hash.slice(1))) router.replace(url)
-  else router.push(url)
 }
 
 const move = (dir: number) => {

@@ -10,11 +10,11 @@
 
 <script setup lang="ts">
 import { watchEffect, ref, computed } from 'vue'
-import { useDocumentStore } from '@/stores/documents'
+import { useMainStore } from '@/stores/main'
 import Router from '@/router/index'
 import { needleFormat, localeIncludes, collator } from '@/utils';
 
-const documentStore = useDocumentStore()
+const store = useMainStore()
 const fileExplorer = ref()
 const props = defineProps<{
   path: Array<string>
@@ -24,12 +24,12 @@ const documents = computed(() => {
   const loc = props.path.join('/')
   const query = props.query
   // List the current location
-  if (!query) return documentStore.document.filter(doc => doc.loc === loc)
+  if (!query) return store.document.filter(doc => doc.loc === loc)
   // Find up to 100 newest documents that match the search
   const needle = needleFormat(query)
   let limit = 100
   let docs = []
-  for (const doc of documentStore.recentDocuments) {
+  for (const doc of store.recentDocuments) {
     if (localeIncludes(doc.haystack, needle)) {
       docs.push(doc)
       if (--limit === 0) break
@@ -53,6 +53,6 @@ const documents = computed(() => {
 })
 
 watchEffect(() => {
-  documentStore.fileExplorer = fileExplorer.value
+  store.fileExplorer = fileExplorer.value
 })
 </script>

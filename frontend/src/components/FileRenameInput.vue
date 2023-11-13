@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Document } from '@/repositories/Document'
+import { Doc } from '@/repositories/Document'
 import { ref, onMounted, nextTick } from 'vue'
 
 const input = ref<HTMLInputElement | null>(null)
@@ -28,8 +28,8 @@ onMounted(() => {
 })
 
 const props = defineProps<{
-  doc: Document
-  rename: (doc: Document, newName: string) => void
+  doc: Doc
+  rename: (doc: Doc, newName: string) => void
   exit: () => void
 }>()
 

@@ -17,7 +17,7 @@
         <td class="name">
           <FileRenameInput :doc="editing" :rename="mkdir" :exit="() => {editing = null}" />
         </td>
-        <FileModified :doc=editing />
+        <FileModified :doc=editing :key=nowkey />
         <FileSize :doc=editing />
         <td class="menu"></td>
       </tr>
@@ -36,11 +36,11 @@
             <input
               type="checkbox"
               tabindex="-1"
-              :checked="documentStore.selected.has(doc.key)"
+              :checked="store.selected.has(doc.key)"
               @change="
                 ($event.target as HTMLInputElement).checked
-                  ? documentStore.selected.add(doc.key)
-                  : documentStore.selected.delete(doc.key)
+                  ? store.selected.add(doc.key)
+                  : store.selected.delete(doc.key)
               "
             />
           </td>
@@ -50,7 +50,7 @@
             </template>
             <template v-else>
               <a
-                :href="url_for(doc)"
+                :href="doc.url"
                 tabindex="-1"
                 @contextmenu.prevent
                 @focus.stop="cursor = doc"
@@ -61,7 +61,7 @@
               <button v-if="cursor == doc" class="rename-button" @click="() => (editing = doc)">🖊️</button>
             </template>
           </td>
-          <FileModified :doc=doc />
+          <FileModified :doc=doc :key=nowkey />
           <FileSize :doc=doc />
           <td class="menu">
             <button tabindex="-1" @click.stop="contextMenu($event, doc)">⋮</button>
@@ -79,28 +79,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue'
-import { useDocumentStore } from '@/stores/documents'
-import type { Document } from '@/repositories/Document'
+import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted } from 'vue'
+import { useMainStore } from '@/stores/main'
+import { Doc } from '@/repositories/Document'
 import FileRenameInput from './FileRenameInput.vue'
 import { connect, controlUrl } from '@/repositories/WS'
-import { collator, formatSize, formatUnixDate } from '@/utils'
+import { collator, formatSize } from '@/utils'
 import { useRouter } from 'vue-router'
 
 const props = defineProps<{
   path: Array<string>
-  documents: Document[]
+  documents: Doc[]
 }>()
-const documentStore = useDocumentStore()
+const store = useMainStore()
 const router = useRouter()
-const url_for = (doc: Document) => {
-  const p = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
-  return doc.dir ? `#/${p}/` : `/files/${p}`
-}
-const cursor = ref<Document | null>(null)
+const cursor = shallowRef<Doc | null>(null)
 // File rename
-const editing = ref<Document | null>(null)
-const rename = (doc: Document, newName: string) => {
+const editing = shallowRef<Doc | null>(null)
+const rename = (doc: Doc, newName: string) => {
   const oldName = doc.name
   const control = connect(controlUrl, {
     message(ev: MessageEvent) {
@@ -124,7 +120,7 @@ const rename = (doc: Document, newName: string) => {
   }
   doc.name = newName // We should get an update from watch but this is quicker
 }
-const sortedDocuments = computed(() => sorted(props.documents as Document[]))
+const sortedDocuments = computed(() => sorted(props.documents))
 const showFolderBreadcrumb = (i: number) => {
   const docs = sortedDocuments.value
   const docloc = docs[i].loc
@@ -132,19 +128,15 @@ const showFolderBreadcrumb = (i: number) => {
 }
 defineExpose({
   newFolder() {
-    const now = Date.now() / 1000
-    editing.value = {
+    const now = Math.floor(Date.now() / 1000)
+    editing.value = new Doc({
       loc: loc.value,
       key: 'new',
       name: 'New Folder',
       dir: true,
       mtime: now,
       size: 0,
-      sizedisp: formatSize(0),
-      modified: formatUnixDate(now),
-      haystack: '',
-    }
-    console.log("New")
+    })
   },
   toggleSelectAll() {
     console.log('Select')
@@ -163,10 +155,10 @@ defineExpose({
   cursorSelect() {
     const doc = cursor.value
     if (!doc) return
-    if (documentStore.selected.has(doc.key)) {
-      documentStore.selected.delete(doc.key)
+    if (store.selected.has(doc.key)) {
+      store.selected.delete(doc.key)
     } else {
-      documentStore.selected.add(doc.key)
+      store.selected.add(doc.key)
     }
     this.cursorMove(1)
   },
@@ -191,8 +183,8 @@ defineExpose({
       for (let p = begin; p !== end; p = increment(p, 1)) {
         if (p === N) continue
         const key = documents[p].key
-        if (documentStore.selected.has(key)) documentStore.selected.delete(key)
-        else documentStore.selected.add(key)
+        if (store.selected.has(key)) store.selected.delete(key)
+        else store.selected.add(key)
       }
     }
     // @ts-ignore
@@ -229,14 +221,14 @@ watchEffect(() => {
     focusBreadcrumb()
   }
 })
-// Update human-readable x seconds ago messages from mtimes
+let nowkey = ref(0)
 let modifiedTimer: any = null
 const updateModified = () => {
-  for (const doc of props.documents) doc.modified = formatUnixDate(doc.mtime)
+  nowkey.value = Math.floor(Date.now() / 1000)
 }
 onMounted(() => { updateModified(); modifiedTimer = setInterval(updateModified, 1000) })
 onUnmounted(() => { clearInterval(modifiedTimer) })
-const mkdir = (doc: Document, name: string) => {
+const mkdir = (doc: Doc, name: string) => {
   const control = connect(controlUrl, {
     open() {
       control.send(
@@ -253,11 +245,13 @@ const mkdir = (doc: Document, name: string) => {
         editing.value = null
       } else {
         console.log('mkdir', msg)
-        router.push(doc.loc ? `/${doc.loc}/${name}/` : `/${name}/`)
+        router.push(doc.urlrouter)
       }
     }
   })
-  doc.name = name // We should get an update from watch but this is quicker
+  // We should get an update from watch but this is quicker
+  doc.name = name
+  doc.key = crypto.randomUUID()
 }
 
 // Column sort
@@ -266,11 +260,11 @@ const toggleSort = (name: string) => {
 }
 const sort = ref<string>('')
 const sortCompare = {
-  name: (a: Document, b: Document) => collator.compare(a.name, b.name),
-  modified: (a: Document, b: Document) => b.mtime - a.mtime,
-  size: (a: Document, b: Document) => b.size - a.size
+  name: (a: Doc, b: Doc) => collator.compare(a.name, b.name),
+  modified: (a: Doc, b: Doc) => b.mtime - a.mtime,
+  size: (a: Doc, b: Doc) => b.size - a.size
 }
-const sorted = (documents: Document[]) => {
+const sorted = (documents: Doc[]) => {
   const cmp = sortCompare[sort.value as keyof typeof sortCompare]
   const sorted = [...documents]
   if (cmp) sorted.sort(cmp)
@@ -280,7 +274,7 @@ const selectionIndeterminate = computed({
   get: () => {
     return (
       props.documents.length > 0 &&
-      props.documents.some((doc: Document) => documentStore.selected.has(doc.key)) &&
+      props.documents.some((doc: Doc) => store.selected.has(doc.key)) &&
       !allSelected.value
     )
   },
@@ -291,16 +285,16 @@ const allSelected = computed({
   get: () => {
     return (
       props.documents.length > 0 &&
-      props.documents.every((doc: Document) => documentStore.selected.has(doc.key))
+      props.documents.every((doc: Doc) => store.selected.has(doc.key))
     )
   },
   set: (value: boolean) => {
     console.log('Setting allSelected', value)
     for (const doc of props.documents) {
       if (value) {
-        documentStore.selected.add(doc.key)
+        store.selected.add(doc.key)
       } else {
-        documentStore.selected.delete(doc.key)
+        store.selected.delete(doc.key)
       }
     }
   }
@@ -308,7 +302,7 @@ const allSelected = computed({
 
 const loc = computed(() => props.path.join('/'))
 
-const contextMenu = (ev: Event, doc: Document) => {
+const contextMenu = (ev: Event, doc: Doc) => {
   cursor.value = doc
   console.log('Context menu', ev, doc)
 }
@@ -458,3 +452,4 @@ tbody .selection input {
   color: #888;
 }
 </style>
+@/stores/main

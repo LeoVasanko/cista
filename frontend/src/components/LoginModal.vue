@@ -39,10 +39,10 @@
 import { reactive, ref } from 'vue'
 import { loginUser } from '@/repositories/User'
 import type { ISimpleError } from '@/repositories/Client'
-import { useDocumentStore } from '@/stores/documents'
+import { useMainStore } from '@/stores/main'
 
 const confirmLoading = ref<boolean>(false)
-const store = useDocumentStore()
+const store = useMainStore()
 
 const loginForm = reactive({
   username: '',
@@ -99,3 +99,4 @@ const login = async () => {
   height: 1em;
 }
 </style>
+@/stores/main

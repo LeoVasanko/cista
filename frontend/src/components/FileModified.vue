@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Document } from '@/repositories/Document'
+import { Doc } from '@/repositories/Document'
 import { computed } from 'vue'
 
 const datetime = computed(() =>
@@ -17,6 +17,6 @@ const tooltip = computed(() =>
 )
 
 const props = defineProps<{
-    doc: Document
+    doc: Doc
 }>()
 </script>

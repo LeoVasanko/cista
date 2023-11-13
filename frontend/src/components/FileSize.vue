@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Document } from '@/repositories/Document'
+import { Doc } from '@/repositories/Document'
 import { computed } from 'vue'
 
 const sizeClass = computed(() => {
@@ -12,7 +12,7 @@ const sizeClass = computed(() => {
 })
 
 const props = defineProps<{
-    doc: Document
+    doc: Doc
 }>()
 </script>
 

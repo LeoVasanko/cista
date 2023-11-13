@@ -86,7 +86,7 @@ export function haystackFormat(str: string) {
 // Preformat search string for faster search
 export function needleFormat(query: string) {
   const based = query.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  return {based, words: based.split(/\W+/)}
+  return {based, words: based.split(/\s+/)}
 }
 
 // Test if haystack includes needle
