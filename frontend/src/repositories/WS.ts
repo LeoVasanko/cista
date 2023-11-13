@@ -12,10 +12,12 @@ let wsWatch = null as WebSocket | null
 export const loadSession = () => {
   const store = useDocumentStore()
   try {
-    tree = JSON.parse(sessionStorage["cista-files"])
+    tree = JSON.parse(sessionStorage['cista-files'])
     store.updateRoot(tree)
+    console.log(`Loaded session ${tree.length} items`)
     return true
   } catch (error) {
+    if (sessionStorage['cista-files']) console.log("Loading session failed", error)
     return false
   }
 }
