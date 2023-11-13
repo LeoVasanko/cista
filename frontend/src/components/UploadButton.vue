@@ -25,7 +25,7 @@ function pasteHandler(event: ClipboardEvent) {
     const entry = item.webkitGetAsEntry()
     if (entry?.isFile) {
       const file = item.getAsFile()
-      infiles.push(file)
+      if (file) infiles.push(file)
     } else if (entry?.isDirectory) {
       dirs.push(entry as FileSystemDirectoryEntry)
     }
