@@ -76,7 +76,7 @@ const speed = computed(() => {
   if (tsince > 1 / s) return 1 / tsince  // Next block is late or not coming, decay
   return s  // "Current speed"
 })
-const speeddisp = computed(() => speed.value ? speed.value.toFixed(speed.value < 100 ? 1 : 0) + '\u202FMB/s': 'stalled')
+const speeddisp = computed(() => speed.value ? speed.value.toFixed(speed.value < 10 ? 1 : 0) + '\u202FMB/s': 'stalled')
 setInterval(() => {
   if (Date.now() - uprogress.tlast > 3000) {
     // Reset
@@ -219,7 +219,7 @@ onUnmounted(() => {
           {{ (uprogress.filepos / uprogress.filesize * 100).toFixed(0) + '\u202F%' }}
         </span>
       </span>
-      <span class="position" v-if="uprogress.filesize > 1e7">
+      <span class="position" v-if="uprogress.total > 1e7">
         {{ (uprogress.uploaded / 1e6).toFixed(0) + '\u202F/\u202F' + (uprogress.total / 1e6).toFixed(0) + '\u202FMB' }}
       </span>
       <span class="speed">{{ speeddisp }}</span>
