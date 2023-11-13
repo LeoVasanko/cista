@@ -16,14 +16,51 @@ type CloudFile = {
   cloudName: string
   cloudPos: number
 }
-
+function pasteHandler(event: ClipboardEvent) {
+  const items = Array.from(event.clipboardData?.items ?? [])
+  const infiles = [] as File[]
+  const dirs = [] as FileSystemDirectoryEntry[]
+  for (const item of items) {
+    if (item.kind !== 'file') continue
+    const entry = item.webkitGetAsEntry()
+    if (entry?.isFile) {
+      const file = item.getAsFile()
+      infiles.push(file)
+    } else if (entry?.isDirectory) {
+      dirs.push(entry as FileSystemDirectoryEntry)
+    }
+  }
+  if (infiles.length || dirs.length) {
+    event.preventDefault()
+    uploadFiles(infiles)
+    for (const entry of dirs) pasteDirectory(entry, `${props.path!.join('/')}/${entry.name}`)
+  }
+}
+const pasteDirectory = async (entry: FileSystemDirectoryEntry, loc: string) => {
+  const reader = entry.createReader()
+  const entries = await new Promise<any[]>(resolve => reader.readEntries(resolve))
+  const cloudfiles = [] as CloudFile[]
+  for (const entry of entries) {
+    const cloudName = `${loc}/${entry.name}`
+    if (entry.isFile) {
+      const file = await new Promise(resolve => entry.file(resolve)) as File
+      cloudfiles.push({file, cloudName, cloudPos: 0})
+    } else if (entry.isDirectory) {
+      await pasteDirectory(entry, cloudName)
+    }
+  }
+  if (cloudfiles.length) uploadCloudFiles(cloudfiles)
+}
 function uploadHandler(event: Event) {
   event.preventDefault()
   // @ts-ignore
   const input = event.target as HTMLInputElement | null
   const infiles = Array.from((input ?? (event as DragEvent).dataTransfer)?.files ?? []) as File[]
   if (input) input.value = ''
-  if (!infiles.length) return
+  if (infiles.length) uploadFiles(infiles)
+}
+
+const uploadFiles = (infiles: File[]) => {
   const loc = props.path!.join('/')
   let files = []
   for (const file of infiles) {
@@ -33,6 +70,9 @@ function uploadHandler(event: Event) {
       cloudPos: 0,
     })
   }
+  uploadCloudFiles(files)
+}
+const uploadCloudFiles = (files: CloudFile[]) => {
   const dotfiles = files.filter(f => f.cloudName.includes('/.'))
   if (dotfiles.length) {
     documentStore.error = "Won't upload dotfiles"
@@ -194,8 +234,10 @@ onMounted(() => {
   // Need to prevent both to prevent browser from opening the file
   addEventListener('dragover', uploadHandler)
   addEventListener('drop', uploadHandler)
+  addEventListener('paste', pasteHandler)
 })
 onUnmounted(() => {
+  removeEventListener('paste', pasteHandler)
   removeEventListener('dragover', uploadHandler)
   removeEventListener('drop', uploadHandler)
 })
