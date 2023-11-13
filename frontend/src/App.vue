@@ -44,8 +44,6 @@ watchEffect(() => {
 onMounted(loadSession)
 onMounted(watchConnect)
 onUnmounted(watchDisconnect)
-// Update human-readable x seconds ago messages from mtimes
-setInterval(documentStore.updateModified, 1000)
 const headerMain = ref<typeof HeaderMain | null>(null)
 let vert = 0
 let timer: any = null

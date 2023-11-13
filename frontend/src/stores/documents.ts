@@ -53,9 +53,6 @@ export const useDocumentStore = defineStore({
       }
       this.document = docs as Document[]
     },
-    updateModified() {
-      for (const doc of this.document) doc.modified = formatUnixDate(doc.mtime)
-    },
     login(username: string, privileged: boolean) {
       this.user.username = username
       this.user.privileged = privileged

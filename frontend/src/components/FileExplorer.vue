@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect } from 'vue'
+import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue'
 import { useDocumentStore } from '@/stores/documents'
 import type { Document } from '@/repositories/Document'
 import FileRenameInput from './FileRenameInput.vue'
@@ -229,6 +229,13 @@ watchEffect(() => {
     focusBreadcrumb()
   }
 })
+// Update human-readable x seconds ago messages from mtimes
+let modifiedTimer: any = null
+const updateModified = () => {
+  for (const doc of props.documents) doc.modified = formatUnixDate(doc.mtime)
+}
+onMounted(() => { modifiedTimer = setInterval(updateModified, 1000) })
+onUnmounted(() => { clearInterval(modifiedTimer) })
 const mkdir = (doc: Document, name: string) => {
   const control = connect(controlUrl, {
     open() {
