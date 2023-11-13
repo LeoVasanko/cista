@@ -67,6 +67,7 @@ export const useDocumentStore = defineStore({
       console.log("Logout")
       await logoutUser()
       this.$reset()
+      localStorage.clear()
       history.go() // Reload page
     }
   },

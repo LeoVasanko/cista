@@ -6,24 +6,26 @@ export const uploadUrl = '/api/upload'
 export const watchUrl = '/api/watch'
 
 let tree = [] as FileEntry[]
-let reconnectDuration = 500
+let reconnDelay = 500
 let wsWatch = null as WebSocket | null
 
 export const loadSession = () => {
+  const s = localStorage['cista-files']
+  if (!s) return false
   const store = useDocumentStore()
   try {
-    tree = JSON.parse(sessionStorage['cista-files'])
+    tree = JSON.parse(s)
     store.updateRoot(tree)
-    console.log(`Loaded session ${tree.length} items`)
+    console.log(`Loaded session with ${tree.length} items cached`)
     return true
   } catch (error) {
-    if (sessionStorage['cista-files']) console.log("Loading session failed", error)
+    console.log("Loading session failed", error)
     return false
   }
 }
 
 const saveSession = () => {
-  sessionStorage["cista-files"] = JSON.stringify(tree)
+  localStorage["cista-files"] = JSON.stringify(tree)
 }
 
 export const connect = (path: string, handlers: Partial<Record<keyof WebSocketEventMap, any>>) => {
@@ -61,7 +63,7 @@ export const watchConnect = () => {
       console.log('Connected to backend', msg)
       store.server = msg.server
       store.connected = true
-      reconnectDuration = 500
+      reconnDelay = 500
       store.error = ''
       if (msg.user) store.login(msg.user.username, msg.user.privileged)
       else if (store.isUserLogged) store.logout()
@@ -85,10 +87,10 @@ const watchReconnect = (event: MessageEvent) => {
     store.connected = false
     store.error = 'Reconnecting...'
   }
-  reconnectDuration = Math.min(5000, reconnectDuration + 500)
+  reconnDelay = Math.min(5000, reconnDelay + 500)
   // The server closes the websocket after errors, so we need to reopen it
   if (watchTimeout !== null) clearTimeout(watchTimeout)
-  watchTimeout = setTimeout(watchConnect, reconnectDuration)
+  watchTimeout = setTimeout(watchConnect, reconnDelay)
 }
 
 
