@@ -1,6 +1,6 @@
 import os
 import re
-from pathlib import Path, PurePath
+from pathlib import Path
 
 from sanic import Sanic
 
@@ -15,7 +15,6 @@ def run(*, dev=False):
     # Silence Sanic's warning about running in production rather than debug
     os.environ["SANIC_IGNORE_PRODUCTION_WARNING"] = "1"
     confdir = config.conffile.parent
-    wwwroot = PurePath(__file__).parent / "wwwroot"
     if opts.get("ssl"):
         # Run plain HTTP redirect/acme server on port 80
         server80.app.prepare(port=80, motd=False)
@@ -27,7 +26,7 @@ def run(*, dev=False):
         motd=False,
         dev=dev,
         auto_reload=dev,
-        reload_dir={confdir, wwwroot},
+        reload_dir={confdir},
         access_log=True,
     )  # type: ignore
     if dev:
