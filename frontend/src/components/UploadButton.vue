@@ -19,9 +19,10 @@ type CloudFile = {
 
 function uploadHandler(event: Event) {
   event.preventDefault()
-  event.stopPropagation()
   // @ts-ignore
-  const infiles = Array.from(event.dataTransfer?.files || event.target.files) as File[]
+  const input = event.target as HTMLInputElement | null
+  const infiles = Array.from((input ?? (event as DragEvent).dataTransfer)?.files ?? []) as File[]
+  if (input) input.value = ''
   if (!infiles.length) return
   const loc = props.path!.join('/')
   let files = []
