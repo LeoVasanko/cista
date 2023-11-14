@@ -1,6 +1,11 @@
-# cista-front
+# Cista Vue Frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+The frontend is a Single-Page App implemented with Vue 3. Development uses the Vite server together with the main Python backend, but in production the latter also serves the prebuilt frontend files.
+
+```fish
+npm install
+npm run dev
+```
 
 ## Recommended IDE Setup
 
@@ -33,8 +38,12 @@ npm install
 npm run dev
 ```
 
+Note: you need to run the `cista --dev -l :8000` backend server, where Vite will forward the API requests, concurrently in another terminal.
+
 ### Type-Check, Compile and Minify for Production
 
 ```sh
 npm run build
 ```
+
+This is also called by `hatch build` during Python packaging.
