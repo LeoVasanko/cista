@@ -86,6 +86,7 @@ import FileRenameInput from './FileRenameInput.vue'
 import { connect, controlUrl } from '@/repositories/WS'
 import { collator, formatSize } from '@/utils'
 import { useRouter } from 'vue-router'
+import ContextMenu from '@imengyu/vue3-context-menu'
 
 const props = defineProps<{
   path: Array<string>
@@ -302,9 +303,13 @@ const allSelected = computed({
 
 const loc = computed(() => props.path.join('/'))
 
-const contextMenu = (ev: Event, doc: Doc) => {
+const contextMenu = (ev: MouseEvent, doc: Doc) => {
   cursor.value = doc
-  console.log('Context menu', ev, doc)
+  ContextMenu.showContextMenu({
+    x: ev.x, y: ev.y, items: [
+      { label: 'Rename', onClick: () => { editing.value = doc } },
+    ],
+  })
 }
 </script>
 
