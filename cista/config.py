@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+import sys
 from functools import wraps
 from hashlib import sha256
 from pathlib import Path, PurePath
@@ -90,6 +91,8 @@ def config_update(modify):
             return "read"
         f.write(new)
         f.close()
+        if sys.platform == "win32":
+            conffile.unlink()  # Windows doesn't support atomic replace
         tmpname.rename(conffile)  # Atomic replace
     except:
         f.close()
