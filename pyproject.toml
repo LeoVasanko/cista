@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = ""
+Homepage = "https://git.zi.fi/Vasanko/cista-storage"
 
 [project.scripts]
 cista = "cista.__main__:main"
