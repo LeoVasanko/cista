@@ -51,6 +51,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   const fileExplorer = store.fileExplorer as any
   if (!fileExplorer) return
   const c = fileExplorer.isCursor()
+  const input = (event.target as HTMLElement).tagName === 'INPUT'
   const keyup = event.type === 'keyup'
   if (event.repeat) {
     if (
@@ -70,13 +71,21 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
     headerMain.value!.toggleSearchInput()
   }
+  // Search also on / (UNIX style)
+  else if (keyup && !input && event.key === '/') {
+    headerMain.value!.toggleSearchInput()
+  }
+  // Globally close search on Escape
+  else if (keyup && event.key === 'Escape') {
+    headerMain.value!.closeSearch(event)
+  }
   // Select all (toggle); keydown to prevent builtin
   else if (!keyup && event.key === 'a' && (event.ctrlKey || event.metaKey)) {
     fileExplorer.toggleSelectAll()
   }
   // Keys 1-3 to sort columns
   else if (
-    c &&
+    !input &&
     keyup &&
     (event.key === '1' || event.key === '2' || event.key === '3')
   ) {

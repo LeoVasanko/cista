@@ -21,7 +21,6 @@
           @input="updateSearch"
           placeholder="Search words"
           class="margin-input"
-          @keyup.escape="closeSearch"
         />
       </template>
       <SvgButton ref="searchButton" name="find" @click.prevent="toggleSearchInput" />
