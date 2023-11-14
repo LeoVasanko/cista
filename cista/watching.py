@@ -129,7 +129,7 @@ def watcher_thread(loop):
     global rootpath
     import inotify.adapters
 
-    while True:
+    while not quit:
         rootpath = config.config.path
         i = inotify.adapters.InotifyTree(rootpath.as_posix())
         # Initialize the tree from filesystem
@@ -218,11 +218,15 @@ def _walk(rel: PurePosixPath, isfile: int, st: stat_result) -> list[FileEntry]:
     try:
         li = []
         for f in path.iterdir():
+            if quit:
+                raise SystemExit("quit")
             if f.name.startswith("."):
                 continue  # No dotfiles
             s = f.stat()
             li.append((int(not stat.S_ISDIR(s.st_mode)), f.name, s))
         for [isfile, name, s] in humansorted(li):
+            if quit:
+                raise SystemExit("quit")
             subtree = _walk(rel / name, isfile, s)
             child = subtree[0]
             entry.mtime = max(entry.mtime, child.mtime)
