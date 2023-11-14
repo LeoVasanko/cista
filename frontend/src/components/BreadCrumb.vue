@@ -5,6 +5,8 @@
     @keyup.left.stop="move(-1)"
     @keyup.right.stop="move(1)"
     @keyup.enter="move(0)"
+    @focus=focusCurrent
+    tabindex=0
   >
     <a href="#/"
       :ref="el => setLinkRef(0, el)"
@@ -26,7 +28,7 @@
 
 <script setup lang="ts">
 import home from '@/assets/svg/home.svg'
-import { onBeforeUpdate, ref, watchEffect } from 'vue'
+import { nextTick, onBeforeUpdate, ref, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -37,22 +39,33 @@ onBeforeUpdate(() => { links.length = 1 })  // 1 to keep home
 
 const props = defineProps<{
   path: Array<string>
+  primary?: boolean
 }>()
 
 const longest = ref<Array<string>>([])
 
 const isCurrent = (index: number) => index == props.path.length ? 'location' : undefined
 
+const focusCurrent = () => {
+  nextTick(() => {
+    const index = props.path.length
+    if (index < links.length) links[index].focus()
+  })
+}
+
 const navigate = (index: number) => {
   const link = links[index]
   if (!link) throw Error(`No link at index ${index} (path: ${props.path})`)
-  const url = `/${longest.value.slice(0, index).join('/')}/`
-  const here = `/${longest.value.join('/')}/`
-  const current = decodeURIComponent(location.hash.slice(1).split('//')[0])
+  const url = index ? `/${longest.value.slice(0, index).join('/')}/` : '/'
+  const long = longest.value.length ? `/${longest.value.join('/')}/` : '/'
+  const browser = decodeURIComponent(location.hash.slice(1).split('//')[0])
   const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
-  if (here.startsWith(current)) router.replace(u)
+  // Clicking on current link clears the rest of the path and adds new history
+  if (isCurrent(index)) { longest.value.splice(index); router.push(u) }
+  // Moving along breadcrumbs doesn't create new history
+  else if (long.startsWith(browser)) router.replace(u)
+  // Nornal navigation from elsewhere (e.g. search result breadcrumbs)
   else router.push(u)
-  link.focus()
 }
 
 const move = (dir: number) => {
@@ -64,13 +77,16 @@ const move = (dir: number) => {
 watchEffect(() => {
   const longcut = longest.value.slice(0, props.path.length)
   const same = longcut.every((value, index) => value === props.path[index])
+  // Navigated out of previous path, reset longest to current
   if (!same) longest.value = props.path
   else if (props.path.length > longcut.length) {
     longest.value = longcut.concat(props.path.slice(longcut.length))
   }
-})
-watchEffect(() => {
-  if (links.length) navigate(props.path.length)
+  // If needed, focus primary navigation to new location
+  if (props.primary) nextTick(() => {
+    const act = document.activeElement as HTMLElement
+    if (!act || [...links, document.body].includes(act)) focusCurrent()
+  })
 })
 </script>
 

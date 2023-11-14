@@ -4,7 +4,7 @@
     <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query">
       <HeaderSelected :path="path.pathList" />
     </HeaderMain>
-    <BreadCrumb :path="path.pathList" tabindex="-1"/>
+    <BreadCrumb :path="path.pathList" primary />
   </header>
   <main>
     <RouterView :path="path.pathList" :query="path.query" />

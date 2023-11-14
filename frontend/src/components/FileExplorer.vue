@@ -58,13 +58,13 @@
                 @keyup.right.stop="ev => { if (doc.dir) (ev.target as HTMLElement).click() }"
                 >{{ doc.name }}</a
               >
-              <button v-if="cursor == doc" class="rename-button" @click="() => (editing = doc)">🖊️</button>
+              <button tabindex=-1 v-if="cursor == doc" class="rename-button" @click="() => (editing = doc)">🖊️</button>
             </template>
           </td>
           <FileModified :doc=doc :key=nowkey />
           <FileSize :doc=doc />
           <td class="menu">
-            <button tabindex="-1" @click.stop="contextMenu($event, doc)">⋮</button>
+            <button tabindex=-1 @click.stop="contextMenu($event, doc)">⋮</button>
           </td>
         </tr>
       </template>
