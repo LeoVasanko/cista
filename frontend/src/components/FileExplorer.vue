@@ -5,9 +5,9 @@
         <th class="selection">
           <input type="checkbox" tabindex="-1" v-model="allSelected" :indeterminate="selectionIndeterminate">
         </th>
-        <th class="sortcolumn" :class="{ sortactive: sort === 'name' }" @click="toggleSort('name')">Name</th>
-        <th class="sortcolumn modified right" :class="{ sortactive: sort === 'modified' }" @click="toggleSort('modified')">Modified</th>
-        <th class="sortcolumn size right" :class="{ sortactive: sort === 'size' }" @click="toggleSort('size')">Size</th>
+        <th class="sortcolumn" :class="{ sortactive: store.sortOrder === 'name' }" @click="store.toggleSort('name')">Name</th>
+        <th class="sortcolumn modified right" :class="{ sortactive: store.sortOrder === 'modified' }" @click="store.toggleSort('modified')">Modified</th>
+        <th class="sortcolumn size right" :class="{ sortactive: store.sortOrder === 'size' }" @click="store.toggleSort('size')">Size</th>
         <th class="menu"></th>
       </tr>
     </thead>
@@ -21,7 +21,7 @@
         <FileSize :doc=editing />
         <td class="menu"></td>
       </tr>
-      <template v-for="(doc, index) in sortedDocuments" :key="doc.key">
+      <template v-for="(doc, index) in documents" :key="doc.key">
         <tr class="folder-change" v-if="showFolderBreadcrumb(index)">
           <th colspan="5"><BreadCrumb :path="doc.loc ? doc.loc.split('/') : []" /></th>
         </tr>
@@ -84,9 +84,10 @@ import { useMainStore } from '@/stores/main'
 import { Doc } from '@/repositories/Document'
 import FileRenameInput from './FileRenameInput.vue'
 import { connect, controlUrl } from '@/repositories/WS'
-import { collator, formatSize } from '@/utils'
+import { formatSize } from '@/utils'
 import { useRouter } from 'vue-router'
 import ContextMenu from '@imengyu/vue3-context-menu'
+import type { SortOrder } from '@/utils/docsort'
 
 const props = defineProps<{
   path: Array<string>
@@ -121,12 +122,6 @@ const rename = (doc: Doc, newName: string) => {
   }
   doc.name = newName // We should get an update from watch but this is quicker
 }
-const sortedDocuments = computed(() => sorted(props.documents))
-const showFolderBreadcrumb = (i: number) => {
-  const docs = sortedDocuments.value
-  const docloc = docs[i].loc
-  return i === 0 ? docloc !== loc.value : docloc !== docs[i - 1].loc
-}
 defineExpose({
   newFolder() {
     const now = Math.floor(Date.now() / 1000)
@@ -144,8 +139,8 @@ defineExpose({
     allSelected.value = !allSelected.value
   },
   toggleSortColumn(column: number) {
-    const columns = ['', 'name', 'modified', 'size', '']
-    toggleSort(columns[column])
+    const order = ['', 'name', 'modified', 'size', ''][column]
+    if (order) store.toggleSort(order as SortOrder)
   },
   isCursor() {
     return cursor.value !== null && editing.value === null
@@ -165,25 +160,25 @@ defineExpose({
   },
   cursorMove(d: number, select = false) {
     // Move cursor up or down (keyboard navigation)
-    const documents = sortedDocuments.value
-    if (documents.length === 0) {
+    const docs = props.documents
+    if (docs.length === 0) {
       cursor.value = null
       return
     }
-    const N = documents.length
+    const N = docs.length
     const mod = (a: number, b: number) => ((a % b) + b) % b
     const increment = (i: number, d: number) => mod(i + d, N + 1)
     const index =
-      cursor.value !== null ? documents.indexOf(cursor.value) : documents.length
+      cursor.value !== null ? docs.indexOf(cursor.value) : docs.length
     const moveto = increment(index, d)
-    cursor.value = documents[moveto] ?? null
+    cursor.value = docs[moveto] ?? null
     const tr = cursor.value ? document.getElementById(`file-${cursor.value.key}`) : null
     if (select) {
       // Go forwards, possibly wrapping over the end; the last entry is not toggled
       let [begin, end] = d > 0 ? [index, moveto] : [moveto, index]
       for (let p = begin; p !== end; p = increment(p, 1)) {
         if (p === N) continue
-        const key = documents[p].key
+        const key = docs[p].key
         if (store.selected.has(key)) store.selected.delete(key)
         else store.selected.add(key)
       }
@@ -254,22 +249,10 @@ const mkdir = (doc: Doc, name: string) => {
   doc.name = name
   doc.key = crypto.randomUUID()
 }
-
-// Column sort
-const toggleSort = (name: string) => {
-  sort.value = sort.value === name ? '' : name
-}
-const sort = ref<string>('')
-const sortCompare = {
-  name: (a: Doc, b: Doc) => collator.compare(a.name, b.name),
-  modified: (a: Doc, b: Doc) => b.mtime - a.mtime,
-  size: (a: Doc, b: Doc) => b.size - a.size
-}
-const sorted = (documents: Doc[]) => {
-  const cmp = sortCompare[sort.value as keyof typeof sortCompare]
-  const sorted = [...documents]
-  if (cmp) sorted.sort(cmp)
-  return sorted
+const showFolderBreadcrumb = (i: number) => {
+  const docs = props.documents
+  const docloc = docs[i].loc
+  return i === 0 ? docloc !== loc.value : docloc !== docs[i - 1].loc
 }
 const selectionIndeterminate = computed({
   get: () => {

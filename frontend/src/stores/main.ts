@@ -5,6 +5,7 @@ import { collator } from '@/utils'
 import { logoutUser } from '@/repositories/User'
 import { watchConnect } from '@/repositories/WS'
 import { shallowRef } from 'vue'
+import { sorted, type SortOrder } from '@/utils/docsort'
 
 type User = {
   username: string
@@ -18,10 +19,15 @@ export const useMainStore = defineStore({
   state: () => ({
     document: shallowRef<Doc[]>([]),
     selected: new Set<FUID>(),
+    query: '' as string,
     fileExplorer: null as any,
     error: '' as string,
     connected: false,
     server: {} as Record<string, any>,
+    prefs: {
+      sortListing: '' as SortOrder,
+      sortFiltered: '' as SortOrder,
+    },
     user: {
       username: '',
       privileged: false,
@@ -29,6 +35,9 @@ export const useMainStore = defineStore({
       isOpenLoginModal: false
     } as User
   }),
+  persist: {
+    paths: ['prefs'],
+  },
   actions: {
     updateRoot(root: FileEntry[]) {
       const docs = []
@@ -63,22 +72,16 @@ export const useMainStore = defineStore({
       this.$reset()
       localStorage.clear()
       history.go() // Reload page
-    }
+    },
+    toggleSort(name: SortOrder) {
+      if (this.query) this.prefs.sortFiltered = this.prefs.sortFiltered === name ? '' : name
+      else this.prefs.sortListing = this.prefs.sortListing === name ? '' : name
+    },
   },
   getters: {
-    isUserLogged(): boolean {
-      return this.user.isLoggedIn
-    },
-    recentDocuments(): Doc[] {
-      const ret = [...this.document]
-      ret.sort((a, b) => b.mtime - a.mtime)
-      return ret
-    },
-    largeDocuments(): Doc[] {
-      const ret = [...this.document]
-      ret.sort((a, b) => b.size - a.size)
-      return ret
-    },
+    sortOrder(): SortOrder { return this.query ? this.prefs.sortFiltered : this.prefs.sortListing },
+    isUserLogged(): boolean { return this.user.isLoggedIn },
+    recentDocuments(): Doc[] { return sorted(this.document, 'modified') },
     selectedFiles(): SelectedItems {
       const selected = this.selected
       const found = new Set<FUID>()

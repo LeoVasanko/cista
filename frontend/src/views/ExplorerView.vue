@@ -13,6 +13,7 @@ import { watchEffect, ref, computed } from 'vue'
 import { useMainStore } from '@/stores/main'
 import Router from '@/router/index'
 import { needleFormat, localeIncludes, collator } from '@/utils';
+import { sorted } from '@/utils/docsort';
 
 const store = useMainStore()
 const fileExplorer = ref()
@@ -24,7 +25,10 @@ const documents = computed(() => {
   const loc = props.path.join('/')
   const query = props.query
   // List the current location
-  if (!query) return store.document.filter(doc => doc.loc === loc)
+  if (!query) return sorted(
+    store.document.filter(doc => doc.loc === loc),
+    store.prefs.sortListing,
+  )
   // Find up to 100 newest documents that match the search
   const needle = needleFormat(query)
   let limit = 100
@@ -35,8 +39,11 @@ const documents = computed(() => {
       if (--limit === 0) break
     }
   }
-  // Organize by folder, by relevance
   const locsub = loc + '/'
+  // Custom sort override in effect?
+  const order = store.prefs.sortFiltered
+  if (order) return sorted(docs, order)
+  // Sort by relevance - current folder, then subfolders, then others
   docs.sort((a, b) => (
     // @ts-ignore
     (b.loc === loc) - (a.loc === loc) ||
@@ -54,5 +61,6 @@ const documents = computed(() => {
 
 watchEffect(() => {
   store.fileExplorer = fileExplorer.value
+  store.query = props.query
 })
 </script>
