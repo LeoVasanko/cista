@@ -149,15 +149,3 @@ class Space(msgspec.Struct):
     free: int
     usage: int
     storage: int
-
-
-def make_dir_data(root):
-    if len(root) == 3:
-        return FileEntry(*root)
-    id_, size, mtime, listing = root
-    converted = {}
-    for name, data in listing.items():
-        converted[name] = make_dir_data(data)
-    sz = sum(x.size for x in converted.values())
-    mt = max(x.mtime for x in converted.values())
-    return DirEntry(id_, sz, max(mt, mtime), converted)

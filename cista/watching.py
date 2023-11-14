@@ -110,26 +110,6 @@ class State:
         with self.lock:
             del self._listing[self._slice(relpath)]
 
-    def _index(self, rel: PurePosixPath):
-        idx = 0
-        ret = []
-
-    def _dir(self, idx: int):
-        level = self._listing[idx].level + 1
-        end = len(self._listing)
-        idx += 1
-        ret = []
-        while idx < end and (r := self._listing[idx]).level >= level:
-            if r.level == level:
-                ret.append(idx)
-        return ret, idx
-
-    def update(self, rel: PurePosixPath, value: FileEntry):
-        begin = 0
-        parents = []
-        while self._listing[begin].level < len(rel.parts):
-            parents.append(begin)
-
 
 state = State()
 rootpath: Path = None  # type: ignore
@@ -160,8 +140,8 @@ def watcher_thread(loop):
                 state.root = new
                 broadcast(format_update(old, new), loop)
 
-        # The watching is not entirely reliable, so do a full refresh every minute
-        refreshdl = time.monotonic() + 60.0
+        # The watching is not entirely reliable, so do a full refresh every 30 seconds
+        refreshdl = time.monotonic() + 30.0
 
         for event in i.event_gen():
             if quit:
@@ -337,7 +317,7 @@ async def abroadcast(msg):
 
 async def start(app, loop):
     config.load_config()
-    use_inotify = False and sys.platform == "linux"
+    use_inotify = sys.platform == "linux"
     app.ctx.watcher = threading.Thread(
         target=watcher_thread if use_inotify else watcher_thread_poll,
         args=[loop],
