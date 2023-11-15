@@ -11,7 +11,7 @@ import brotli
 import sanic.helpers
 from blake3 import blake3
 from sanic import Blueprint, Sanic, empty, raw
-from sanic.exceptions import Forbidden, NotFound, ServerError
+from sanic.exceptions import Forbidden, NotFound
 from sanic.log import logging
 from stream_zip import ZIP_AUTO, stream_zip
 
@@ -119,11 +119,9 @@ def _load_wwwroot(www):
             if len(br) >= len(data):
                 br = False
             wwwnew[name] = data, br, headers
-    if not wwwnew:
-        raise ServerError(
-            "Web frontend missing. Did you forget npm run build?",
-            extra={"wwwroot": str(base)},
-            quiet=True,
+    if not wwwnew and not app.debug:
+        logging.warning(
+            f"Web frontend missing from {base}\n  Did you forget: hatch build"
         )
     return wwwnew
 
