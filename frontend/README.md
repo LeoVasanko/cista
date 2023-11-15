@@ -2,11 +2,6 @@
 
 The frontend is a Single-Page App implemented with Vue 3. Development uses the Vite server together with the main Python backend, but in production the latter also serves the prebuilt frontend files.
 
-```fish
-npm install
-npm run dev
-```
-
 ## Recommended IDE Setup
 
 [VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
@@ -22,28 +17,30 @@ If the standalone TypeScript plugin doesn't feel fast enough to you, Volar has a
     2) Find `TypeScript and JavaScript Language Features`, right click and select `Disable (Workspace)`
 2. Reload the VSCode window by running `Developer: Reload Window` from the command palette.
 
-## Customize configuration
+## Hot-Reload for Development
 
-See [Vite Configuration Reference](https://vitejs.dev/config/).
+### Run the backend
 
-## Project Setup
-
-```sh
-npm install
+```fish
+hatch shell
+cista --dev -l :8000
 ```
 
-### Compile and Hot-Reload for Development
+### And the Vite server (in another terminal)
 
-```sh
+```fish
+cd frontend
+npm install
 npm run dev
 ```
+Browse to Vite, which will proxy API requests to port 8000. Both servers live reload changes.
 
-Note: you need to run the `cista --dev -l :8000` backend server, where Vite will forward the API requests, concurrently in another terminal.
 
 ### Type-Check, Compile and Minify for Production
 
-```sh
+This is also called by `hatch build` during Python packaging:
+
+```fish
 npm run build
 ```
 
-This is also called by `hatch build` during Python packaging.
