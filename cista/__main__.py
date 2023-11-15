@@ -62,12 +62,15 @@ def _main():
     _confdir(args)
     exists = config.conffile.exists()
     import_droppy = args["--import-droppy"]
-    necessary_opts = exists or import_droppy or path and listen
+    necessary_opts = exists or import_droppy or path
     if not necessary_opts:
         # Maybe run without arguments
         print(doc)
         print(
-            "No config file found! Get started with:\n  cista -l :8000 /path/to/files, or\n  cista -l example.com --import-droppy  # Uses Droppy files\n",
+            "No config file found! Get started with one of:\n"
+            "  cista --user yourname --privileged\n"
+            "  cista --import-droppy\n"
+            "  cista -l :8000 /path/to/files\n"
         )
         return 1
     settings = {}
@@ -79,8 +82,15 @@ def _main():
         settings = droppy.readconf()
     if path:
         settings["path"] = path
+    elif not exists:
+        settings["path"] = Path.home() / "Downloads"
     if listen:
         settings["listen"] = listen
+    elif not exists:
+        settings["listen"] = ":8000"
+    if not exists and not import_droppy:
+        # We have no users, so make it public
+        settings["public"] = True
     operation = config.update_config(settings)
     print(f"Config {operation}: {config.conffile}")
     # Prepare to serve
@@ -112,11 +122,23 @@ def _confdir(args):
 
 def _user(args):
     _confdir(args)
-    config.load_config()
+    if config.conffile.exists():
+        config.load_config()
+        operation = False
+    else:
+        # Defaults for new config when user is created
+        operation = config.update_config(
+            {
+                "listen": ":8000",
+                "path": Path.home() / "Downloads",
+                "public": False,
+            }
+        )
+        print(f"Config {operation}: {config.conffile}\n")
+
     name = args["--user"]
     if not name or not name.isidentifier():
         raise ValueError("Invalid username")
-    config.load_config()
     u = config.config.users.get(name)
     info = f"User {name}" if u else f"New user {name}"
     changes = {}
@@ -128,11 +150,16 @@ def _user(args):
         info += " (admin)" if oldadmin else ""
     if args["--password"] or not u:
         changes["password"] = pw = pwgen.generate()
-        info += f"\n  Password: {pw}"
-    res = config.update_user(args["--user"], changes)
+        info += f"\n  Password: {pw}\n"
+    res = config.update_user(name, changes)
     print(info)
     if res == "read":
         print("  No changes")
+
+    if operation == "created":
+        print(
+            "Now you can run the server:\n  cista    # defaults set: -l :8000 ~/Downloads\n"
+        )
 
 
 if __name__ == "__main__":

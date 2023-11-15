@@ -119,9 +119,20 @@ def _load_wwwroot(www):
             if len(br) >= len(data):
                 br = False
             wwwnew[name] = data, br, headers
-    if not wwwnew and not app.debug:
-        logging.warning(
-            f"Web frontend missing from {base}\n  Did you forget: hatch build"
+    if not wwwnew:
+        msg = f"Web frontend missing from {base}\n  Did you forget: hatch build\n"
+        if not www:
+            logging.warning(msg)
+        if not app.debug:
+            msg = "Web frontend missing. Cista installation is broken.\n"
+        wwwnew[""] = (
+            msg.encode(),
+            False,
+            {
+                "etag": "error",
+                "content-type": "text/plain",
+                "cache-control": "no-store",
+            },
         )
     return wwwnew
 

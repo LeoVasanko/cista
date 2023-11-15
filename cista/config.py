@@ -138,7 +138,7 @@ def update_user(conf: Config, name: str, changes: dict) -> Config:
     # Encode into dict, update values with new, convert to Config
     try:
         u = conf.users[name].__copy__()
-    except KeyError:
+    except (KeyError, AttributeError):
         u = User()
     if "password" in changes:
         from . import auth
@@ -147,7 +147,7 @@ def update_user(conf: Config, name: str, changes: dict) -> Config:
         del changes["password"]
     udict = msgspec.to_builtins(u, enc_hook=enc_hook)
     udict.update(changes)
-    settings = msgspec.to_builtins(conf, enc_hook=enc_hook)
+    settings = msgspec.to_builtins(conf, enc_hook=enc_hook) if conf else {"users": {}}
     settings["users"][name] = msgspec.convert(udict, User, dec_hook=dec_hook)
     return msgspec.convert(settings, Config, dec_hook=dec_hook)
 
