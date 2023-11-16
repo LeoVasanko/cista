@@ -21,7 +21,6 @@ def jres(data, **kwargs):
 
 
 async def handle_sanic_exception(request, e):
-    logger.exception(e)
     context, code = {}, 500
     message = str(e)
     if isinstance(e, SanicException):

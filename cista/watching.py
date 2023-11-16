@@ -9,7 +9,7 @@ from pathlib import Path, PurePosixPath
 
 import msgspec
 from natsort import humansorted, natsort_keygen, ns
-from sanic.log import logging
+from sanic.log import logger
 
 from cista import config
 from cista.fileio import fuid
@@ -113,7 +113,8 @@ class State:
 
 state = State()
 rootpath: Path = None  # type: ignore
-quit = False
+quit = threading.Event()
+
 modified_flags = (
     "IN_CREATE",
     "IN_DELETE",
@@ -129,7 +130,7 @@ def watcher_thread(loop):
     global rootpath
     import inotify.adapters
 
-    while not quit:
+    while not quit.is_set():
         rootpath = config.config.path
         i = inotify.adapters.InotifyTree(rootpath.as_posix())
         # Initialize the tree from filesystem
@@ -144,7 +145,7 @@ def watcher_thread(loop):
         refreshdl = time.monotonic() + 30.0
 
         for event in i.event_gen():
-            if quit:
+            if quit.is_set():
                 return
             # Disk usage update
             du = shutil.disk_usage(rootpath)
@@ -174,7 +175,7 @@ def watcher_thread(loop):
 def watcher_thread_poll(loop):
     global rootpath
 
-    while not quit:
+    while not quit.is_set():
         rootpath = config.config.path
         new = walk()
         with state.lock:
@@ -190,7 +191,7 @@ def watcher_thread_poll(loop):
             state.space = space
             broadcast(format_space(space), loop)
 
-        time.sleep(2.0)
+        quit.wait(2.0)
 
 
 def walk(rel=PurePosixPath()) -> list[FileEntry]:  # noqa: B008
@@ -218,14 +219,14 @@ def _walk(rel: PurePosixPath, isfile: int, st: stat_result) -> list[FileEntry]:
     try:
         li = []
         for f in path.iterdir():
-            if quit:
+            if quit.is_set():
                 raise SystemExit("quit")
             if f.name.startswith("."):
                 continue  # No dotfiles
             s = f.stat()
             li.append((int(not stat.S_ISDIR(s.st_mode)), f.name, s))
         for [isfile, name, s] in humansorted(li):
-            if quit:
+            if quit.is_set():
                 raise SystemExit("quit")
             subtree = _walk(rel / name, isfile, s)
             child = subtree[0]
@@ -316,7 +317,7 @@ async def abroadcast(msg):
             queue.put_nowait(msg)
     except Exception:
         # Log because asyncio would silently eat the error
-        logging.exception("Broadcast error")
+        logger.exception("Broadcast error")
 
 
 async def start(app, loop):
@@ -325,11 +326,12 @@ async def start(app, loop):
     app.ctx.watcher = threading.Thread(
         target=watcher_thread if use_inotify else watcher_thread_poll,
         args=[loop],
+        name="watcher",
     )
     app.ctx.watcher.start()
 
 
 async def stop(app, loop):
     global quit
-    quit = True
+    quit.set()
     app.ctx.watcher.join()

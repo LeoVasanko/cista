@@ -71,7 +71,7 @@ def verify(request, *, privileged=False):
             raise Forbidden("Access Forbidden: Only for privileged users", quiet=True)
     elif config.config.public or request.ctx.user:
         return
-    raise Unauthorized("Login required", "cookie", quiet=True)
+    raise Unauthorized(f"Login required for {request.path}", "cookie", quiet=True)
 
 
 bp = Blueprint("auth")

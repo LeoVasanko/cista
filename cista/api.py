@@ -111,13 +111,24 @@ async def watch(req, ws):
     )
     uuid = token_bytes(16)
     try:
-        with watching.state.lock:
-            q = watching.pubsub[uuid] = asyncio.Queue()
-            # Init with disk usage and full tree
-            await ws.send(watching.format_space(watching.state.space))
-            await ws.send(watching.format_root(watching.state.root))
+        q, space, root = await asyncio.get_event_loop().run_in_executor(
+            req.app.ctx.threadexec, subscribe, uuid, ws
+        )
+        await ws.send(space)
+        await ws.send(root)
         # Send updates
         while True:
             await ws.send(await q.get())
     finally:
         del watching.pubsub[uuid]
+
+
+def subscribe(uuid, ws):
+    with watching.state.lock:
+        q = watching.pubsub[uuid] = asyncio.Queue()
+        # Init with disk usage and full tree
+        return (
+            q,
+            watching.format_space(watching.state.space),
+            watching.format_root(watching.state.root),
+        )

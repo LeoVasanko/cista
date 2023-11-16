@@ -51,7 +51,7 @@ def parse_listen(listen):
             raise ValueError(
                 f"Directory for unix socket does not exist: {unix.parent}/",
             )
-        return "http://localhost", {"unix": unix}
+        return "http://localhost", {"unix": unix.as_posix()}
     if re.fullmatch(r"(\w+(-\w+)*\.)+\w{2,}", listen, re.UNICODE):
         return f"https://{listen}", {"host": listen, "port": 443, "ssl": True}
     try:

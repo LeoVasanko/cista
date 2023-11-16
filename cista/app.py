@@ -1,6 +1,8 @@
 import asyncio
 import datetime
+import logging
 import mimetypes
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePath, PurePosixPath
 from stat import S_IFDIR, S_IFREG
@@ -12,7 +14,7 @@ import sanic.helpers
 from blake3 import blake3
 from sanic import Blueprint, Sanic, empty, raw
 from sanic.exceptions import Forbidden, NotFound
-from sanic.log import logging
+from sanic.log import logger
 from stream_zip import ZIP_AUTO, stream_zip
 
 from cista import auth, config, session, watching
@@ -31,14 +33,16 @@ app.exception(Exception)(handle_sanic_exception)
 @app.before_server_start
 async def main_start(app, loop):
     config.load_config()
-    await watching.start(app, loop)
+    logger.setLevel(logging.INFO)
     app.ctx.threadexec = ThreadPoolExecutor(
         max_workers=8, thread_name_prefix="cista-ioworker"
     )
+    await watching.start(app, loop)
 
 
 @app.after_server_stop
 async def main_stop(app, loop):
+    quit.set()
     await watching.stop(app, loop)
     app.ctx.threadexec.shutdown()
 
@@ -122,7 +126,7 @@ def _load_wwwroot(www):
     if not wwwnew:
         msg = f"Web frontend missing from {base}\n  Did you forget: hatch build\n"
         if not www:
-            logging.warning(msg)
+            logger.warning(msg)
         if not app.debug:
             msg = "Web frontend missing. Cista installation is broken.\n"
         wwwnew[""] = (
@@ -141,7 +145,7 @@ def _load_wwwroot(www):
 async def start(app):
     await load_wwwroot(app)
     if app.debug:
-        app.add_task(refresh_wwwroot())
+        app.add_task(refresh_wwwroot(), name="refresh_wwwroot")
 
 
 async def load_wwwroot(app):
@@ -151,27 +155,31 @@ async def load_wwwroot(app):
     )
 
 
+quit = threading.Event()
+
+
 async def refresh_wwwroot():
-    while True:
-        await asyncio.sleep(0.5)
-        try:
-            wwwold = www
-            await load_wwwroot(app)
-            changes = ""
-            for name in sorted(www):
-                attr = www[name]
-                if wwwold.get(name) == attr:
-                    continue
-                headers = attr[2]
-                changes += f"{headers['last-modified']} {headers['etag']} /{name}\n"
-            for name in sorted(set(wwwold) - set(www)):
-                changes += f"Deleted /{name}\n"
-            if changes:
-                print(f"Updated wwwroot:\n{changes}", end="", flush=True)
-        except Exception as e:
-            print("Error loading wwwroot", e)
-        if not app.debug:
-            return
+    try:
+        while not quit.is_set():
+            try:
+                wwwold = www
+                await load_wwwroot(app)
+                changes = ""
+                for name in sorted(www):
+                    attr = www[name]
+                    if wwwold.get(name) == attr:
+                        continue
+                    headers = attr[2]
+                    changes += f"{headers['last-modified']} {headers['etag']} /{name}\n"
+                for name in sorted(set(wwwold) - set(www)):
+                    changes += f"Deleted /{name}\n"
+                if changes:
+                    print(f"Updated wwwroot:\n{changes}", end="", flush=True)
+            except Exception as e:
+                print(f"Error loading wwwroot: {e!r}")
+            await asyncio.sleep(0.5)
+    except asyncio.CancelledError:
+        pass
 
 
 @app.route("/<path:path>", methods=["GET", "HEAD"])
@@ -251,7 +259,7 @@ async def zip_download(req, keys, zipfile, ext):
             for chunk in stream_zip(local_files(files)):
                 asyncio.run_coroutine_threadsafe(queue.put(chunk), loop).result()
         except Exception:
-            logging.exception("Error streaming ZIP")
+            logger.exception("Error streaming ZIP")
             raise
         finally:
             asyncio.run_coroutine_threadsafe(queue.put(None), loop)
