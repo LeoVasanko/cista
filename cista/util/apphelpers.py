@@ -41,7 +41,9 @@ async def handle_sanic_exception(request, e):
         res.cookies.add_cookie("message", message, max_age=5)
         return res
     # Otherwise use Sanic's default error page
-    return errorpages.HTMLRenderer(request, e, debug=request.app.debug).full()
+    res = errorpages.HTMLRenderer(request, e, debug=request.app.debug).full()
+    res.status = status  # Unfortunately Sanic <23.12 doesn't set this
+    return res
 
 
 def websocket_wrapper(handler):
@@ -53,13 +55,14 @@ def websocket_wrapper(handler):
             auth.verify(request)
             await handler(request, ws, *args, **kwargs)
         except Exception as e:
-            logger.exception(e)
             context, code, message = {}, 500, str(e) or "Internal Server Error"
             if isinstance(e, SanicException):
                 context = e.context or {}
                 code = e.status_code
             message = f"⚠️ {message}" if code < 500 else f"🛑 {message}"
             await asend(ws, ErrorMsg({"code": code, "message": message, **context}))
+            if not getattr(e, "quiet", False):
+                logger.exception(f"{code} {e!r}")
             raise
 
     return wrapper

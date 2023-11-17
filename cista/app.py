@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import logging
 import mimetypes
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -33,7 +32,6 @@ app.exception(Exception)(handle_sanic_exception)
 @app.before_server_start
 async def main_start(app, loop):
     config.load_config()
-    logger.setLevel(logging.INFO)
     app.ctx.threadexec = ThreadPoolExecutor(
         max_workers=8, thread_name_prefix="cista-ioworker"
     )
