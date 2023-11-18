@@ -23,6 +23,7 @@
       />
     </template>
     <SvgButton ref="searchButton" name="find" @click.prevent="toggleSearchInput" />
+    <SvgButton name="eye" @click="store.gallery = !store.gallery" />
     <SvgButton name="cog" @click="settingsMenu" />
   </nav>
 </template>
@@ -72,7 +73,6 @@ watchEffect(() => {
 const settingsMenu = (e: Event) => {
   // show the context menu
   const items = []
-  items.push({ label: 'Gallery', onClick: () => store.gallery = !store.gallery })
   if (store.user.isLoggedIn) {
     items.push({ label: `Logout ${store.user.username ?? ''}`, onClick: () => store.logout() })
   } else {
