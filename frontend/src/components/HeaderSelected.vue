@@ -150,6 +150,6 @@ const download = async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin: 0;
 }
 </style>
-@/stores/main

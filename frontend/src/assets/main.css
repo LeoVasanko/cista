@@ -92,7 +92,7 @@
   nav,
   .menu,
   .rename-button {
-    display: none;
+    display: none !important;
   }
   .breadcrumb > a {
     color: black !important;
@@ -113,6 +113,7 @@
     padding-bottom: 0 !important;
   }
   thead tr {
+    font-size: 1rem !important;
     position: static !important;
     background: none !important;
     border-bottom: 1pt solid black !important;

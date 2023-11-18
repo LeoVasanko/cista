@@ -137,10 +137,6 @@ defineExpose({
     console.log('Select')
     allSelected.value = !allSelected.value
   },
-  toggleSortColumn(column: number) {
-    const order = ['', 'name', 'modified', 'size', ''][column]
-    if (order) store.toggleSort(order as SortOrder)
-  },
   isCursor() {
     return store.cursor && editing.value === null
   },
@@ -309,29 +305,36 @@ tbody tr {
   position: relative;
   z-index: auto;
 }
-table thead input[type='checkbox'] {
+table thead .selection input[type='checkbox'] {
   position: inherit;
-  width: 1em;
-  height: 1em;
-  padding: 0.5rem 0.5em;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  margin: auto;
 }
-table tbody input[type='checkbox'] {
+table tbody .selection input[type='checkbox'] {
   width: 2rem;
   height: 2rem;
 }
 table .selection {
-  width: 2rem;
+  width: 3rem;
   text-align: center;
   text-overflow: clip;
+  padding: 0;
+}
+table .selection input {
+  margin: auto;
 }
 table .modified {
-  width: 9em;
+  width: 10rem;
+  text-overflow: clip;
 }
 table .size {
-  width: 5em;
+  width: 7rem;
+  text-overflow: clip;
 }
 table .menu {
-  width: 1rem;
+  width: 2rem;
 }
 tbody td {
   font-size: 1.2rem;
@@ -366,7 +369,7 @@ table td {
   }
 }
 thead tr {
-  font-size: var(--header-font-size);
+  font-size: 0.8rem;
   background: linear-gradient(to bottom, #eee, #fff 30%, #ddd);
   color: #000;
   box-shadow: 0 0 .2rem black;
@@ -387,9 +390,11 @@ tbody tr.cursor {
   padding-right: 1.5rem;
 }
 .sortcolumn::after {
+  font-size: 1rem;
   content: '▸';
   color: #888;
-  margin-left: 0.5em;
+  margin-left: 0.5rem;
+  margin-top: -.2rem;
   position: absolute;
   transition: all var(--transition-time) linear;
 }
