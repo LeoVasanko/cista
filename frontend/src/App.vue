@@ -133,4 +133,3 @@ onUnmounted(() => {
 })
 export type { Path }
 </script>
-@/stores/main

@@ -23,6 +23,8 @@ export const useMainStore = defineStore({
     fileExplorer: null as any,
     error: '' as string,
     connected: false,
+    gallery: false,
+    cursor: shallowRef<Doc | null>(null),
     server: {} as Record<string, any>,
     prefs: {
       sortListing: '' as SortOrder,

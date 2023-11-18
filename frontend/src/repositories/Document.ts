@@ -36,6 +36,14 @@ export class Doc {
   get urlrouter(): string {
     return this.url.replace(/^\/#/, '')
   }
+  get img(): boolean {
+    const ext = this.name.split('.').pop()?.toLowerCase()
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg'].includes(ext || '')
+  }
+  get ext(): string {
+    const ext = this.name.split('.').pop()
+    return ext ? ext.toLowerCase() : ''
+  }
 }
 export type errorEvent = {
   error: {

@@ -28,11 +28,11 @@
 
         <tr
           :id="`file-${doc.key}`"
-          :class="{ file: !doc.dir, folder: doc.dir, cursor: cursor === doc }"
-          @click="cursor = cursor === doc ? null : doc"
+          :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc }"
+          @click="store.cursor = store.cursor === doc ? null : doc"
           @contextmenu.prevent="contextMenu($event, doc)"
         >
-          <td class="selection" @click.up.stop="cursor = cursor === doc ? doc : null">
+          <td class="selection" @click.up.stop="store.cursor = store.cursor === doc ? doc : null">
             <input
               type="checkbox"
               tabindex="-1"
@@ -53,7 +53,7 @@
                 :href="doc.url"
                 tabindex="-1"
                 @contextmenu.prevent
-                @focus.stop="cursor = doc"
+                @focus.stop="store.cursor = doc"
                 @keyup.left="router.back()"
                 @keyup.right.stop="ev => { if (doc.dir) (ev.target as HTMLElement).click() }"
                 >{{ doc.name }}</a
@@ -75,7 +75,6 @@
       </tr>
     </tbody>
   </table>
-  <div v-else class="empty-container">Nothing to see here</div>
 </template>
 
 <script setup lang="ts">
@@ -88,6 +87,7 @@ import { formatSize } from '@/utils'
 import { useRouter } from 'vue-router'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import type { SortOrder } from '@/utils/docsort'
+import type SvgButtonVue from './SvgButton.vue'
 
 const props = defineProps<{
   path: Array<string>
@@ -95,7 +95,6 @@ const props = defineProps<{
 }>()
 const store = useMainStore()
 const router = useRouter()
-const cursor = shallowRef<Doc | null>(null)
 // File rename
 const editing = shallowRef<Doc | null>(null)
 const rename = (doc: Doc, newName: string) => {
@@ -143,13 +142,13 @@ defineExpose({
     if (order) store.toggleSort(order as SortOrder)
   },
   isCursor() {
-    return cursor.value !== null && editing.value === null
+    return store.cursor !== null && editing.value === null
   },
   cursorRename() {
-    editing.value = cursor.value
+    editing.value = store.cursor
   },
   cursorSelect() {
-    const doc = cursor.value
+    const doc = store.cursor
     if (!doc) return
     if (store.selected.has(doc.key)) {
       store.selected.delete(doc.key)
@@ -162,17 +161,17 @@ defineExpose({
     // Move cursor up or down (keyboard navigation)
     const docs = props.documents
     if (docs.length === 0) {
-      cursor.value = null
+      store.cursor = null
       return
     }
     const N = docs.length
     const mod = (a: number, b: number) => ((a % b) + b) % b
     const increment = (i: number, d: number) => mod(i + d, N + 1)
     const index =
-      cursor.value !== null ? docs.indexOf(cursor.value) : docs.length
+      store.cursor !== null ? docs.indexOf(store.cursor) : docs.length
     const moveto = increment(index, d)
-    cursor.value = docs[moveto] ?? null
-    const tr = cursor.value ? document.getElementById(`file-${cursor.value.key}`) : null
+    store.cursor = docs[moveto] ?? null
+    const tr = store.cursor ? document.getElementById(`file-${store.cursor.key}`) : null
     if (select) {
       // Go forwards, possibly wrapping over the end; the last entry is not toggled
       let [begin, end] = d > 0 ? [index, moveto] : [moveto, index]
@@ -202,18 +201,18 @@ const focusBreadcrumb = () => {
 let scrolltimer: any = null
 let scrolltr: any = null
 watchEffect(() => {
-  if (cursor.value && cursor.value !== editing.value) editing.value = null
-  if (editing.value) cursor.value = editing.value
-  if (cursor.value) {
+  if (store.cursor && store.cursor !== editing.value) editing.value = null
+  if (editing.value) store.cursor = editing.value
+  if (store.cursor) {
     const a = document.querySelector(
-      `#file-${cursor.value.key} .name a`
+      `#file-${store.cursor.key} .name a`
     ) as HTMLAnchorElement | null
     if (a) a.focus()
   }
 })
 watchEffect(() => {
-  if (!props.documents.length && cursor.value) {
-    cursor.value = null
+  if (!props.documents.length && store.cursor) {
+    store.cursor = null
     focusBreadcrumb()
   }
 })
@@ -287,7 +286,7 @@ const allSelected = computed({
 const loc = computed(() => props.path.join('/'))
 
 const contextMenu = (ev: MouseEvent, doc: Doc) => {
-  cursor.value = doc
+  store.cursor = doc
   ContextMenu.showContextMenu({
     x: ev.x, y: ev.y, items: [
       { label: 'Rename', onClick: () => { editing.value = doc } },

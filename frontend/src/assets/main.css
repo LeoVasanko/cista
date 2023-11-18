@@ -14,7 +14,7 @@
   /* The following are overridden by responsive layouts */
   --root-font-size: 1rem;
   --header-font-size: 1rem;
-  --header-height: calc(6.5 * var(--header-font-size));
+  --header-height: 4rem;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -48,6 +48,7 @@
   :root {
     --header-font-size: calc(10px + 10 * 100vh / 600);  /* 20px at 600px height */
     --root-font-size: 0.8rem;
+    --header-height: 2rem;
   }
   header .breadcrumb > * {
     padding-top: calc(8 + 8 * 100vh / 600) !important;

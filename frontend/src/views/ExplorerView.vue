@@ -1,19 +1,40 @@
 <template>
-  <FileExplorer
+  <div v-if="!props.path || documents.length === 0" class="empty-container">
+    <component :is="cog" class="cog"/>
+    <p v-if="!store.connected">No Connection</p>
+    <p v-else-if="store.document.length === 0">Waiting for Files</p>
+    <p v-else-if="store.query">No matches!</p>
+    <p v-else-if="!store.document.find(doc => doc.loc.length + 1 === props.path.length && [...doc.loc, doc.name].join('/') === props.path.join('/'))">Folder not found.</p>
+    <p v-else>Empty folder</p>
+  </div>
+  <Gallery
+    v-else-if="store.gallery"
     ref="fileExplorer"
-    :key="Router.currentRoute.value.path"
+    :key="`gallery-${Router.currentRoute.value.path}`"
     :path="props.path"
     :documents="documents"
-    v-if="props.path"
   />
+  <FileExplorer
+    v-else
+    ref="fileExplorer"
+    :key="`explorer-${Router.currentRoute.value.path}`"
+    :path="props.path"
+    :documents="documents"
+  />
+  <div v-if="!store.gallery && documents.some(doc => doc.img)" class="suggest-gallery">
+    <p>Media files found. Would you like a gallery view?</p>
+    <SvgButton name="eye" taborder=0 @click="() => { store.gallery = true }">Gallery</SvgButton>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { watchEffect, ref, computed } from 'vue'
 import { useMainStore } from '@/stores/main'
 import Router from '@/router/index'
-import { needleFormat, localeIncludes, collator } from '@/utils';
-import { sorted } from '@/utils/docsort';
+import { needleFormat, localeIncludes, collator } from '@/utils'
+import { sorted } from '@/utils/docsort'
+import FileExplorer from '@/components/FileExplorer.vue'
+import cog from '@/assets/svg/cog.svg'
 
 const store = useMainStore()
 const fileExplorer = ref()
@@ -64,3 +85,39 @@ watchEffect(() => {
   store.query = props.query
 })
 </script>
+
+<style scoped>
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 2rem;
+  text-shadow: 0 0 1rem #000, 0 0 2rem #000;
+  color: var(--accent-color);
+}
+@keyframes rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(359deg); }
+}
+.suggest-gallery p {
+  font-size: 2rem;
+  color: var(--accent-color);
+}
+.suggest-gallery {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+svg.cog {
+  width: 10rem;
+  height: 10rem;
+  margin: 0 auto;
+  animation: rotate 10s linear infinite;
+  filter: drop-shadow(0 0 1rem black);
+  fill: var(--primary-color);
+}
+</style>
