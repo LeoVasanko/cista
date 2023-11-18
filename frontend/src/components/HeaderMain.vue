@@ -18,7 +18,7 @@
         type="search"
         :value="query"
         @input="updateSearch"
-        placeholder="Search words"
+        placeholder="Find files"
         class="margin-input"
       />
     </template>
