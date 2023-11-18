@@ -11,7 +11,6 @@
 </template>
 
 <script setup lang=ts>
-import { defineProps } from 'vue'
 import { useMainStore } from '@/stores/main'
 import type { Doc } from '@/repositories/Document'
 

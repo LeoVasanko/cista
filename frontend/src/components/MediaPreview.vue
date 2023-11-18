@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang=ts>
-import { defineProps, ref } from 'vue'
+import { ref } from 'vue'
 import type { Doc } from '@/repositories/Document'
 
 const media = ref<HTMLAudioElement | HTMLVideoElement | null>(null)

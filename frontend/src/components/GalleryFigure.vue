@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang=ts>
-import { defineProps, ref } from 'vue'
+import { ref } from 'vue'
 import { useMainStore } from '@/stores/main'
 import { Doc } from '@/repositories/Document'
 import MediaPreview from '@/components/MediaPreview.vue'
