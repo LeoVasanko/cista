@@ -51,43 +51,6 @@ const rename = (doc: Doc, newName: string) => {
   }
   doc.name = newName // We should get an update from watch but this is quicker
 }
-const cursorMove = (d: number, select = false) => {
-  // Move cursor up or down (keyboard navigation)
-  const docs = props.documents
-  if (docs.length === 0) {
-    store.cursor = null
-    return
-  }
-  const N = docs.length
-  const mod = (a: number, b: number) => ((a % b) + b) % b
-  const increment = (i: number, d: number) => mod(i + d, N + 1)
-  const index =
-    store.cursor !== null ? docs.indexOf(store.cursor) : docs.length
-  const moveto = increment(index, d)
-  store.cursor = docs[moveto] ?? null
-  const tr = store.cursor ? document.getElementById(`file-${store.cursor.key}`) : null
-  if (select) {
-    // Go forwards, possibly wrapping over the end; the last entry is not toggled
-    let [begin, end] = d > 0 ? [index, moveto] : [moveto, index]
-    for (let p = begin; p !== end; p = increment(p, 1)) {
-      if (p === N) continue
-      const key = docs[p].key
-      if (store.selected.has(key)) store.selected.delete(key)
-      else store.selected.add(key)
-    }
-  }
-  // @ts-ignore
-  scrolltr = tr
-  if (!scrolltimer) {
-    scrolltimer = setTimeout(() => {
-      if (scrolltr)
-        scrolltr.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      scrolltimer = null
-    }, 300)
-  }
-  if (moveto === N) focusBreadcrumb()
-}
-
 defineExpose({
   newFolder() {
     const now = Math.floor(Date.now() / 1000)
@@ -109,22 +72,57 @@ defineExpose({
     if (order) store.toggleSort(order as SortOrder)
   },
   isCursor() {
-    return store.cursor !== null && editing.value === null
+    return store.cursor && editing.value === null
   },
   cursorRename() {
-    editing.value = store.cursor
+    editing.value = props.documents.find(doc => doc.key === store.cursor) ?? null
   },
   cursorSelect() {
-    const doc = store.cursor
-    if (!doc) return
-    if (store.selected.has(doc.key)) {
-      store.selected.delete(doc.key)
+    const key = store.cursor
+    if (!key) return
+    if (store.selected.has(key)) {
+      store.selected.delete(key)
     } else {
-      store.selected.add(doc.key)
+      store.selected.add(key)
     }
     this.cursorMove(1)
   },
-  cursorMove,
+  cursorMove(d: number, select = false) {
+    // Move cursor up or down (keyboard navigation)
+    const docs = props.documents
+    if (docs.length === 0) {
+      store.cursor = ''
+      return
+    }
+    const N = docs.length
+    const mod = (a: number, b: number) => ((a % b) + b) % b
+    const increment = (i: number, d: number) => mod(i + d, N + 1)
+    const index =
+      store.cursor ? docs.findIndex(doc => doc.key === store.cursor) : docs.length
+    const moveto = increment(index, d)
+    store.cursor = docs[moveto]?.key ?? ''
+    const tr = store.cursor ? document.getElementById(`file-${store.cursor}`) : ''
+    if (select) {
+      // Go forwards, possibly wrapping over the end; the last entry is not toggled
+      let [begin, end] = d > 0 ? [index, moveto] : [moveto, index]
+      for (let p = begin; p !== end; p = increment(p, 1)) {
+        if (p === N) continue
+        const key = docs[p].key
+        if (store.selected.has(key)) store.selected.delete(key)
+        else store.selected.add(key)
+      }
+    }
+    // @ts-ignore
+    scrolltr = tr
+    if (!scrolltimer) {
+      scrolltimer = setTimeout(() => {
+        if (scrolltr)
+          scrolltr.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        scrolltimer = null
+      }, 300)
+    }
+    if (moveto === N) focusBreadcrumb()
+  }
 })
 const focusBreadcrumb = () => {
   const el = document.querySelector('.breadcrumb') as HTMLElement | null
@@ -133,18 +131,18 @@ const focusBreadcrumb = () => {
 let scrolltimer: any = null
 let scrolltr: any = null
 watchEffect(() => {
-  if (store.cursor && store.cursor !== editing.value) editing.value = null
-  if (editing.value) store.cursor = editing.value
+  if (store.cursor && store.cursor !== editing.value?.key) editing.value = null
+  if (editing.value) store.cursor = editing.value.key
   if (store.cursor) {
     const a = document.querySelector(
-      `#file-${store.cursor.key} .name a`
+      `#file-${store.cursor} a`
     ) as HTMLAnchorElement | null
     if (a) a.focus()
   }
 })
 watchEffect(() => {
   if (!props.documents.length && store.cursor) {
-    store.cursor = null
+    store.cursor = ''
     focusBreadcrumb()
   }
 })
@@ -218,7 +216,7 @@ const allSelected = computed({
 const loc = computed(() => props.path.join('/'))
 
 const contextMenu = (ev: MouseEvent, doc: Doc) => {
-  store.cursor = doc
+  store.cursor = doc.key
   ContextMenu.showContextMenu({
     x: ev.x, y: ev.y, items: [
       { label: 'Rename', onClick: () => { editing.value = doc } },

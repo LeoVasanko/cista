@@ -24,7 +24,7 @@ export const useMainStore = defineStore({
     error: '' as string,
     connected: false,
     gallery: false,
-    cursor: shallowRef<Doc | null>(null),
+    cursor: '' as string,
     server: {} as Record<string, any>,
     prefs: {
       sortListing: '' as SortOrder,

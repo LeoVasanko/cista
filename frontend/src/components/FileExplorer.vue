@@ -28,11 +28,11 @@
 
         <tr
           :id="`file-${doc.key}`"
-          :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc }"
-          @click="store.cursor = store.cursor === doc ? null : doc"
+          :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc.key }"
+          @click="store.cursor = store.cursor === doc.key ? '' : doc.key"
           @contextmenu.prevent="contextMenu($event, doc)"
         >
-          <td class="selection" @click.up.stop="store.cursor = store.cursor === doc ? doc : null">
+          <td class="selection" @click.up.stop="store.cursor = store.cursor === doc.key ? doc.key : ''">
             <input
               type="checkbox"
               tabindex="-1"
@@ -53,12 +53,12 @@
                 :href="doc.url"
                 tabindex="-1"
                 @contextmenu.prevent
-                @focus.stop="store.cursor = doc"
+                @focus.stop="store.cursor = doc.key"
                 @keyup.left="router.back()"
                 @keyup.right.stop="ev => { if (doc.dir) (ev.target as HTMLElement).click() }"
                 >{{ doc.name }}</a
               >
-              <button tabindex=-1 v-if="cursor == doc" class="rename-button" @click="() => (editing = doc)">🖊️</button>
+              <button tabindex=-1 v-if="store.cursor == doc.key" class="rename-button" @click="() => (editing = doc)">🖊️</button>
             </template>
           </td>
           <FileModified :doc=doc :key=nowkey />
@@ -142,18 +142,18 @@ defineExpose({
     if (order) store.toggleSort(order as SortOrder)
   },
   isCursor() {
-    return store.cursor !== null && editing.value === null
+    return store.cursor && editing.value === null
   },
   cursorRename() {
     editing.value = store.cursor
   },
   cursorSelect() {
-    const doc = store.cursor
-    if (!doc) return
-    if (store.selected.has(doc.key)) {
-      store.selected.delete(doc.key)
+    const key = store.cursor
+    if (!key) return
+    if (store.selected.has(key)) {
+      store.selected.delete(key)
     } else {
-      store.selected.add(doc.key)
+      store.selected.add(key)
     }
     this.cursorMove(1)
   },
@@ -161,17 +161,17 @@ defineExpose({
     // Move cursor up or down (keyboard navigation)
     const docs = props.documents
     if (docs.length === 0) {
-      store.cursor = null
+      store.cursor = ''
       return
     }
     const N = docs.length
     const mod = (a: number, b: number) => ((a % b) + b) % b
     const increment = (i: number, d: number) => mod(i + d, N + 1)
     const index =
-      store.cursor !== null ? docs.indexOf(store.cursor) : docs.length
+      store.cursor ? docs.find(doc => doc.key === store.cursor) : docs.length
     const moveto = increment(index, d)
-    store.cursor = docs[moveto] ?? null
-    const tr = store.cursor ? document.getElementById(`file-${store.cursor.key}`) : null
+    store.cursor = docs[moveto]?.key ?? ''
+    const tr = store.cursor ? document.getElementById(`file-${store.cursor}`) : ''
     if (select) {
       // Go forwards, possibly wrapping over the end; the last entry is not toggled
       let [begin, end] = d > 0 ? [index, moveto] : [moveto, index]
@@ -201,18 +201,18 @@ const focusBreadcrumb = () => {
 let scrolltimer: any = null
 let scrolltr: any = null
 watchEffect(() => {
-  if (store.cursor && store.cursor !== editing.value) editing.value = null
-  if (editing.value) store.cursor = editing.value
+  if (store.cursor && store.cursor !== editing.value?.key) editing.value = null
+  if (editing.value) store.cursor = editing.value?.key
   if (store.cursor) {
     const a = document.querySelector(
-      `#file-${store.cursor.key} .name a`
+      `#file-${store.cursor} .name a`
     ) as HTMLAnchorElement | null
     if (a) a.focus()
   }
 })
 watchEffect(() => {
   if (!props.documents.length && store.cursor) {
-    store.cursor = null
+    store.cursor = ''
     focusBreadcrumb()
   }
 })
@@ -286,7 +286,7 @@ const allSelected = computed({
 const loc = computed(() => props.path.join('/'))
 
 const contextMenu = (ev: MouseEvent, doc: Doc) => {
-  store.cursor = doc
+  store.cursor = doc.key
   ContextMenu.showContextMenu({
     x: ev.x, y: ev.y, items: [
       { label: 'Rename', onClick: () => { editing.value = doc } },

@@ -1,19 +1,17 @@
 <template>
   <a
+    :id="`file-${doc.key}`"
     :href="doc.url"
     tabindex=0
+    :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc.key }"
     @contextmenu.prevent
-    @focus.stop="store.cursor = doc"
+    @focus.stop="store.cursor = doc.key"
     @click="ev => {
+      store.cursor = store.cursor === doc.key ? '' : doc.key
       if (media) { media.play(); ev.preventDefault() }
     }"
   >
-    <figure
-      :id="`file-${doc.key}`"
-      :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc }"
-      @click="store.cursor = store.cursor === doc ? null : doc"
-      @click.up.stop="store.cursor = store.cursor === doc ? doc : null"
-    >
+    <figure>
       <slot></slot>
       <MediaPreview ref=media :doc="doc" />
       <caption>
@@ -58,7 +56,7 @@ figure caption {
   color: var(--text-color);
   text-shadow: 0 0 .2rem #000, 0 0 1rem #000;
 }
-figure.cursor caption {
+.cursor caption {
   background: var(--accent-color);
 }
 caption {

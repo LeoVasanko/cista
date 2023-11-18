@@ -57,6 +57,8 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
     if (
       event.key === 'ArrowUp' ||
       event.key === 'ArrowDown' ||
+      event.key === 'ArrowLeft' ||
+      event.key === 'ArrowRight' ||
       (c && event.code === 'Space')
     ) {
       event.preventDefault()
@@ -65,8 +67,17 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   }
   //console.log("key pressed", event)
   // For up/down implement custom fast repeat
-  if (event.key === 'ArrowUp') vert = keyup ? 0 : event.altKey ? -10 : -1
-  else if (event.key === 'ArrowDown') vert = keyup ? 0 : event.altKey ? 10 : 1
+  let stride = 1
+  if (store.gallery) {
+    const grid = document.querySelector('.gallery') as HTMLElement
+    stride = getComputedStyle(grid).gridTemplateColumns.split(' ').length
+  }
+  else if (event.altKey) stride *= 10
+  // Long if-else machina for all keys we handle here
+  if (event.key === 'ArrowUp') vert = stride * (keyup ? 0 : -1)
+  else if (event.key === 'ArrowDown') vert = stride * (keyup ? 0 : 1)
+  else if (event.key === 'ArrowLeft') vert = keyup ? 0 : -1
+  else if (event.key === 'ArrowRight') vert = keyup ? 0 : 1
   // Find: process on keydown so that we can bypass the built-in search hotkey
   else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
     headerMain.value!.toggleSearchInput()
@@ -82,6 +93,10 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   // Select all (toggle); keydown to prevent builtin
   else if (!keyup && event.key === 'a' && (event.ctrlKey || event.metaKey)) {
     fileExplorer.toggleSelectAll()
+  }
+  // G toggles Gallery
+  else if (keyup && event.key === 'g') {
+    store.gallery = !store.gallery
   }
   // Keys 1-3 to sort columns
   else if (
