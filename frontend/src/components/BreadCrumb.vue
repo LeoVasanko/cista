@@ -113,11 +113,11 @@ watchEffect(() => {
   padding: 0 1em 0 0;
 }
 .breadcrumb > a {
+  flex: 0 4 auto;
   display: flex;
   align-items: center;
   margin: 0 -0.5em 0 -0.5em;
   padding: 0;
-  max-width: 8em;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
@@ -126,13 +126,13 @@ watchEffect(() => {
   clip-path: polygon(0 0, 1em 50%, 0 100%, 100% 100%, 100% 0, 0 0);
   transition: all var(--breadcrumb-transtime);
 }
-.breadcrumb a:first-child {
+.breadcrumb > a:first-child {
+  flex: 0 0 auto;
   padding-left: 1.5em;
   padding-right: 1.7em;
   clip-path: none;
 }
-.breadcrumb a:last-child {
-  max-width: none;
+.breadcrumb > a:last-child {
   clip-path: polygon(
     0 0,
     calc(100% - 1em) 0,
@@ -143,7 +143,7 @@ watchEffect(() => {
     0 0
   );
 }
-.breadcrumb a:only-child {
+.breadcrumb > a:only-child {
   clip-path: polygon(
     0 0,
     calc(100% - 1em) 0,
@@ -177,6 +177,6 @@ watchEffect(() => {
 }
 .breadcrumb a:hover { color: var(--breadcrumb-hover-color) }
 .breadcrumb a:hover svg { fill: var(--breadcrumb-hover-color) }
-.breadcrumb a.current { color: var(--accent-color) }
+.breadcrumb a.current { color: var(--accent-color); max-width: none; flex: 0 1 auto; }
 .breadcrumb a.current svg { fill: var(--accent-color) }
 </style>
