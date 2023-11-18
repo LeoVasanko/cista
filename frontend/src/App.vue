@@ -77,8 +77,8 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   // Long if-else machina for all keys we handle here
   if (event.key === 'ArrowUp') vert = stride * (keyup ? 0 : -1)
   else if (event.key === 'ArrowDown') vert = stride * (keyup ? 0 : 1)
-  else if (event.key === 'ArrowLeft') vert = keyup ? 0 : -1
-  else if (event.key === 'ArrowRight') vert = keyup ? 0 : 1
+  else if (store.gallery && event.key === 'ArrowLeft') vert = keyup ? 0 : -1
+  else if (store.gallery && event.key === 'ArrowRight') vert = keyup ? 0 : 1
   // Find: process on keydown so that we can bypass the built-in search hotkey
   else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
     headerMain.value!.toggleSearchInput()
@@ -89,6 +89,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   }
   // Globally close search on Escape
   else if (keyup && event.key === 'Escape') {
+    store.error = ''
     headerMain.value!.closeSearch(event)
   }
   // Select all (toggle); keydown to prevent builtin
@@ -96,7 +97,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
     fileExplorer.toggleSelectAll()
   }
   // G toggles Gallery
-  else if (keyup && event.key === 'g') {
+  else if (!input && keyup && event.key === 'g') {
     store.gallery = !store.gallery
   }
   // Keys 1-3 to sort columns
