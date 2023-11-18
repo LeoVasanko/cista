@@ -41,9 +41,7 @@ async def handle_sanic_exception(request, e):
         res.cookies.add_cookie("message", message, max_age=5)
         return res
     # Otherwise use Sanic's default error page
-    res = errorpages.HTMLRenderer(request, e, debug=request.app.debug).full()
-    res.status = status  # Unfortunately Sanic <23.12 doesn't set this
-    return res
+    return errorpages.HTMLRenderer(request, e, debug=request.app.debug).render()
 
 
 def websocket_wrapper(handler):
