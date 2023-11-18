@@ -12,6 +12,8 @@
       :ref="el => setLinkRef(0, el)"
       :class="{ current: !!isCurrent(0) }"
       :aria-current="isCurrent(0)"
+      @click.prevent="navigate(0)"
+      title="/"
     >
       <component :is="home" />
     </a>
@@ -21,6 +23,7 @@
         :aria-current="isCurrent(index + 1)"
         @click.prevent="navigate(index + 1)"
         :ref="el => setLinkRef(index + 1, el)"
+        :title="`/${longest.slice(0, index + 1).join('/')}`"
       >{{ location }}</a>
     </template>
   </nav>
@@ -101,27 +104,31 @@ watchEffect(() => {
   --breadcrumb-transtime: 0.3s;
 }
 .breadcrumb {
+  flex: 1 1 auto;
   display: flex;
-  list-style: none;
+  min-width: 20%;
+  max-width: 100%;
+  min-height: 2em;
   margin: 0;
   padding: 0 1em 0 0;
 }
 .breadcrumb > a {
+  display: flex;
+  align-items: center;
   margin: 0 -0.5em 0 -0.5em;
   padding: 0;
   max-width: 8em;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-  height: 1.5em;
   color: var(--breadcrumb-color);
   padding: 0.3em 1.5em;
   clip-path: polygon(0 0, 1em 50%, 0 100%, 100% 100%, 100% 0, 0 0);
   transition: all var(--breadcrumb-transtime);
 }
 .breadcrumb a:first-child {
-  margin-left: 0;
-  padding-left: .2em;
+  padding-left: 1.5em;
+  padding-right: 1.7em;
   clip-path: none;
 }
 .breadcrumb a:last-child {
@@ -148,9 +155,9 @@ watchEffect(() => {
 }
 .breadcrumb svg {
   /* FIXME: Custom positioning to align it well; needs proper solution */
-  padding-left: 0.8em;
   width: 1.3em;
   height: 1.3em;
+  margin: -.5em;
   fill: var(--breadcrumb-color);
   transition: fill var(--breadcrumb-transtime);
 }

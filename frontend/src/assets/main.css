@@ -37,12 +37,6 @@
   :root {
     --root-font-size: calc(8px + 8 * 100vw / 1000);
   }
-  header .buttons:has(input[type='search']) > div {
-    display: none;
-  }
-  header .buttons > div:has(input[type='search']) {
-    display: inherit;
-  }
 }
 @media screen and (min-width: 2000px) {
   :root {
@@ -78,17 +72,13 @@
   }
   header {
     display: flex;
-    flex-direction: row-reverse;
     justify-content: space-between;
-    align-items: end;
   }
-  header .breadcrumb {
-    flex-shrink: 1;
-  }
-  header .breadcrumb > * {
-    flex-shrink: 1;
-    padding-top: 1rem !important;
-    padding-bottom: 1rem !important;
+  header .headermain { order: 1; }
+  header .breadcrumb { align-self: stretch; }
+  header .action-button {
+    width: 2em;
+    height: 2em;
   }
 }
 @media print {
@@ -141,6 +131,9 @@
     transform: scale(0.5);
     left: 0;
   }
+}
+* {
+  box-sizing: border-box;
 }
 html {
   font-size: var(--root-font-size);

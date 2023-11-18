@@ -1,31 +1,29 @@
 <template>
-  <nav class="headermain">
-    <div class="buttons">
-      <template v-if="store.error">
-        <div class="error-message" @click="store.error = ''">{{ store.error }}</div>
-        <div class="smallgap"></div>
-      </template>
-      <UploadButton :path="props.path" />
-      <SvgButton
-        name="create-folder"
-        data-tooltip="New folder"
-        @click="() => store.fileExplorer!.newFolder()"
+  <nav class="headermain buttons">
+    <template v-if="store.error">
+      <div class="error-message" @click="store.error = ''">{{ store.error }}</div>
+      <div class="smallgap"></div>
+    </template>
+    <UploadButton :path="props.path" />
+    <SvgButton
+      name="create-folder"
+      data-tooltip="New folder"
+      @click="() => store.fileExplorer!.newFolder()"
+    />
+    <slot></slot>
+    <div class="spacer smallgap"></div>
+    <template v-if="showSearchInput">
+      <input
+        ref="search"
+        type="search"
+        :value="query"
+        @input="updateSearch"
+        placeholder="Search words"
+        class="margin-input"
       />
-      <slot></slot>
-      <div class="spacer smallgap"></div>
-      <template v-if="showSearchInput">
-        <input
-          ref="search"
-          type="search"
-          :value="query"
-          @input="updateSearch"
-          placeholder="Search words"
-          class="margin-input"
-        />
-      </template>
-      <SvgButton ref="searchButton" name="find" @click.prevent="toggleSearchInput" />
-      <SvgButton name="cog" @click="settingsMenu" />
-    </div>
+    </template>
+    <SvgButton ref="searchButton" name="find" @click.prevent="toggleSearchInput" />
+    <SvgButton name="cog" @click="settingsMenu" />
   </nav>
 </template>
 
@@ -93,24 +91,18 @@ defineExpose({
 
 <style scoped>
 .buttons {
+  flex: 1000 0 auto;
   padding: 0;
   display: flex;
   align-items: center;
-  height: 3.5em;
   z-index: 10;
-}
-.buttons > * {
-  flex-shrink: 1;
 }
 input[type='search'] {
   background: var(--input-background);
   color: var(--input-color);
   border: 0;
   border-radius: 0.1em;
-  padding: 0.5em;
   outline: none;
-  font-size: 1.5em;
-  max-width: 30vw;
+  max-width: 15ch;
 }
 </style>
-@/stores/main
