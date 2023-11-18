@@ -21,6 +21,7 @@ import { useMainStore } from '@/stores/main'
 
 import { computed } from 'vue'
 import Router from '@/router/index'
+import type { SortOrder } from './utils/docsort'
 
 interface Path {
   path: string
@@ -102,9 +103,9 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   else if (
     !input &&
     keyup &&
-    (event.key === '1' || event.key === '2' || event.key === '3')
+    (event.code === 'Backquote' || event.key === '1' || event.key === '2' || event.key === '3')
   ) {
-    fileExplorer.toggleSortColumn(+event.key)
+    store.sort(['', 'name', 'modified', 'size'][+event.key || 0] as SortOrder)
   }
   // Rename
   else if (c && keyup && !event.ctrlKey && (event.key === 'F2' || event.key === 'r')) {

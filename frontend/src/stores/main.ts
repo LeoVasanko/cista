@@ -79,6 +79,10 @@ export const useMainStore = defineStore({
       if (this.query) this.prefs.sortFiltered = this.prefs.sortFiltered === name ? '' : name
       else this.prefs.sortListing = this.prefs.sortListing === name ? '' : name
     },
+    sort(name: SortOrder | '') {
+      if (this.query) this.prefs.sortFiltered = name
+      else this.prefs.sortListing = name
+    },
   },
   getters: {
     sortOrder(): SortOrder { return this.query ? this.prefs.sortFiltered : this.prefs.sortListing },
