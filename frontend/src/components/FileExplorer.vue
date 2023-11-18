@@ -141,7 +141,7 @@ defineExpose({
     return store.cursor && editing.value === null
   },
   cursorRename() {
-    editing.value = store.cursor
+    editing.value = props.documents.find(doc => doc.key === store.cursor) ?? null
   },
   cursorSelect() {
     const key = store.cursor
@@ -164,7 +164,7 @@ defineExpose({
     const mod = (a: number, b: number) => ((a % b) + b) % b
     const increment = (i: number, d: number) => mod(i + d, N + 1)
     const index =
-      store.cursor ? docs.find(doc => doc.key === store.cursor) : docs.length
+      store.cursor ? docs.findIndex(doc => doc.key === store.cursor) : docs.length
     const moveto = increment(index, d)
     store.cursor = docs[moveto]?.key ?? ''
     const tr = store.cursor ? document.getElementById(`file-${store.cursor}`) : ''
