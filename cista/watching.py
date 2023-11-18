@@ -6,7 +6,7 @@ import time
 from contextlib import suppress
 from os import stat_result
 from pathlib import Path, PurePosixPath
-from stat import S_ISDIR
+from stat import S_ISDIR, S_ISREG
 
 import msgspec
 from natsort import humansorted, natsort_keygen, ns
@@ -144,8 +144,12 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
             if f.name.startswith("."):
                 continue  # No dotfiles
             with suppress(FileNotFoundError):
-                s = f.stat()
-                li.append((int(not S_ISDIR(s.st_mode)), f.name, s))
+                s = f.lstat()
+                isfile = S_ISREG(s.st_mode)
+                isdir = S_ISDIR(s.st_mode)
+                if not isfile and not isdir:
+                    continue
+                li.append((int(isfile), f.name, s))
         # Build the tree as a list of FileEntries
         for [_, name, s] in humansorted(li):
             sub = walk(rel / name, stat=s)
@@ -155,7 +159,9 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
             entry.size += child.size
     except FileNotFoundError:
         pass  # Things may be rapidly in motion
-    except OSError:
+    except OSError as e:
+        if e.errno == 13:  # Permission denied
+            pass
         logger.error(f"Watching {path=}: {e!r}")
     return ret
 
@@ -309,9 +315,13 @@ def watcher_inotify(loop):
 def watcher_poll(loop):
     """Polling version of the watcher thread."""
     while not quit.is_set():
+        t0 = time.perf_counter()
         update_root(loop)
         update_space(loop)
-        quit.wait(2.0)
+        dur = time.perf_counter() - t0
+        if dur > 1.0:
+            logger.debug(f"Reading the full file list took {dur:.1f}s")
+        quit.wait(0.1 + 8 * dur)
 
 
 async def start(app, loop):
