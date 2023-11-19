@@ -51,10 +51,11 @@ const m = ref<typeof MediaPreview | null>(null)
 figure caption {
   font-weight: 600;
   color: var(--text-color);
-  text-shadow: 0 0 .2rem #000, 0 0 1rem #000;
+  text-shadow: 0 0 .2rem var(--primary-background), 0 0 .2rem var(--primary-background);
 }
 .cursor caption {
   background: var(--accent-color);
+  text-shadow: none;
 }
 caption {
   position: absolute;
