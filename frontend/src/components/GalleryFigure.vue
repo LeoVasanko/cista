@@ -4,7 +4,6 @@
     @contextmenu.stop
     @focus.stop="store.cursor = doc.key"
     @click="ev => {
-      console.log('Gallery click', doc.key, store.cursor, !!media)
       if (m!.play()) ev.preventDefault()
       store.cursor = doc.key
     }"
