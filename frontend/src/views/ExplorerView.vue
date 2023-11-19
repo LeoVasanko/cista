@@ -8,7 +8,7 @@
     <p v-else>Empty folder</p>
   </div>
   <Gallery
-    v-else-if="store.gallery"
+    v-else-if="store.prefs.gallery"
     ref="fileExplorer"
     :key="`gallery-${Router.currentRoute.value.path}`"
     :path="props.path"
@@ -21,9 +21,9 @@
     :path="props.path"
     :documents="documents"
   />
-  <div v-if="!store.gallery && documents.some(doc => doc.img)" class="suggest-gallery">
+  <div v-if="!store.prefs.gallery && documents.some(doc => doc.img)" class="suggest-gallery">
     <p>Media files found. Would you like a gallery view?</p>
-    <SvgButton name="eye" taborder=0 @click="() => { store.gallery = true }">Gallery</SvgButton>
+    <SvgButton name="eye" taborder=0 @click="() => { store.prefs.gallery = true }">Gallery</SvgButton>
   </div>
 </template>
 

@@ -1,5 +1,5 @@
 <template>
-  <img v-if=doc.img :src=doc.url alt="">
+  <img v-if=doc.img :src="preview() ? doc.previewurl : doc.url" alt="">
   <span v-else-if=doc.dir class="folder icon"></span>
   <video ref=vid v-else-if=video() :src=doc.url controls preload=none @click.prevent>📄</video>
   <audio ref=aud v-else-if=audio() :src=doc.url controls preload=metadata @click.stop>📄</audio>
@@ -32,8 +32,11 @@ defineExpose({
 
 const video = () => ['mkv', 'mp4', 'webm', 'mov', 'avi'].includes(props.doc.ext)
 const audio = () => ['mp3', 'flac', 'ogg', 'aac'].includes(props.doc.ext)
-const embed = () => ['txt', 'py', 'html', 'css', 'js', 'json', 'xml', 'csv', 'tsv'].includes(props.doc.ext)
 const archive = () => ['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar'].includes(props.doc.ext)
+const preview = () => (
+  props.doc.size > 500000 &&
+  ['png', 'bmp', 'ico', 'webp', 'avif', 'jpg', 'jpeg'].includes(props.doc.ext)
+)
 </script>
 
 <style scoped>

@@ -16,7 +16,7 @@ from sanic.exceptions import Forbidden, NotFound
 from sanic.log import logger
 from stream_zip import ZIP_AUTO, stream_zip
 
-from cista import auth, config, session, watching
+from cista import auth, config, preview, session, watching
 from cista.api import bp
 from cista.util.apphelpers import handle_sanic_exception
 
@@ -25,6 +25,7 @@ sanic.helpers._ENTITY_HEADERS = frozenset()
 
 app = Sanic("cista", strict_slashes=True)
 app.blueprint(auth.bp)
+app.blueprint(preview.bp)
 app.blueprint(bp)
 app.exception(Exception)(handle_sanic_exception)
 

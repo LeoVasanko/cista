@@ -23,7 +23,7 @@
       />
     </template>
     <SvgButton ref="searchButton" name="find" @click.prevent="toggleSearchInput" />
-    <SvgButton name="eye" @click="store.gallery = !store.gallery" />
+    <SvgButton name="eye" @click="store.prefs.gallery = !store.prefs.gallery" />
     <SvgButton name="cog" @click="settingsMenu" />
   </nav>
 </template>

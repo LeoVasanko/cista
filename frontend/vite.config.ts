@@ -45,6 +45,7 @@ export default defineConfig({
       "/login": dev_backend,
       "/logout": dev_backend,
       "/zip": dev_backend,
+      "/preview": dev_backend,
     }
   },
   build: {

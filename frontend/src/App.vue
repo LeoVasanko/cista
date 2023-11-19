@@ -93,7 +93,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   }
   // G toggles Gallery
   else if (!input && keyup && event.key === 'g') {
-    store.gallery = !store.gallery
+    store.prefs.gallery = !store.prefs.gallery
   }
   // Keys Backquote-1-2-3 to sort columns
   else if (

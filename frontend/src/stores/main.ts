@@ -23,10 +23,10 @@ export const useMainStore = defineStore({
     fileExplorer: null as any,
     error: '' as string,
     connected: false,
-    gallery: false,
     cursor: '' as string,
     server: {} as Record<string, any>,
     prefs: {
+      gallery: false,
       sortListing: '' as SortOrder,
       sortFiltered: '' as SortOrder,
     },

@@ -40,6 +40,9 @@ export class Doc {
     const ext = this.name.split('.').pop()?.toLowerCase()
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg'].includes(ext || '')
   }
+  get previewurl(): string {
+    return this.url.replace(/^\/files/, '/preview')
+  }
   get ext(): string {
     const ext = this.name.split('.').pop()
     return ext ? ext.toLowerCase() : ''
