@@ -244,12 +244,13 @@ const contextMenu = (ev: MouseEvent, doc: Doc) => {
 
 <style scoped>
 .gallery {
-  padding: 1rem;
+  padding: 1em;
   width: 100%;
   display: grid;
-  gap: .5rem;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  grid-auto-rows: 15rem;
+  gap: .5em;
+  grid-template-columns: repeat(auto-fill, minmax(15em, 1fr));
+  grid-template-rows: repeat(minmax(auto, 15em));
+  align-items: end;
 }
 .breadcrumb {
   position: absolute;

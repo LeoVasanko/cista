@@ -2,8 +2,8 @@
   <img v-if=preview() :src="`${doc.previewurl}?${quality}&t=${doc.mtime}`" alt="">
   <img v-else-if=doc.img :src=doc.url alt="">
   <span v-else-if=doc.dir class="folder icon"></span>
-  <video ref=vid v-else-if=video() :src=doc.url :poster="`${doc.previewurl}?${quality}&t=${doc.mtime}`" controls preload=none @click.prevent>📄</video>
-  <audio ref=aud v-else-if=audio() :src=doc.url controls preload=metadata @click.stop>📄</audio>
+  <video ref=vid v-else-if=video() :src=doc.url :poster="`${doc.previewurl}?${quality}&t=${doc.mtime}`" controls preload=none @click.prevent>🎞️</video>
+  <audio ref=aud v-else-if=audio() :src=doc.url controls preload=metadata @click.stop>🔈</audio>
   <span v-else-if=archive() class="archive icon"></span>
   <span v-else class="file icon" :class="`ext-${doc.ext}`"></span>
 </template>
@@ -43,22 +43,21 @@ const preview = () => (
 </script>
 
 <style scoped>
-img, embed, .icon {
+img, embed, .icon, audio, video {
   font-size: 10em;
-  border-radius: .5rem;
   overflow: hidden;
-  text-align: center;
-  object-fit: cover;
-  object-position: center;
-  min-width: 50%;
-  height: 100%;
-}
-audio, video {
-  height: 100%;
   min-width: 50%;
   max-width: 100%;
+  min-height: 50%;
+  max-height: 100%;
+  object-fit: cover;
+  border-radius: .05em;
+}
+img {
+  justify-self: start;
+}
+audio, video {
   padding-bottom: 2rem;
-  margin: auto;
 }
 .folder::before {
   content: '📁';

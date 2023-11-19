@@ -37,21 +37,24 @@ const m = ref<typeof MediaPreview | null>(null)
 
 <style scoped>
 .gallery figure {
-  height: 15rem;
+  max-height: 15em;
   position: relative;
-  border-radius: .5rem;
+  border-radius: .5em;
   overflow: hidden;
   margin: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: end;
   overflow: hidden;
+}
+.icon {
+  justify-self: end;
 }
 figure caption {
   font-weight: 600;
   color: var(--text-color);
-  text-shadow: 0 0 .2rem var(--primary-background), 0 0 .2rem var(--primary-background);
+  text-shadow: 0 0 .2em var(--primary-background), 0 0 .2em var(--primary-background);
 }
 .cursor caption {
   background: var(--accent-color);
@@ -73,15 +76,15 @@ caption label {
 }
 label span {
   flex: 1 1;
-  margin-right: 2rem;
+  margin-right: 2em;
   text-align: center;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 label input[type='checkbox'] {
-  width: 2rem;
-  height: 2rem;
+  width: 2em;
+  height: 2em;
   opacity: 0;
   flex-shrink: 0;
 }

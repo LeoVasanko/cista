@@ -10,6 +10,7 @@
   >
     <a href="#/"
       :ref="el => setLinkRef(0, el)"
+      class="home"
       :class="{ current: !!isCurrent(0) }"
       :aria-current="isCurrent(0)"
       @click.prevent="navigate(0)"

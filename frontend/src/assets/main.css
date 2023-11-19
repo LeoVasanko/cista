@@ -89,9 +89,10 @@
     --header-background: none;
     --header-color: black;
   }
-  nav,
+  .headermain,
   .menu,
-  .rename-button {
+  .rename-button,
+  .suggest-gallery {
     display: none !important;
   }
   .breadcrumb > a {
@@ -107,9 +108,12 @@
   }
   .breadcrumb svg {
     fill: black !important;
+    margin: 0 .5rem 0 1rem !important;
+  }
+  body#app {
+    height: auto !important;
   }
   main {
-    height: auto !important;
     padding-bottom: 0 !important;
   }
   thead tr {
@@ -117,6 +121,17 @@
     position: static !important;
     background: none !important;
     border-bottom: 1pt solid black !important;
+  }
+  audio::-webkit-media-controls-timeline,
+  video::-webkit-media-controls-timeline {
+    display: none;
+  }
+  audio::-webkit-media-controls,
+  video::-webkit-media-controls {
+    display: none;
+  }
+  tr, figure {
+    page-break-inside: avoid;
   }
   .selection {
     min-width: 0 !important;
@@ -157,6 +172,7 @@ tbody .modified {
   font-family: 'Roboto Mono';
 }
 header {
+  flex: 0 0 auto;
   background-color: var(--header-background);
   color: var(--header-color);
   font-size: var(--header-font-size);
@@ -198,20 +214,22 @@ table {
   border: 0;
   gap: 0;
 }
-#app {
-  height: 100%;
+body#app {
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
+main {
+  flex: 1 1 auto;
+  padding-bottom: 3em; /* convenience space on the bottom */
+  overflow-y: scroll;
+  text-align: center;
+}
+
 header nav.headermain {
   /* Position so that tooltips can appear on top of other positioned elements */
   position: relative;
   z-index: 100;
-}
-main {
-  height: calc(100svh - var(--header-height));
-  padding-bottom: 3em; /* convenience space on the bottom */
-  overflow-y: scroll;
 }
 .spacer { flex-grow: 1 }
 .smallgap { flex-shrink: 1; width: 2em }
