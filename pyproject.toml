@@ -22,6 +22,7 @@ dependencies = [
     "msgspec",
     "natsort",
     "pathvalidate",
+    "pillow",
     "pyjwt",
     "sanic",
     "stream-zip",
