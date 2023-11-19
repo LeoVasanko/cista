@@ -141,10 +141,6 @@ html {
   font-size: var(--root-font-size);
   overflow: hidden;
 }
-/* Hide scrollbar for all browsers */
-main::-webkit-scrollbar {
-  display: none;
-}
 main {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */

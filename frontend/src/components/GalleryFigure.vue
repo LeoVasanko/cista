@@ -10,7 +10,7 @@
   >
     <figure>
       <slot></slot>
-      <MediaPreview ref=m :doc="doc" tabindex=-1 quality="?sz=512" />
+      <MediaPreview ref=m :doc="doc" tabindex=-1 quality="sz=512" />
       <caption>
         <label>
           <SelectBox :doc=doc />

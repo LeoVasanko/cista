@@ -33,7 +33,8 @@ async def preview(req, path):
     headers = {
         "etag": etag,
         "last-modified": format_date_time(stat.st_mtime),
-        "cache-control": "max-age=604800, immutable",
+        "cache-control": "max-age=604800, immutable"
+        + ("" if config.config.public else ", private"),
         "content-type": "image/webp",
         "content-disposition": f"inline; filename*=UTF-8''{urllib.parse.quote(savename.as_posix())}",
     }
