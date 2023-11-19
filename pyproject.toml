@@ -24,6 +24,7 @@ dependencies = [
     "pathvalidate",
     "pillow",
     "pyjwt",
+    "pymupdf",
     "sanic",
     "stream-zip",
     "tomli_w",
