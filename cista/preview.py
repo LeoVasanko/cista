@@ -1,10 +1,13 @@
 import asyncio
 import io
+import mimetypes
 import urllib.parse
 from pathlib import PurePosixPath
 from urllib.parse import unquote
 from wsgiref.handlers import format_date_time
 
+import av
+import av.datasets
 import fitz  # PyMuPDF
 from PIL import Image
 from sanic import Blueprint, empty, raw
@@ -54,6 +57,8 @@ async def preview(req, path):
 def dispatch(path, quality, maxsize, maxzoom):
     if path.suffix.lower() in (".pdf", ".xps", ".epub", ".mobi"):
         return process_pdf(path, quality=quality, maxsize=maxsize, maxzoom=maxzoom)
+    if mimetypes.guess_type(path.name)[0].startswith("video/"):
+        return process_video(path, quality=quality, maxsize=maxsize)
     return process_image(path, quality=quality, maxsize=maxsize)
 
 
@@ -86,3 +91,24 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     mat = fitz.Matrix(zoom, zoom)
     pix = page.get_pixmap(matrix=mat)
     return pix.pil_tobytes(format="webp", quality=quality, method=4)
+
+
+def process_video(path, *, maxsize, quality):
+    with av.open(str(path)) as container:
+        stream = container.streams.video[0]
+        rotation = (
+            stream.side_data
+            and stream.side_data.get(av.stream.SideData.DISPLAYMATRIX)
+            or 0
+        )
+        stream.codec_context.skip_frame = "NONKEY"
+        container.seek(container.duration // 8)
+        frame = next(container.decode(stream))
+        img = frame.to_image()
+
+    img.thumbnail((maxsize, maxsize))
+    imgdata = io.BytesIO()
+    if rotation:
+        img = img.rotate(rotation, expand=True)
+    img.save(imgdata, format="webp", quality=quality, method=4)
+    return imgdata.getvalue()

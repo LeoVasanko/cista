@@ -23,6 +23,7 @@ dependencies = [
     "natsort",
     "pathvalidate",
     "pillow",
+    "pyav",
     "pyjwt",
     "pymupdf",
     "sanic",

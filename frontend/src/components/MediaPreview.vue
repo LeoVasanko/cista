@@ -2,7 +2,7 @@
   <img v-if=preview() :src="`${doc.previewurl}?${quality}&t=${doc.mtime}`" alt="">
   <img v-else-if=doc.img :src=doc.url alt="">
   <span v-else-if=doc.dir class="folder icon"></span>
-  <video ref=vid v-else-if=video() :src=doc.url controls preload=none @click.prevent>📄</video>
+  <video ref=vid v-else-if=video() :src=doc.url :poster="`${doc.previewurl}?${quality}&t=${doc.mtime}`" controls preload=none @click.prevent>📄</video>
   <audio ref=aud v-else-if=audio() :src=doc.url controls preload=metadata @click.stop>📄</audio>
   <span v-else-if=archive() class="archive icon"></span>
   <span v-else class="file icon" :class="`ext-${doc.ext}`"></span>

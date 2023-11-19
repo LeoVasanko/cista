@@ -11,7 +11,7 @@ from wsgiref.handlers import format_date_time
 import brotli
 import sanic.helpers
 from blake3 import blake3
-from sanic import Blueprint, Sanic, empty, raw
+from sanic import Blueprint, Sanic, empty, raw, redirect
 from sanic.exceptions import Forbidden, NotFound
 from sanic.log import logger
 from stream_zip import ZIP_AUTO, stream_zip
@@ -196,6 +196,12 @@ async def wwwroot(req, path=""):
         headers = {**headers, "content-encoding": "br"}
         data = br
     return raw(data, headers=headers)
+
+
+@app.route("/favicon.ico", methods=["GET", "HEAD"])
+async def favicon(req):
+    # Browsers keep asking for it when viewing files (not HTML with icon link)
+    return redirect("/assets/logo-97d1d7eb.svg", status=308)
 
 
 def get_files(wanted: set) -> list[tuple[PurePosixPath, Path]]:
