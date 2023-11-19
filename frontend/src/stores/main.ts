@@ -83,6 +83,9 @@ export const useMainStore = defineStore({
       if (this.query) this.prefs.sortFiltered = name
       else this.prefs.sortListing = name
     },
+    focusBreadcrumb() {
+      (document.querySelector('.breadcrumb') as HTMLAnchorElement).focus()
+    }
   },
   getters: {
     sortOrder(): SortOrder { return this.query ? this.prefs.sortFiltered : this.prefs.sortListing },

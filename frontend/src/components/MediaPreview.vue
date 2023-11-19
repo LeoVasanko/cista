@@ -1,19 +1,19 @@
 <template>
   <img v-if=doc.img :src=doc.url alt="">
   <span v-else-if=doc.dir class="folder icon"></span>
-  <video v-else-if=video() ref=media :src=doc.url controls preload=metadata @click.prevent>📄</video>
-  <audio v-else-if=audio() ref=media :src=doc.url controls preload=metadata @click.stop>📄</audio>
-  <embed v-else-if=embed() :src=doc.url type=text/plain @click.stop @scroll.prevent>
+  <video ref=vid v-else-if=video() :src=doc.url controls preload=none @click.prevent>📄</video>
+  <audio ref=aud v-else-if=audio() :src=doc.url controls preload=metadata @click.stop>📄</audio>
   <span v-else-if=archive() class="archive icon"></span>
   <span v-else class="file icon" :class="`ext-${doc.ext}`"></span>
 </template>
 
 <script setup lang=ts>
-import { ref } from 'vue'
+import { compile, computed, ref } from 'vue'
 import type { Doc } from '@/repositories/Document'
 
-const media = ref<HTMLAudioElement | HTMLVideoElement | null>(null)
-
+const aud = ref<HTMLAudioElement | null>(null)
+const vid = ref<HTMLVideoElement | null>(null)
+const media = computed(() => aud.value || vid.value)
 const props = defineProps<{
   doc: Doc
 }>()
@@ -21,9 +21,12 @@ const props = defineProps<{
 defineExpose({
   play() {
     if (media.value) {
-      media.value.play()
+      if (media.value.paused) media.value.play()
+      else media.value.pause()
+      return true
     }
-  }
+    return false
+  },
 })
 
 

@@ -62,23 +62,14 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
       event.key === 'ArrowRight' ||
       (c && event.code === 'Space')
     ) {
-      event.preventDefault()
+      if (!input) event.preventDefault()
     }
     return
   }
   //console.log("key pressed", event)
-  // For up/down implement custom fast repeat
-  let stride = 1
-  if (store.gallery) {
-    const grid = document.querySelector('.gallery') as HTMLElement
-    stride = getComputedStyle(grid).gridTemplateColumns.split(' ').length
-  }
-  else if (event.altKey) stride *= 10
-  // Long if-else machina for all keys we handle here
-  if (event.key === 'ArrowUp') vert = stride * (keyup ? 0 : -1)
-  else if (event.key === 'ArrowDown') vert = stride * (keyup ? 0 : 1)
-  else if (store.gallery && event.key === 'ArrowLeft') vert = keyup ? 0 : -1
-  else if (store.gallery && event.key === 'ArrowRight') vert = keyup ? 0 : 1
+  /// Long if-else machina for all keys we handle here
+  let arrow = ''
+  if (event.key.startsWith("Arrow")) arrow = event.key.slice(5).toLowerCase()
   // Find: process on keydown so that we can bypass the built-in search hotkey
   else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
     headerMain.value!.toggleSearchInput()
@@ -87,12 +78,16 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   else if (keyup && !input && event.key === '/') {
     headerMain.value!.toggleSearchInput()
   }
-  // Globally close search on Escape
+  // Globally close search, clear errors on Escape
   else if (keyup && event.key === 'Escape') {
     store.error = ''
     headerMain.value!.closeSearch(event)
+    store.focusBreadcrumb()
   }
-  // Select all (toggle); keydown to prevent builtin
+  else if (!input && keyup && event.key === 'Backspace') {
+    Router.back()
+  }
+  // Select all (toggle); keydown to precede and prevent builtin
   else if (!keyup && event.key === 'a' && (event.ctrlKey || event.metaKey)) {
     fileExplorer.toggleSelectAll()
   }
@@ -100,7 +95,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   else if (!input && keyup && event.key === 'g') {
     store.gallery = !store.gallery
   }
-  // Keys 1-3 to sort columns
+  // Keys Backquote-1-2-3 to sort columns
   else if (
     !input &&
     keyup &&
@@ -116,28 +111,26 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   else if (c && event.code === 'Space') {
     if (keyup && !event.altKey && !event.ctrlKey)
       fileExplorer.cursorSelect()
-  } else return
-  event.preventDefault()
-  if (!vert) {
-    if (timer) {
-      clearTimeout(timer) // Good for either timeout or interval
-      timer = null
-    }
-    return
   }
-  if (!timer) {
+  else return
+  /// We are handling this!
+  event.preventDefault()
+  if (timer) {
+    clearTimeout(timer) // Good for either timeout or interval
+    timer = null
+  }
+  let f: any
+  switch (arrow) {
+    case 'up': f = () => fileExplorer.up(event); break
+    case 'down': f = () => fileExplorer.down(event); break
+    case 'left': f = () => fileExplorer.left(event); break
+    case 'right': f = () => fileExplorer.right(event); break
+  }
+  if (f && !keyup) {
     // Initial move, then t0 delay until repeats at tr intervals
-    const select = event.shiftKey
-    fileExplorer.cursorMove(vert, select)
-    const t0 = 200,
-      tr = 30
-    timer = setTimeout(
-      () =>
-        (timer = setInterval(() => {
-          fileExplorer.cursorMove(vert, select)
-        }, tr)),
-      t0 - tr
-    )
+    const t0 = 200, tr = event.altKey ? 20 : 100
+    f()
+    timer = setTimeout(() => { timer = setInterval(f, tr) }, t0 - tr)
   }
 }
 onMounted(() => {

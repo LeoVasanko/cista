@@ -1,19 +1,17 @@
 <template>
-  <a
-    :id="`file-${doc.key}`"
-    :href="doc.url"
-    tabindex=0
+  <a :id="`file-${doc.key}`" :href=doc.url tabindex=-1
     :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc.key }"
-    @contextmenu.prevent
+    @contextmenu.stop
     @focus.stop="store.cursor = doc.key"
     @click="ev => {
-      store.cursor = store.cursor === doc.key ? '' : doc.key
-      if (media) { media.play(); ev.preventDefault() }
+      console.log('Gallery click', doc.key, store.cursor, !!media)
+      if (m!.play()) ev.preventDefault()
+      store.cursor = doc.key
     }"
   >
     <figure>
       <slot></slot>
-      <MediaPreview ref=media :doc="doc" />
+      <MediaPreview ref=m :doc="doc" :tabindex=-1 />
       <caption>
         <label>
           <SelectBox :doc=doc />
@@ -35,7 +33,7 @@ const props = defineProps<{
   doc: Doc
   index: number
 }>()
-const media = ref<typeof MediaPreview | null>(null)
+const m = ref<typeof MediaPreview | null>(null)
 </script>
 
 <style scoped>

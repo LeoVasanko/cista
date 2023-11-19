@@ -49,15 +49,9 @@
               <FileRenameInput :doc="doc" :rename="rename" :exit="() => {editing = null}" />
             </template>
             <template v-else>
-              <a
-                :href="doc.url"
-                tabindex="-1"
-                @contextmenu.prevent
-                @focus.stop="store.cursor = doc.key"
-                @keyup.left="router.back()"
-                @keyup.right.stop="ev => { if (doc.dir) (ev.target as HTMLElement).click() }"
-                >{{ doc.name }}</a
-              >
+              <a :href=doc.url tabindex=-1 @contextmenu.stop @focus.stop="store.cursor = doc.key">
+                {{ doc.name }}
+              </a>
               <button tabindex=-1 v-if="store.cursor == doc.key" class="rename-button" @click="() => (editing = doc)">🖊️</button>
             </template>
           </td>
@@ -151,9 +145,17 @@ defineExpose({
     } else {
       store.selected.add(key)
     }
-    this.cursorMove(1)
+    this.cursorMove(1, null)
   },
-  cursorMove(d: number, select = false) {
+  up(ev: KeyboardEvent) { this.cursorMove(-1, ev) },
+  down(ev: KeyboardEvent) { this.cursorMove(1, ev) },
+  left(ev: KeyboardEvent) { router.back() },
+  right(ev: KeyboardEvent) {
+    const a = document.querySelector(`#file-${store.cursor} a`) as HTMLAnchorElement | null
+    if (a) a.click()
+  },
+  cursorMove(d: number, ev: KeyboardEvent | null) {
+    const select = !!ev?.shiftKey
     // Move cursor up or down (keyboard navigation)
     const docs = props.documents
     if (docs.length === 0) {

@@ -2,8 +2,8 @@
   <nav
     class="breadcrumb"
     aria-label="Breadcrumb"
-    @keyup.left.stop="move(-1)"
-    @keyup.right.stop="move(1)"
+    @keydown.left.stop="move(-1)"
+    @keydown.right.stop="move(1)"
     @keyup.enter="move(0)"
     @focus=focusCurrent
     tabindex=0

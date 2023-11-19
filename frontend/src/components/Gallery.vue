@@ -1,15 +1,13 @@
 <template>
-  <div v-if="props.documents.length || editing" class="gallery">
-    <template v-for="(doc, index) in documents" :key="doc.key">
-      <GalleryFigure :doc="doc" :index="index">
-        <BreadCrumb :path="doc.loc ? doc.loc.split('/') : []" v-if="showFolderBreadcrumb(index)" class="folder-change"/>
-      </GalleryFigure>
-    </template>
+  <div v-if="props.documents.length || editing" class="gallery" ref="gallery">
+    <GalleryFigure v-for="(doc, index) in documents" :key="doc.key" :doc="doc" :index="index">
+      <BreadCrumb :path="doc.loc ? doc.loc.split('/') : []" v-if="showFolderBreadcrumb(index)" class="folder-change"/>
+    </GalleryFigure>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted, nextTick } from 'vue'
 import { useMainStore } from '@/stores/main'
 import { Doc } from '@/repositories/Document'
 import FileRenameInput from './FileRenameInput.vue'
@@ -51,6 +49,11 @@ const rename = (doc: Doc, newName: string) => {
   }
   doc.name = newName // We should get an update from watch but this is quicker
 }
+const gallery = ref<HTMLElement>()
+const columns = computed(() => {
+  if (!gallery.value) return 1
+  return getComputedStyle(gallery.value).gridTemplateColumns.split(' ').length
+})
 defineExpose({
   newFolder() {
     const now = Math.floor(Date.now() / 1000)
@@ -85,9 +88,14 @@ defineExpose({
     } else {
       store.selected.add(key)
     }
-    this.cursorMove(1)
+    this.cursorMove(1, null)
   },
-  cursorMove(d: number, select = false) {
+  up(ev: KeyboardEvent) { this.cursorMove(-columns.value, ev) },
+  down(ev: KeyboardEvent) { this.cursorMove(columns.value, ev) },
+  left(ev: KeyboardEvent) { this.cursorMove(-1, ev) },
+  right(ev: KeyboardEvent) { this.cursorMove(1, ev) },
+  cursorMove(d: number, ev: KeyboardEvent | null) {
+    const select = !!ev?.shiftKey
     // Move cursor up or down (keyboard navigation)
     const docs = props.documents
     if (docs.length === 0) {
@@ -98,8 +106,15 @@ defineExpose({
     const mod = (a: number, b: number) => ((a % b) + b) % b
     const increment = (i: number, d: number) => mod(i + d, N + 1)
     const index =
-      store.cursor ? docs.findIndex(doc => doc.key === store.cursor) : docs.length
-    const moveto = increment(index, d)
+      store.cursor ? docs.findIndex(doc => doc.key === store.cursor) : N
+    let moveto
+    if (index === N) moveto = d > 0 ? 0 : N - 1
+    else {
+      moveto = increment(index, d)
+      // Wrapping either end, just land outside the list
+      if (Math.abs(d) >= N || Math.sign(d) !== Math.sign(moveto - index)) moveto = N
+    }
+    console.log("Gallery cursorMove", d, index, moveto, moveto - index)
     store.cursor = docs[moveto]?.key ?? ''
     const tr = store.cursor ? document.getElementById(`file-${store.cursor}`) : ''
     if (select) {
@@ -134,10 +149,8 @@ watchEffect(() => {
   if (store.cursor && store.cursor !== editing.value?.key) editing.value = null
   if (editing.value) store.cursor = editing.value.key
   if (store.cursor) {
-    const a = document.querySelector(
-      `#file-${store.cursor} a`
-    ) as HTMLAnchorElement | null
-    if (a) a.focus()
+    const a = document.querySelector(`#file-${store.cursor}`) as HTMLAnchorElement | null
+    if (a) { a.focus(); a.scrollIntoView({ block: 'center', behavior: 'smooth' }) }
   }
 })
 watchEffect(() => {

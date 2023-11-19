@@ -4,7 +4,7 @@
     <p v-if="!store.connected">No Connection</p>
     <p v-else-if="store.document.length === 0">Waiting for Files</p>
     <p v-else-if="store.query">No matches!</p>
-    <p v-else-if="!store.document.find(doc => doc.loc.length + 1 === props.path.length && [...doc.loc, doc.name].join('/') === props.path.join('/'))">Folder not found.</p>
+    <p v-else-if="!store.document.some(doc => `${doc.loc}/${doc.name}` === props.path.join('/'))">Folder not found.</p>
     <p v-else>Empty folder</p>
   </div>
   <Gallery
