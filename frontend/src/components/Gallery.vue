@@ -107,6 +107,10 @@ defineExpose({
     const increment = (i: number, d: number) => mod(i + d, N + 1)
     const index =
       store.cursor ? docs.findIndex(doc => doc.key === store.cursor) : N
+    // Stop navigation sideways away from the grid (only with up/down)
+    if (ev && index === 0 && ev.key === "ArrowLeft") return
+    if (ev && index === N - 1 && ev.key === "ArrowRight") return
+    // Calculate new position
     let moveto
     if (index === N) moveto = d > 0 ? 0 : N - 1
     else {
