@@ -118,7 +118,6 @@ defineExpose({
       // Wrapping either end, just land outside the list
       if (Math.abs(d) >= N || Math.sign(d) !== Math.sign(moveto - index)) moveto = N
     }
-    console.log("Gallery cursorMove", d, index, moveto, moveto - index)
     store.cursor = docs[moveto]?.key ?? ''
     const tr = store.cursor ? document.getElementById(`file-${store.cursor}`) : ''
     if (select) {

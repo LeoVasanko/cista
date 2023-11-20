@@ -94,7 +94,7 @@ watchEffect(() => {
   justify-content: center;
   height: 100%;
   font-size: 2rem;
-  text-shadow: 0 0 1rem #000, 0 0 2rem #000;
+  text-shadow: 0 0 .3rem #000, 0 0 2rem #0008;
   color: var(--accent-color);
 }
 @keyframes rotate {
@@ -118,6 +118,6 @@ svg.cog {
   margin: 0 auto;
   animation: rotate 10s linear infinite;
   filter: drop-shadow(0 0 1rem black);
-  fill: var(--primary-color);
+  fill: #888;
 }
 </style>

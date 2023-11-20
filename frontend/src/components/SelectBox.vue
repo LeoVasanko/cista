@@ -1,5 +1,5 @@
 <template>
-  <input type=checkbox tabindex=-1 :checked="store.selected.has(doc.key)"
+  <input type=checkbox tabindex=-1 :checked="store.selected.has(doc.key)" @click.stop
     @change="ev => {
       if ((ev.target as HTMLInputElement).checked) {
         store.selected.add(doc.key)
