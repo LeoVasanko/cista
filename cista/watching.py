@@ -56,33 +56,50 @@ class State:
         if not relpath.parts:
             return slice(begin, end)
 
-        begin += 1
         for part in relpath.parts:
             level += 1
             found = False
 
-            while begin < end:
+            # Traverse contents of a folder at level
+            while begin + 1 < end:
+                begin += 1
                 entry = self._listing[begin]
 
+                # Skip subentries
+                if entry.level > level:
+                    continue
+
+                # The directory we were traversing has ended
                 if entry.level < level:
                     break
 
-                if entry.level == level:
-                    if entry.name == part:
-                        found = True
-                        if level == len(relpath.parts):
-                            isfile = relfile
-                        else:
-                            begin += 1
-                        break
-                    cmp = entry.isfile - isfile or sortkey(entry.name) > sortkey(part)
-                    if cmp > 0:
-                        break
+                # Found the requested part?
+                if entry.name == part:
+                    found = True
+                    # Are we finished yet?
+                    if level == len(relpath.parts):
+                        isfile = relfile
+                    else:
+                        # Enter subdirectory
+                        continue
+                    break
 
-                begin += 1
+                # Checking if past the requested spot in sort order
+                cmp = entry.isfile - isfile or sortkey(entry.name) > sortkey(part)
+                if cmp > 0:
+                    break
 
             if not found:
+                if level < len(relpath.parts) - 1:
+                    # Fail if the parent folder is missing
+                    parent = "/".join(relpath.parts[:level])
+                    raise ValueError(
+                        f"Parent folder {parent} is missing for {relpath.as_posix()} at {level=}"
+                    )
+                # Insertion point at the end of the directory
                 return slice(begin, begin)
+
+            # Otherwise found=True, continue to the next part if not there yet
 
         # Found the starting point, now find the end of the slice
         for end in range(begin + 1, len(self._listing) + 1):
@@ -103,7 +120,7 @@ class State:
                 parent = self._slice(rel.parent)
                 if parent.start == parent.stop:
                     raise ValueError(
-                        f"Parent folder {rel.as_posix()} is missing for {rel.name}"
+                        f"Parent folder {rel.as_posix()} is missing for {rel.name} {level=}"
                     )
             self._listing[self._slice(index)] = value
 
@@ -185,8 +202,12 @@ def update_path(relpath: PurePosixPath, loop):
             return
         old = state.root
         if new:
+            logger.debug(
+                f"Watch: Update {relpath}" if old else f"Watch: Created {relpath}"
+            )
             state[relpath, new[0].isfile] = new
         else:
+            logger.debug(f"Watch: Removed {relpath}")
             del state[relpath]
         broadcast(format_update(old, state.root), loop)
 
@@ -307,7 +328,8 @@ def watcher_inotify(loop):
             # Inotify event, update the tree
             if event and any(f in modified_flags for f in event[1]):
                 # Update modified path
-                update_path(PurePosixPath(event[2]) / event[3], loop)
+                path = PurePosixPath(event[2]) / event[3]
+                update_path(path.relative_to(rootpath), loop)
 
         del i  # Free the inotify object
 
