@@ -112,7 +112,7 @@ class ErrorMsg(msgspec.Struct):
 ## Directory listings
 
 
-class FileEntry(msgspec.Struct, array_like=True):
+class FileEntry(msgspec.Struct, array_like=True, frozen=True):
     level: int
     name: str
     key: str

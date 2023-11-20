@@ -1,10 +1,7 @@
-from pathlib import PurePosixPath
-
 import msgspec
-import pytest
 
 from cista.protocol import FileEntry, UpdateMessage, UpdDel, UpdIns, UpdKeep
-from cista.watching import State, format_update
+from cista.watching import format_update
 
 
 def decode(data: str):
@@ -34,6 +31,14 @@ def test_insertions():
     old_list = f(3)
     new_list = old_list[:2] + f(1, 10) + old_list[2:]
     expected = [UpdKeep(2), UpdIns(f(1, 10)), UpdKeep(1)]
+    assert decode(format_update(old_list, new_list)) == expected
+
+
+def test_insertion_at_end():
+    old_list = [*f(3), FileEntry(1, "xxx", "xxx", 0, 0, 1)]
+    newfile = FileEntry(1, "yyy", "yyy", 0, 0, 1)
+    new_list = [*old_list, newfile]
+    expected = [UpdKeep(4), UpdIns([newfile])]
     assert decode(format_update(old_list, new_list)) == expected
 
 
@@ -83,54 +88,3 @@ def test_longer_lists():
 def sortkey(name):
     # Define the sorting key for names here
     return name.lower()
-
-
-@pytest.fixture()
-def state():
-    entries = [
-        FileEntry(0, "", "root", 0, 0, 0),
-        FileEntry(1, "bar", "bar", 0, 0, 0),
-        FileEntry(2, "baz", "bar/baz", 0, 0, 0),
-        FileEntry(1, "foo", "foo", 0, 0, 0),
-        FileEntry(1, "xxx", "xxx", 0, 0, 0),
-        FileEntry(2, "yyy", "xxx/yyy", 0, 0, 1),
-    ]
-    s = State()
-    s._listing = entries
-    return s
-
-
-def test_existing_directory(state):
-    path = PurePosixPath("bar")
-    expected_slice = slice(1, 3)  # Includes 'bar' and 'baz'
-    assert state._slice(path) == expected_slice
-
-
-def test_existing_file(state):
-    path = PurePosixPath("xxx/yyy")
-    expected_slice = slice(5, 6)  # Only includes 'yyy'
-    assert state._slice(path) == expected_slice
-
-
-def test_nonexistent_directory(state):
-    path = PurePosixPath("zzz")
-    expected_slice = slice(6, 6)  # 'zzz' would be inserted at end
-    assert state._slice(path) == expected_slice
-
-
-def test_nonexistent_file(state):
-    path = (PurePosixPath("bar/mmm"), 1)
-    expected_slice = slice(3, 3)  # A file would be inserted after 'baz' under 'bar'
-    assert state._slice(path) == expected_slice
-
-
-def test_root_directory(state):
-    path = PurePosixPath()
-    expected_slice = slice(0, 6)  # Entire tree
-    assert state._slice(path) == expected_slice
-
-
-def test_directory_with_subdirs_and_files(state):
-    path = PurePosixPath("xxx")
-    expected_slice = slice(4, 6)  # Includes 'xxx' and 'yyy'
-    assert state._slice(path) == expected_slice
