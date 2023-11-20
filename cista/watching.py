@@ -24,7 +24,7 @@ class State:
     def __init__(self):
         self.lock = threading.RLock()
         self._space = Space(0, 0, 0, 0)
-        self._listing: list[FileEntry] = []
+        self.root: list[FileEntry] = []
 
     @property
     def space(self):
@@ -35,16 +35,6 @@ class State:
     def space(self, space):
         with self.lock:
             self._space = space
-
-    @property
-    def root(self) -> list[FileEntry]:
-        with self.lock:
-            return self._listing[:]
-
-    @root.setter
-    def root(self, listing: list[FileEntry]):
-        with self.lock:
-            self._listing = listing
 
 
 def treeiter(rootmod):
@@ -136,7 +126,7 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
         if isfile:
             return [entry]
         # Walk all entries of the directory
-        ret = [entry]
+        ret: list[FileEntry] = [...]  # type: ignore
         li = []
         for f in path.iterdir():
             if quit.is_set():
@@ -155,15 +145,15 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
             sub = walk(rel / name, stat=s)
             child = sub[0]
             entry = FileEntry(
-                entry.level,
-                entry.name,
-                entry.key,
-                entry.size + child.size,
-                max(entry.mtime, child.mtime),
-                entry.isfile,
+                level=entry.level,
+                name=entry.name,
+                key=entry.key,
+                size=entry.size + child.size,
+                mtime=max(entry.mtime, child.mtime),
+                isfile=entry.isfile,
             )
-            ret[0] = entry
             ret.extend(sub)
+        ret[0] = entry
     except FileNotFoundError:
         pass  # Things may be rapidly in motion
     except OSError as e:
@@ -175,12 +165,13 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
 
 def update_root(loop):
     """Full filesystem scan"""
+    old = state.root
     new = walk(PurePosixPath())
-    with state.lock:
-        old = state.root
-        if old != new:
+    if old != new:
+        update = format_update(old, new)
+        with state.lock:
+            broadcast(update, loop)
             state.root = new
-            broadcast(format_update(old, new), loop)
 
 
 def update_path(rootmod: list[FileEntry], relpath: PurePosixPath, loop):
@@ -323,7 +314,7 @@ def watcher_inotify(loop):
         update_root(loop)
         t1 = time.perf_counter()
         logger.debug(f"Root update took {t1 - t0:.1f}s")
-        trefresh = time.monotonic() + 30.0
+        trefresh = time.monotonic() + 300.0
         tspace = time.monotonic() + 5.0
         # Watch for changes (frequent wakeups needed for quiting)
         while not quit.is_set():
@@ -336,11 +327,12 @@ def watcher_inotify(loop):
                 tspace = time.monotonic() + 5.0
                 update_space(loop)
             # Inotify events, update the tree
-            events = list(i.event_gen(yield_nones=False, timeout_s=0.1))
             dirty = False
-            rootmod = list(state.root)
-            for event in events:
+            rootmod = state.root[:]
+            for event in i.event_gen(yield_nones=False, timeout_s=0.1):
                 assert event
+                if quit.is_set():
+                    return
                 interesting = any(f in modified_flags for f in event[1])
                 if event[2] == rootpath.as_posix() and event[3] == "zzz":
                     logger.debug(f"Watch: {interesting=} {event=}")
@@ -351,7 +343,12 @@ def watcher_inotify(loop):
                     update_path(rootmod, path.relative_to(rootpath), loop)
                     t1 = time.perf_counter()
                     logger.debug(f"Watch: Update {event[3]} took {t1 - t0:.1f}s")
-                    dirty = True
+                    if not dirty:
+                        t = time.monotonic()
+                        dirty = True
+                # Wait a maximum of 0.5s to push the updates
+                if dirty and time.monotonic() >= t + 0.5:
+                    break
             if dirty and state.root != rootmod:
                 t0 = time.perf_counter()
                 update = format_update(state.root, rootmod)

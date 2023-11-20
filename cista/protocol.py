@@ -120,8 +120,11 @@ class FileEntry(msgspec.Struct, array_like=True, frozen=True):
     size: int
     isfile: int
 
-    def __repr__(self):
+    def __str__(self):
         return self.key or "FileEntry()"
+
+    def __repr__(self):
+        return f"{self.name} ({self.size}, {self.mtime})"
 
 
 class Update(msgspec.Struct, array_like=True):
