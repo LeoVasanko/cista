@@ -1,5 +1,6 @@
 <template>
   <LoginModal />
+  <SettingsModal />
   <header>
     <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query">
       <HeaderSelected :path="path.pathList" />
@@ -22,6 +23,7 @@ import { useMainStore } from '@/stores/main'
 import { computed } from 'vue'
 import Router from '@/router/index'
 import type { SortOrder } from './utils/docsort'
+import type SettingsModalVue from './components/SettingsModal.vue'
 
 interface Path {
   path: string
@@ -49,6 +51,13 @@ const headerMain = ref<typeof HeaderMain | null>(null)
 let vert = 0
 let timer: any = null
 const globalShortcutHandler = (event: KeyboardEvent) => {
+  if (store.dialog) {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    return
+  }
   const fileExplorer = store.fileExplorer as any
   if (!fileExplorer) return
   const c = fileExplorer.isCursor()

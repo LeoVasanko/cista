@@ -1,32 +1,46 @@
 <template>
-  <dialog ref="dialog">
+  <dialog v-if="store.dialog === name" ref="dialog" :id=props.name @keydown.escape=close>
     <h1 v-if="props.title">{{ props.title }}</h1>
     <div>
       <slot>
         Dialog with no content
-        <button onclick="dialog.close()">OK</button>
+        <button @click=close>OK</button>
       </slot>
     </div>
   </dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watchEffect, nextTick } from 'vue'
+import { useMainStore } from '@/stores/main'
 
 const dialog = ref<HTMLDialogElement | null>(null)
+const store = useMainStore()
 
-const props = withDefaults(
-  defineProps<{
-    title: string
-  }>(),
-  {
-    title: ''
-  }
-)
-const show = () => {
-  dialog.value!.showModal()
+const close = () => {
+  dialog.value!.close()
+  store.dialog = ''
 }
-defineExpose({ show })
+
+const props = defineProps<{
+    title: string,
+    name: typeof store.dialog,
+  }>()
+
+const show = () => {
+  store.dialog = props.name
+  setTimeout(() => {
+    dialog.value!.showModal()
+    nextTick(() => {
+      const input = dialog.value!.querySelector('input')
+      if (input) input.focus()
+    })
+  }, 0)
+}
+defineExpose({ show, close })
+watchEffect(() => {
+  if (dialog.value) show()
+})
 onMounted(() => {
   show()
 })

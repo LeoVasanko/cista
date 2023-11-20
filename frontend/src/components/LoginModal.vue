@@ -1,5 +1,5 @@
 <template>
-  <ModalDialog v-if="store.user.isOpenLoginModal" title="Authentication required" @blur="store.user.isOpenLoginModal = false">
+  <ModalDialog name="login" title="Authentication required">
     <form @submit.prevent="login">
       <div class="login-container">
         <label for="username">Username:</label>
@@ -99,4 +99,3 @@ const login = async () => {
   height: 1em;
 }
 </style>
-@/stores/main

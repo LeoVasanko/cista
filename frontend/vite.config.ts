@@ -44,6 +44,7 @@ export default defineConfig({
       "/files": dev_backend,
       "/login": dev_backend,
       "/logout": dev_backend,
+      "/password-change": dev_backend,
       "/zip": dev_backend,
       "/preview": dev_backend,
     }

@@ -74,6 +74,7 @@ watchEffect(() => {
 const settingsMenu = (e: Event) => {
   // show the context menu
   const items = []
+  items.push({ label: 'Settings', onClick: () => { store.dialog = 'settings' }})
   if (store.user.isLoggedIn) {
     items.push({ label: `Logout ${store.user.username ?? ''}`, onClick: () => store.logout() })
   } else {

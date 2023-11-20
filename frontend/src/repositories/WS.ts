@@ -53,7 +53,7 @@ export const watchConnect = () => {
     if ('error' in msg) {
       if (msg.error.code === 401) {
         store.user.isLoggedIn = false
-        store.user.isOpenLoginModal = true
+        store.dialog = 'login'
       } else {
         store.error = msg.error.message
       }
@@ -67,7 +67,7 @@ export const watchConnect = () => {
       store.error = ''
       if (msg.user) store.login(msg.user.username, msg.user.privileged)
       else if (store.isUserLogged) store.logout()
-      if (!msg.server.public && !msg.user) store.user.isOpenLoginModal = true
+      if (!msg.server.public && !msg.user) store.dialog = 'login'
     }
   })
 }
@@ -87,9 +87,14 @@ const watchReconnect = (event: MessageEvent) => {
     store.connected = false
     store.error = 'Reconnecting...'
   }
+  if (watchTimeout !== null) clearTimeout(watchTimeout)
+  // Don't hammer the server while on login dialog
+  if (store.dialog === 'login') {
+    watchTimeout = setTimeout(watchReconnect, 100)
+    return
+  }
   reconnDelay = Math.min(5000, reconnDelay + 500)
   // The server closes the websocket after errors, so we need to reopen it
-  if (watchTimeout !== null) clearTimeout(watchTimeout)
   watchTimeout = setTimeout(watchConnect, reconnDelay)
 }
 
@@ -148,7 +153,7 @@ function handleUpdateMessage(updateData: { update: UpdateEntry[] }) {
 function handleError(msg: errorEvent) {
   const store = useMainStore()
   if (msg.error.code === 401) {
-    store.user.isOpenLoginModal = true
+    store.user.dialog = 'login'
     store.user.isLoggedIn = false
     return
   }

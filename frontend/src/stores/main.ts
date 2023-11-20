@@ -7,13 +7,6 @@ import { watchConnect } from '@/repositories/WS'
 import { shallowRef } from 'vue'
 import { sorted, type SortOrder } from '@/utils/docsort'
 
-type User = {
-  username: string
-  privileged: boolean
-  isOpenLoginModal: boolean
-  isLoggedIn: boolean
-}
-
 export const useMainStore = defineStore({
   id: 'main',
   state: () => ({
@@ -25,17 +18,17 @@ export const useMainStore = defineStore({
     connected: false,
     cursor: '' as string,
     server: {} as Record<string, any>,
+    dialog: '' as '' | 'login' | 'settings',
     prefs: {
       gallery: false,
       sortListing: '' as SortOrder,
       sortFiltered: '' as SortOrder,
     },
     user: {
-      username: '',
-      privileged: false,
-      isLoggedIn: false,
-      isOpenLoginModal: false
-    } as User
+      username: '' as string,
+      privileged: false as boolean,
+      isLoggedIn: false as boolean,
+    }
   }),
   persist: {
     paths: ['prefs'],
@@ -62,11 +55,11 @@ export const useMainStore = defineStore({
       this.user.username = username
       this.user.privileged = privileged
       this.user.isLoggedIn = true
-      this.user.isOpenLoginModal = false
+      this.dialog = ''
       if (!this.connected) watchConnect()
     },
     loginDialog() {
-      this.user.isOpenLoginModal = true
+      this.dialog = 'login'
     },
     async logout() {
       console.log("Logout")

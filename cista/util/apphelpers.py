@@ -59,7 +59,7 @@ def websocket_wrapper(handler):
                 code = e.status_code
             message = f"⚠️ {message}" if code < 500 else f"🛑 {message}"
             await asend(ws, ErrorMsg({"code": code, "message": message, **context}))
-            if not getattr(e, "quiet", False):
+            if not getattr(e, "quiet", False) or code == 500:
                 logger.exception(f"{code} {e!r}")
             raise
 

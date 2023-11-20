@@ -159,3 +159,35 @@ async def logout_post(request):
         res = json({"message": msg})
     session.delete(res)
     return res
+
+
+@bp.post("/password-change")
+async def change_password(request):
+    try:
+        if request.headers.content_type == "application/json":
+            username = request.json["username"]
+            pwchange = request.json["passwordChange"]
+            password = request.json["password"]
+        else:
+            username = request.form["username"][0]
+            pwchange = request.form["passwordChange"][0]
+            password = request.form["password"][0]
+        if not username or not password:
+            raise KeyError
+    except KeyError:
+        raise BadRequest(
+            "Missing username, passwordChange or password",
+        ) from None
+    try:
+        user = login(username, password)
+        set_password(user, pwchange)
+    except ValueError as e:
+        raise Forbidden(str(e), context={"redirect": "/login"}) from e
+
+    if "text/html" in request.headers.accept:
+        res = redirect("/")
+        session.flash(res, "Password updated")
+    else:
+        res = json({"message": "Password updated"})
+    session.create(res, username)
+    return res
