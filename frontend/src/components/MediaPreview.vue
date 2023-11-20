@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang=ts>
-import { compile, computed, ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { Doc } from '@/repositories/Document'
 
 const aud = ref<HTMLAudioElement | null>(null)
@@ -159,15 +159,8 @@ img, embed, .icon, audio, video {
 figure.cursor .icon {
   filter: brightness(1);
 }
-img::before, video::before {
-  /* broken media */
-  background: #888;
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
-  text-align: center;
+img::before {
+  /* broken image */
   text-shadow: 0 0 .5rem #000;
   filter: grayscale(1);
   content: '❌';
