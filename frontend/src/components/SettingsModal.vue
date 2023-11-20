@@ -1,5 +1,5 @@
 <template>
-  <ModalDialog name=settings title="Settings">
+  <ModalDialog name=settings2 title="Settings">
     <form>
       <template v-if="store.user.isLoggedIn">
         <h3>Update your authentication</h3>

@@ -41,9 +41,6 @@ defineExpose({ show, close })
 watchEffect(() => {
   if (dialog.value) show()
 })
-onMounted(() => {
-  show()
-})
 </script>
 
 <style>

@@ -153,8 +153,8 @@ function handleUpdateMessage(updateData: { update: UpdateEntry[] }) {
 function handleError(msg: errorEvent) {
   const store = useMainStore()
   if (msg.error.code === 401) {
-    store.user.dialog = 'login'
     store.user.isLoggedIn = false
+    store.dialog = 'login'
     return
   }
 }
