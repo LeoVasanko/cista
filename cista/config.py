@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import secrets
 import sys
+from contextlib import suppress
 from functools import wraps
 from hashlib import sha256
 from pathlib import Path, PurePath
@@ -33,7 +35,23 @@ class Link(msgspec.Struct, omit_defaults=True):
 
 
 config = None
-conffile = Path.home() / ".local/share/cista/db.toml"
+conffile = None
+
+
+def init_confdir():
+    if p := os.environ.get("CISTA_HOME"):
+        home = Path(p)
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME")
+        home = (
+            Path(xdg).expanduser() / "cista" if xdg else Path.home() / ".config/cista"
+        )
+    if not home.is_dir():
+        home.mkdir(parents=True, exist_ok=True)
+        home.chmod(0o700)
+
+    global conffile
+    conffile = home / "db.toml"
 
 
 def derived_secret(*params, len=8) -> bytes:
@@ -61,8 +79,8 @@ def dec_hook(typ, obj):
 
 def config_update(modify):
     global config
-    if not conffile.exists():
-        conffile.parent.mkdir(parents=True, exist_ok=True)
+    if conffile is None:
+        init_confdir()
     tmpname = conffile.with_suffix(".tmp")
     try:
         f = tmpname.open("xb")
@@ -76,10 +94,6 @@ def config_update(modify):
             old = conffile.read_bytes()
             c = msgspec.toml.decode(old, type=Config, dec_hook=dec_hook)
         except FileNotFoundError:
-            # No existing config file, make sure we have a folder...
-            confdir = conffile.parent
-            confdir.mkdir(parents=True, exist_ok=True)
-            confdir.chmod(0o700)
             old = b""
             c = None
         c = modify(c)
@@ -92,7 +106,9 @@ def config_update(modify):
         f.write(new)
         f.close()
         if sys.platform == "win32":
-            conffile.unlink()  # Windows doesn't support atomic replace
+            # Windows doesn't support atomic replace
+            with suppress(FileNotFoundError):
+                conffile.unlink()
         tmpname.rename(conffile)  # Atomic replace
     except:
         f.close()
@@ -120,6 +136,8 @@ def modifies_config(modify):
 
 def load_config():
     global config
+    if conffile is None:
+        init_confdir()
     config = msgspec.toml.decode(conffile.read_bytes(), type=Config, dec_hook=dec_hook)
 
 

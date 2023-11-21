@@ -3,6 +3,7 @@ import datetime
 import mimetypes
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import cpu_count
 from pathlib import Path, PurePath, PurePosixPath
 from stat import S_IFDIR, S_IFREG
 from urllib.parse import unquote
@@ -14,6 +15,7 @@ from blake3 import blake3
 from sanic import Blueprint, Sanic, empty, raw, redirect
 from sanic.exceptions import Forbidden, NotFound
 from sanic.log import logger
+from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
 
 from cista import auth, config, preview, session, watching
@@ -30,11 +32,16 @@ app.blueprint(bp)
 app.exception(Exception)(handle_sanic_exception)
 
 
+setproctitle("cista-main")
+
+
 @app.before_server_start
 async def main_start(app, loop):
     config.load_config()
+    setproctitle(f"cista {config.config.path.name}")
+    workers = max(2, min(8, cpu_count()))
     app.ctx.threadexec = ThreadPoolExecutor(
-        max_workers=8, thread_name_prefix="cista-ioworker"
+        max_workers=workers, thread_name_prefix="cista-ioworker"
     )
     await watching.start(app, loop)
 

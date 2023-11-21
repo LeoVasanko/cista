@@ -26,7 +26,6 @@ def run(*, dev=False):
         motd=False,
         dev=dev,
         auto_reload=dev,
-        reload_dir={confdir},
         access_log=True,
     )  # type: ignore
     if dev:

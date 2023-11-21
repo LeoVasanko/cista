@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import io
 import mimetypes
 import urllib.parse
@@ -16,6 +17,8 @@ from sanic.log import logger
 
 from cista import config
 from cista.util.filename import sanitize
+
+DISPLAYMATRIX = av.stream.SideData.DISPLAYMATRIX
 
 bp = Blueprint("preview", url_prefix="/preview")
 
@@ -96,19 +99,19 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
 def process_video(path, *, maxsize, quality):
     with av.open(str(path)) as container:
         stream = container.streams.video[0]
-        rotation = (
-            stream.side_data
-            and stream.side_data.get(av.stream.SideData.DISPLAYMATRIX)
-            or 0
-        )
         stream.codec_context.skip_frame = "NONKEY"
+        rot = stream.side_data and stream.side_data.get(DISPLAYMATRIX) or 0
         container.seek(container.duration // 8)
-        frame = next(container.decode(stream))
-        img = frame.to_image()
+        img = next(container.decode(stream)).to_image()
+        del stream
 
     img.thumbnail((maxsize, maxsize))
     imgdata = io.BytesIO()
-    if rotation:
-        img = img.rotate(rotation, expand=True)
+    if rot:
+        img = img.rotate(rot, expand=True)
     img.save(imgdata, format="webp", quality=quality, method=4)
-    return imgdata.getvalue()
+    del img
+    ret = imgdata.getvalue()
+    del imgdata
+    gc.collect()
+    return ret

@@ -27,6 +27,7 @@ dependencies = [
     "pyjwt",
     "pymupdf",
     "sanic",
+    "setproctitle",
     "stream-zip",
     "tomli_w",
 ]

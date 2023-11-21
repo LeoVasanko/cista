@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -61,6 +62,7 @@ def _main():
         path = None
     _confdir(args)
     exists = config.conffile.exists()
+    print(config.conffile, exists)
     import_droppy = args["--import-droppy"]
     necessary_opts = exists or import_droppy or path
     if not necessary_opts:
@@ -117,7 +119,8 @@ def _confdir(args):
                 raise ValueError("Config path is not a directory")
             # Accidentally pointed to the db.toml, use parent
             confdir = confdir.parent
-        config.conffile = confdir / config.conffile.name
+        os.environ["CISTA_HOME"] = confdir.as_posix()
+    config.init_confdir()  # Uses environ if available
 
 
 def _user(args):

@@ -4,7 +4,6 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // @ts-ignore
-import pluginRewriteAll from 'vite-plugin-rewrite-all'
 import svgLoader from 'vite-svg-loader'
 import Components from 'unplugin-vue-components/vite'
 
@@ -21,7 +20,6 @@ const dev_backend = {
 export default defineConfig({
   plugins: [
     vue(),
-    pluginRewriteAll(),
     svgLoader(),          // import svg files
     Components(),         // auto import components
   ],
