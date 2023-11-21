@@ -10,9 +10,6 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version, build_data):
         super().initialize(version, build_data)
-        # A hack to stop building twice on run
-        if not build_data.get("force_include"):
-            return
         stderr.write(">>> Building Cista frontend\n")
         npm = shutil.which("npm")
         if npm is None:
