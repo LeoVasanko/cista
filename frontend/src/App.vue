@@ -78,13 +78,13 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   //console.log("key pressed", event)
   /// Long if-else machina for all keys we handle here
   let arrow = ''
-  if (event.key.startsWith("Arrow")) arrow = event.key.slice(5).toLowerCase()
+  if (!input && event.key.startsWith("Arrow")) arrow = event.key.slice(5).toLowerCase()
   // Find: process on keydown so that we can bypass the built-in search hotkey
   else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
     headerMain.value!.toggleSearchInput()
   }
   // Search also on / (UNIX style)
-  else if (keyup && !input && event.key === '/') {
+  else if (!input && keyup && event.key === '/') {
     headerMain.value!.toggleSearchInput()
   }
   // Globally close search, clear errors on Escape
@@ -97,7 +97,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
     Router.back()
   }
   // Select all (toggle); keydown to precede and prevent builtin
-  else if (!keyup && event.key === 'a' && (event.ctrlKey || event.metaKey)) {
+  else if (!input && !keyup && event.key === 'a' && (event.ctrlKey || event.metaKey)) {
     fileExplorer.toggleSelectAll()
   }
   // G toggles Gallery
@@ -113,11 +113,11 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
     store.sort(['', 'name', 'modified', 'size'][+event.key || 0] as SortOrder)
   }
   // Rename
-  else if (c && keyup && !event.ctrlKey && (event.key === 'F2' || event.key === 'r')) {
+  else if (!input && c && keyup && !event.ctrlKey && (event.key === 'F2' || event.key === 'r')) {
     fileExplorer.cursorRename()
   }
   // Toggle selections on file explorer; ignore all spaces to prevent scrolling built-in hotkey
-  else if (c && event.code === 'Space') {
+  else if (!input && c && event.code === 'Space') {
     if (keyup && !event.altKey && !event.ctrlKey)
       fileExplorer.cursorSelect()
   }
