@@ -10,9 +10,14 @@
       <MediaPreview ref=m :doc="doc" tabindex=-1 quality="sz=512" class="figcontent" />
       <div class="titlespacer"></div>
       <figcaption>
-        <SelectBox :doc=doc />
-        <span :title="doc.name + '\n' + doc.modified + '\n' + doc.sizedisp">{{ doc.name }}</span>
-        <div class=namespacer></div>
+        <template v-if="editing">
+          <FileRenameInput :doc=doc :rename=editing.rename :exit=editing.exit />
+        </template>
+        <template v-else>
+          <SelectBox :doc=doc />
+          <span :title="doc.name + '\n' + doc.modified + '\n' + doc.sizedisp">{{ doc.name }}</span>
+          <div class=namespacer></div>
+        </template>
       </figcaption>
     </figure>
   </a>
@@ -25,9 +30,14 @@ import { Doc } from '@/repositories/Document'
 import MediaPreview from '@/components/MediaPreview.vue'
 
 const store = useMainStore()
+type EditingProp = {
+  rename: (name: string) => void;
+  exit: () => void;
+}
+
 const props = defineProps<{
-  doc: Doc
-  index: number
+  doc: Doc,
+  editing?: EditingProp,
 }>()
 const m = ref<typeof MediaPreview | null>(null)
 
@@ -70,7 +80,7 @@ figcaption {
 figcaption input[type='checkbox'] {
   width: 1.5em;
   height: 1.5em;
-  margin: .25em;
+  margin: .25em 0 .25em .25em;
   opacity: 0;
   flex-shrink: 0;
 }

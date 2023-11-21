@@ -153,13 +153,14 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
                 isfile=entry.isfile,
             )
             ret.extend(sub)
-        ret[0] = entry
     except FileNotFoundError:
         pass  # Things may be rapidly in motion
     except OSError as e:
         if e.errno == 13:  # Permission denied
             pass
         logger.error(f"Watching {path=}: {e!r}")
+    if ret:
+        ret[0] = entry
     return ret
 
 

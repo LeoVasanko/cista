@@ -6,7 +6,6 @@
     </template>
     <UploadButton :path="props.path" />
     <SvgButton
-      v-if="!store.prefs.gallery"
       name="create-folder"
       data-tooltip="New folder"
       @click="() => store.fileExplorer!.newFolder()"

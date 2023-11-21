@@ -1,5 +1,8 @@
 import { useMainStore } from '@/stores/main'
 
-const store = useMainStore()
 
-export const exists = (path: string[]) => store.document.some(doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === path.join('/'))
+export const exists = (path: string[]) => {
+  const store = useMainStore()
+  const p = path.join('/')
+  return store.document.some(doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === p)
+}

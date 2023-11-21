@@ -56,4 +56,10 @@ input#FileRenameInput {
   outline: none;
   font: inherit;
 }
+.gallery input#FileRenameInput {
+  padding: .75em;
+  font-weight: 600;
+  width: auto;
+}
+
 </style>

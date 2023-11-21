@@ -122,6 +122,7 @@ watchEffect(() => {
   min-height: 2em;
   margin: 0;
   padding: 0 1em 0 0;
+  overflow: hidden;
 }
 .breadcrumb > a {
   flex: 0 4 auto;

@@ -1,18 +1,19 @@
 <template>
   <div v-if="props.documents.length || editing" class="gallery" ref="gallery">
-    <GalleryFigure v-for="(doc, index) in documents" :key="doc.key" :doc="doc" :index="index">
-      <BreadCrumb :path="doc.loc ? doc.loc.split('/') : []" v-if="showFolderBreadcrumb(index)" class="folder-change"/>
-    </GalleryFigure>
+    <GalleryFigure v-if="editing?.key === 'new'" :doc="editing" :key=editing.key :editing="{rename: mkdir, exit}" />
+    <template v-for="(doc, index) in documents" :key=doc.key>
+      <GalleryFigure :doc=doc :editing="editing === doc ? {rename, exit} : null">
+        <BreadCrumb v-if=showFolderBreadcrumb(index) :path="doc.loc ? doc.loc.split('/') : []" class="folder-change"/>
+      </GalleryFigure>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted } from 'vue'
 import { useMainStore } from '@/stores/main'
 import { Doc } from '@/repositories/Document'
-import FileRenameInput from './FileRenameInput.vue'
 import { connect, controlUrl } from '@/repositories/WS'
-import { formatSize } from '@/utils'
 import { useRouter } from 'vue-router'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import type { SortOrder } from '@/utils/docsort'
@@ -25,6 +26,7 @@ const store = useMainStore()
 const router = useRouter()
 // File rename
 const editing = shallowRef<Doc | null>(null)
+const exit = () => { editing.value = null }
 const rename = (doc: Doc, newName: string) => {
   const oldName = doc.name
   const control = connect(controlUrl, {
@@ -252,7 +254,6 @@ const contextMenu = (ev: MouseEvent, doc: Doc) => {
   align-items: end;
 }
 .breadcrumb {
-  position: absolute;
-  z-index: 1;
+  border-radius: .5em;
 }
 </style>
