@@ -9,12 +9,12 @@
       <slot></slot>
       <MediaPreview ref=m :doc="doc" tabindex=-1 quality="sz=512" class="figcontent" />
       <div class="titlespacer"></div>
-      <figcaption>
+      <figcaption @click.prevent>
         <template v-if="editing">
           <FileRenameInput :doc=doc :rename=editing.rename :exit=editing.exit />
         </template>
         <template v-else>
-          <SelectBox :doc=doc />
+          <SelectBox :doc=doc @click="store.cursor = doc.key"/>
           <span :title="doc.name + '\n' + doc.modified + '\n' + doc.sizedisp">{{ doc.name }}</span>
           <div class=namespacer></div>
         </template>
@@ -83,11 +83,13 @@ figcaption input[type='checkbox'] {
   margin: .25em 0 .25em .25em;
   opacity: 0;
   flex-shrink: 0;
+  transition: opacity var(--transition-time) ease-in-out;
 }
-figcaption input[type='checkbox']:checked, figcaption input[type='checkbox']:hover {
+figcaption input[type='checkbox']:checked, figcaption:hover input[type='checkbox'] {
   opacity: 1;
 }
 figcaption span {
+  cursor: default;
   padding: .5em;
   color: #fff;
   font-weight: 600;

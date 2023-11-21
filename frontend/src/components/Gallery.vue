@@ -169,8 +169,13 @@ let modifiedTimer: any = null
 const updateModified = () => {
   nowkey.value = Math.floor(Date.now() / 1000)
 }
-onMounted(() => { updateModified(); modifiedTimer = setInterval(updateModified, 1000) })
-onUnmounted(() => { clearInterval(modifiedTimer) })
+onMounted(() => {
+  const active = document.querySelector('.cursor') as HTMLElement | null
+  if (active) {
+    active.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    active.focus()
+  }
+})
 const mkdir = (doc: Doc, name: string) => {
   const control = connect(controlUrl, {
     open() {

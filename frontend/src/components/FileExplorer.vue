@@ -80,8 +80,6 @@ import { connect, controlUrl } from '@/repositories/WS'
 import { formatSize } from '@/utils'
 import { useRouter } from 'vue-router'
 import ContextMenu from '@imengyu/vue3-context-menu'
-import type { SortOrder } from '@/utils/docsort'
-import type SvgButtonVue from './SvgButton.vue'
 
 const props = defineProps<{
   path: Array<string>
@@ -219,7 +217,14 @@ let modifiedTimer: any = null
 const updateModified = () => {
   nowkey.value = Math.floor(Date.now() / 1000)
 }
-onMounted(() => { updateModified(); modifiedTimer = setInterval(updateModified, 1000) })
+onMounted(() => {
+  updateModified(); modifiedTimer = setInterval(updateModified, 1000)
+  const active = document.querySelector('.cursor') as HTMLElement | null
+  if (active) {
+    active.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    active.focus()
+  }
+})
 onUnmounted(() => { clearInterval(modifiedTimer) })
 const mkdir = (doc: Doc, name: string) => {
   const control = connect(controlUrl, {
