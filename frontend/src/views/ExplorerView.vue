@@ -27,7 +27,6 @@ import Router from '@/router/index'
 import { needleFormat, localeIncludes, collator } from '@/utils'
 import { sorted } from '@/utils/docsort'
 import FileExplorer from '@/components/FileExplorer.vue'
-import cog from '@/assets/svg/cog.svg'
 
 const store = useMainStore()
 const fileExplorer = ref()
