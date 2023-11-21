@@ -2,7 +2,7 @@
 import { connect, uploadUrl } from '@/repositories/WS';
 import { useMainStore } from '@/stores/main'
 import { collator } from '@/utils';
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 
 const fileInput = ref()
 const folderInput = ref()
@@ -94,7 +94,7 @@ const cancelUploads = () => {
 
 const uprogress_init = {
   total: 0,
-  uploaded: 0,
+  xfer: 0,
   t0: 0,
   tlast: 0,
   statbytes: 0,
@@ -109,15 +109,6 @@ const uprogress_init = {
   status: 'idle',
 }
 const uprogress = reactive({...uprogress_init})
-const percent = computed(() => uprogress.uploaded / uprogress.total * 100)
-const speed = computed(() => {
-  let s = uprogress.statbytes / uprogress.statdur / 1e3
-  const tsince = (Date.now() - uprogress.tlast) / 1e3
-  if (tsince > 5 / s) return 0  // Less than fifth of previous speed => stalled
-  if (tsince > 1 / s) return 1 / tsince  // Next block is late or not coming, decay
-  return s  // "Current speed"
-})
-const speeddisp = computed(() => speed.value ? speed.value.toFixed(speed.value < 10 ? 1 : 0) + '\u202FMB/s': 'stalled')
 setInterval(() => {
   if (Date.now() - uprogress.tlast > 3000) {
     // Reset
@@ -132,7 +123,7 @@ setInterval(() => {
 const statUpdate = ({name, size, start, end}: {name: string, size: number, start: number, end: number}) => {
   if (name !== uprogress.filename) return  // If stats have been reset
   const now = Date.now()
-  uprogress.uploaded = uprogress.filestart + end
+  uprogress.xfer = uprogress.filestart + end
   uprogress.filepos = end
   uprogress.statbytes += end - start
   uprogress.statdur += now - uprogress.tlast
@@ -249,57 +240,5 @@ onUnmounted(() => {
   </template>
   <SvgButton name="add-file" data-tooltip="Upload files" @click="fileInput.click()" />
   <SvgButton name="add-folder" data-tooltip="Upload folder" @click="folderInput.click()" />
-  <div class="uploadprogress" v-if="uprogress.total" :style="`background: linear-gradient(to right, var(--bar) 0, var(--bar) ${percent}%, var(--nobar) ${percent}%, var(--nobar) 100%);`">
-    <div class="statustext">
-      <span v-if="uprogress.filecount > 1" class="index">
-        [{{ uprogress.fileidx }}/{{ uprogress.filecount }}]
-      </span>
-      <span class="filename">{{ uprogress.filename.split('/').pop() }}
-        <span v-if="uprogress.filesize > 1e7" class="percent">
-          {{ (uprogress.filepos / uprogress.filesize * 100).toFixed(0) + '\u202F%' }}
-        </span>
-      </span>
-      <span class="position" v-if="uprogress.total > 1e7">
-        {{ (uprogress.uploaded / 1e6).toFixed(0) + '\u202F/\u202F' + (uprogress.total / 1e6).toFixed(0) + '\u202FMB' }}
-      </span>
-      <span class="speed">{{ speeddisp }}</span>
-      <button class="close" @click="cancelUploads">❌</button>
-    </div>
-  </div>
+  <TransferBar :status=uprogress @cancel=cancelUploads />
 </template>
-
-<style scoped>
-.uploadprogress {
-  --bar: var(--accent-color);
-  --nobar: var(--header-background);
-  display: flex;
-  flex-direction: column;
-  color: var(--primary-color);
-  position: fixed;
-  left: 0;
-  bottom: 0;
-  width: 100vw;
-}
-.statustext {
-  display: flex;
-  padding: 0.5rem 0;
-}
-span {
-  color: #ccc;
-  white-space: nowrap;
-  text-align: right;
-  padding: 0 0.5em;
-}
-.filename {
-  color: #fff;
-  flex: 1 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: left;
-}
-.index { min-width: 3.5em }
-.position { min-width: 4em }
-.speed { min-width: 4em }
-</style>
-@/stores/main
