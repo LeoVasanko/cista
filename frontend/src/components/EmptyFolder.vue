@@ -4,7 +4,7 @@
     <p v-if="!store.connected">No Connection</p>
     <p v-else-if="store.document.length === 0">Waiting for File List</p>
     <p v-else-if="store.query">No matches!</p>
-    <p v-else-if="!store.document.some(doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === props.path.join('/'))">Folder not found</p>
+    <p v-else-if="!exists(props.path)">Folder not found</p>
     <p v-else>Empty folder</p>
   </div>
 </template>
@@ -13,6 +13,7 @@
 import { defineProps } from 'vue'
 import { useMainStore } from '@/stores/main'
 import cog from '@/assets/svg/cog.svg'
+import { exists } from '@/utils/fileutil'
 
 const store = useMainStore()
 const props = defineProps<{

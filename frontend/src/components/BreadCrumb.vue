@@ -34,6 +34,7 @@
 import home from '@/assets/svg/home.svg'
 import { nextTick, onBeforeUpdate, ref, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
+import { exists } from '@/utils/fileutil'
 
 const router = useRouter()
 
@@ -85,6 +86,15 @@ watchEffect(() => {
   if (!same) longest.value = props.path
   else if (props.path.length > longcut.length) {
     longest.value = longcut.concat(props.path.slice(longcut.length))
+  }
+  else {
+    // Prune deleted folders from longest
+    for (let i = props.path.length; i < longest.value.length; ++i) {
+      if (!exists(longest.value.slice(0, i + 1))) {
+        longest.value = longest.value.slice(0, i)
+        break
+      }
+    }
   }
   // If needed, focus primary navigation to new location
   if (props.primary) nextTick(() => {
