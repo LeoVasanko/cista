@@ -3,7 +3,10 @@
     <GalleryFigure v-if="editing?.key === 'new'" :doc="editing" :key=editing.key :editing="{rename: mkdir, exit}" />
     <template v-for="(doc, index) in documents" :key=doc.key>
       <GalleryFigure :doc=doc :editing="editing === doc ? {rename, exit} : null" @menu="contextMenu($event, doc)">
-        <BreadCrumb v-if=showFolderBreadcrumb(index) :path="doc.loc ? doc.loc.split('/') : []" class="folder-change"/>
+        <template v-if=showFolderBreadcrumb(index)>
+          <BreadCrumb :path="doc.loc ? doc.loc.split('/') : []" class="folder-change"/>
+          <div class="spacer"></div>
+        </template>
       </GalleryFigure>
     </template>
   </div>
@@ -255,6 +258,9 @@ const contextMenu = (ev: MouseEvent, doc: Doc) => {
   align-items: end;
 }
 .breadcrumb {
-  border-radius: .5em;
+  border-radius: .5em 0 0 .5em;
+}
+.spacer {
+  flex: 0 1000000000 4rem;
 }
 </style>
