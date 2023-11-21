@@ -221,7 +221,7 @@ onMounted(() => {
   updateModified(); modifiedTimer = setInterval(updateModified, 1000)
   const active = document.querySelector('.cursor') as HTMLElement | null
   if (active) {
-    active.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    active.scrollIntoView({ block: 'center', behavior: 'instant' })
     active.focus()
   }
 })

@@ -164,15 +164,10 @@ watchEffect(() => {
     focusBreadcrumb()
   }
 })
-let nowkey = ref(0)
-let modifiedTimer: any = null
-const updateModified = () => {
-  nowkey.value = Math.floor(Date.now() / 1000)
-}
 onMounted(() => {
   const active = document.querySelector('.cursor') as HTMLElement | null
   if (active) {
-    active.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    active.scrollIntoView({ block: 'center', behavior: 'instant' })
     active.focus()
   }
 })

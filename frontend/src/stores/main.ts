@@ -1,6 +1,6 @@
 import type { FileEntry, FUID, SelectedItems } from '@/repositories/Document'
 import { Doc } from '@/repositories/Document'
-import { defineStore } from 'pinia'
+import { defineStore, type StateTree } from 'pinia'
 import { collator } from '@/utils'
 import { logoutUser } from '@/repositories/User'
 import { watchConnect } from '@/repositories/WS'
@@ -11,7 +11,7 @@ export const useMainStore = defineStore({
   id: 'main',
   state: () => ({
     document: shallowRef<Doc[]>([]),
-    selected: new Set<FUID>(),
+    selected: new Set<FUID>([]),
     query: '' as string,
     fileExplorer: null as any,
     error: '' as string,
@@ -31,7 +31,18 @@ export const useMainStore = defineStore({
     }
   }),
   persist: {
-    paths: ['prefs'],
+    paths: ['prefs', 'cursor', 'selected'],
+    serializer: {
+      deserialize: (data: string): StateTree => {
+        const ret = JSON.parse(data)
+        ret.selected = new Set(ret.selected)
+        return ret
+      },
+      serialize: (tree: StateTree): string => {
+        tree.selected = Array.from(tree.selected)
+        return JSON.stringify(tree)
+      }
+    },
   },
   actions: {
     updateRoot(root: FileEntry[]) {
