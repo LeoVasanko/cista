@@ -1,14 +1,6 @@
 <template>
-  <div v-if="!props.path || documents.length === 0" class="empty-container">
-    <component :is="cog" class="cog"/>
-    <p v-if="!store.connected">No Connection</p>
-    <p v-else-if="store.document.length === 0">Waiting for File List</p>
-    <p v-else-if="store.query">No matches!</p>
-    <p v-else-if="!store.document.some(doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === props.path.join('/'))">Folder not found</p>
-    <p v-else>Empty folder</p>
-  </div>
   <Gallery
-    v-else-if="store.prefs.gallery"
+    v-if="store.prefs.gallery"
     ref="fileExplorer"
     :key="`gallery-${Router.currentRoute.value.path}`"
     :path="props.path"
@@ -21,10 +13,11 @@
     :path="props.path"
     :documents="documents"
   />
-  <div v-if="!store.prefs.gallery && documents.some(doc => doc.img)" class="suggest-gallery">
-    <p>Media files found. Would you like a gallery view?</p>
-    <SvgButton name="eye" taborder=0 @click="() => { store.prefs.gallery = true }">Gallery</SvgButton>
+  <div v-if="!store.prefs.gallery && documents.some(doc => doc.previewable)" class="suggest-gallery">
+    <SvgButton name="eye" taborder=0 @click="() => { store.prefs.gallery = true }"></SvgButton>
+    Gallery View
   </div>
+  <EmptyFolder :documents=documents :path=props.path />
 </template>
 
 <script setup lang="ts">
@@ -97,10 +90,6 @@ watchEffect(() => {
   text-shadow: 0 0 .3rem #000, 0 0 2rem #0008;
   color: var(--accent-color);
 }
-@keyframes rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(359deg); }
-}
 .suggest-gallery p {
   font-size: 2rem;
   color: var(--accent-color);
@@ -112,12 +101,4 @@ watchEffect(() => {
   justify-content: center;
 }
 
-svg.cog {
-  width: 10rem;
-  height: 10rem;
-  margin: 0 auto;
-  animation: rotate 10s linear infinite;
-  filter: drop-shadow(0 0 1rem black);
-  fill: #888;
-}
 </style>

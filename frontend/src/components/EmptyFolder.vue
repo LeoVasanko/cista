@@ -1,0 +1,37 @@
+<template>
+  <div v-if="!props.path || documents.length === 0" class="empty-container">
+    <component :is="cog" class="cog"/>
+    <p v-if="!store.connected">No Connection</p>
+    <p v-else-if="store.document.length === 0">Waiting for File List</p>
+    <p v-else-if="store.query">No matches!</p>
+    <p v-else-if="!store.document.some(doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === props.path.join('/'))">Folder not found</p>
+    <p v-else>Empty folder</p>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { defineProps } from 'vue'
+import { useMainStore } from '@/stores/main'
+import cog from '@/assets/svg/cog.svg'
+
+const store = useMainStore()
+const props = defineProps<{
+  path: string[],
+  documents: Document[],
+}>()
+</script>
+
+<style scoped>
+@keyframes rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+svg.cog {
+  width: 10rem;
+  height: 10rem;
+  margin: 0 auto;
+  animation: rotate 10s linear infinite;
+  filter: drop-shadow(0 0 1rem black);
+  fill: #888;
+}
+</style>

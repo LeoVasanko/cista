@@ -40,6 +40,12 @@ export class Doc {
     const ext = this.name.split('.').pop()?.toLowerCase()
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg'].includes(ext || '')
   }
+  get previewable(): boolean {
+    if (this.img) return true
+    const ext = this.name.split('.').pop()?.toLowerCase()
+    // Not a comprehensive list, but good enough for now
+    return ['mp4', 'mkv', 'webm', 'ogg', 'mp3', 'flac', 'aac', 'pdf'].includes(ext || '')
+  }
   get previewurl(): string {
     return this.url.replace(/^\/files/, '/preview')
   }
