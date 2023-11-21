@@ -1,6 +1,5 @@
 <template>
   <SvgButton name="download" data-tooltip="Download" @click="download" />
-  <TransferBar :status=progress @cancel=cancelDownloads />
 </template>
 
 <script setup lang="ts">
@@ -26,22 +25,22 @@ const status_init = {
   filepos: 0,
   status: 'idle',
 }
-const progress = reactive({...status_init})
+store.dprogress = {...status_init}
 setInterval(() => {
-  if (Date.now() - progress.tlast > 3000) {
+  if (Date.now() - store.dprogress.tlast > 3000) {
     // Reset
-    progress.statbytes = 0
-    progress.statdur = 1
+    store.dprogress.statbytes = 0
+    store.dprogress.statdur = 1
   } else {
     // Running average by decay
-    progress.statbytes *= .9
-    progress.statdur *= .9
+    store.dprogress.statbytes *= .9
+    store.dprogress.statdur *= .9
   }
 }, 100)
 const statReset = () => {
-  Object.assign(progress, status_init)
-  progress.t0 = Date.now()
-  progress.tlast = progress.t0 + 1
+  Object.assign(store.dprogress, status_init)
+  store.dprogress.t0 = Date.now()
+  store.dprogress.tlast = store.dprogress.t0 + 1
 }
 const cancelDownloads = () => {
   location.reload()  // FIXME
@@ -61,9 +60,9 @@ const filesystemdl = async (sel: SelectedItems, handle: FileSystemDirectoryHandl
   console.log('Downloading to filesystem', sel.recursive)
   for (const [rel, full, doc] of sel.recursive) {
     if (doc.dir) continue
-    progress.files.push(rel)
-    ++progress.filecount
-    progress.total += doc.size
+    store.dprogress.files.push(rel)
+    ++store.dprogress.filecount
+    store.dprogress.total += doc.size
   }
   for (const [rel, full, doc] of sel.recursive) {
     // Create any missing directories
@@ -73,6 +72,7 @@ const filesystemdl = async (sel: SelectedItems, handle: FileSystemDirectoryHandl
     }
     const r = rel.slice(hdir.length)
     for (const dir of r.split('/').slice(0, doc.dir ? undefined : -1)) {
+      if (!dir) continue
       hdir += `${dir}/`
       try {
         h = await h.getDirectoryHandle(dir.normalize('NFC'), { create: true })
@@ -101,22 +101,22 @@ const filesystemdl = async (sel: SelectedItems, handle: FileSystemDirectoryHandl
       throw new Error(`Failed to download ${url}: ${res.status} ${res.statusText}`)
     }
     if (res.body) {
-      ++progress.fileidx
+      ++store.dprogress.fileidx
       const reader = res.body.getReader()
       await writable.truncate(0)
       store.error = "Direct download."
-      progress.tlast = Date.now()
+      store.dprogress.tlast = Date.now()
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
         await writable.write(value)
         const now = Date.now()
         const size = value.byteLength
-        progress.xfer += size
-        progress.filepos += size
-        progress.statbytes += size
-        progress.statdur += now - progress.tlast
-        progress.tlast = now
+        store.dprogress.xfer += size
+        store.dprogress.filepos += size
+        store.dprogress.statbytes += size
+        store.dprogress.statdur += now - store.dprogress.tlast
+        store.dprogress.tlast = now
       }
     }
     await writable.close()

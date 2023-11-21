@@ -1,3 +1,12 @@
+<template>
+  <template>
+    <input ref="fileInput" @change="uploadHandler" type="file" multiple>
+    <input ref="folderInput" @change="uploadHandler" type="file" webkitdirectory>
+  </template>
+  <SvgButton name="add-file" data-tooltip="Upload files" @click="fileInput.click()" />
+  <SvgButton name="add-folder" data-tooltip="Upload folder" @click="folderInput.click()" />
+</template>
+
 <script setup lang="ts">
 import { connect, uploadUrl } from '@/repositories/WS';
 import { useMainStore } from '@/stores/main'
@@ -108,50 +117,50 @@ const uprogress_init = {
   filepos: 0,
   status: 'idle',
 }
-const uprogress = reactive({...uprogress_init})
+store.uprogress = {...uprogress_init}
 setInterval(() => {
-  if (Date.now() - uprogress.tlast > 3000) {
+  if (Date.now() - store.uprogress.tlast > 3000) {
     // Reset
-    uprogress.statbytes = 0
-    uprogress.statdur = 1
+    store.uprogress.statbytes = 0
+    store.uprogress.statdur = 1
   } else {
     // Running average by decay
-    uprogress.statbytes *= .9
-    uprogress.statdur *= .9
+    store.uprogress.statbytes *= .9
+    store.uprogress.statdur *= .9
   }
 }, 100)
 const statUpdate = ({name, size, start, end}: {name: string, size: number, start: number, end: number}) => {
-  if (name !== uprogress.filename) return  // If stats have been reset
+  if (name !== store.uprogress.filename) return  // If stats have been reset
   const now = Date.now()
-  uprogress.xfer = uprogress.filestart + end
-  uprogress.filepos = end
-  uprogress.statbytes += end - start
-  uprogress.statdur += now - uprogress.tlast
-  uprogress.tlast = now
+  store.uprogress.xfer = store.uprogress.filestart + end
+  store.uprogress.filepos = end
+  store.uprogress.statbytes += end - start
+  store.uprogress.statdur += now - store.uprogress.tlast
+  store.uprogress.tlast = now
   // File finished?
   if (end === size) {
-    uprogress.filestart += size
+    store.uprogress.filestart += size
     statNextFile()
-    if (++uprogress.fileidx >= uprogress.filecount) statReset()
+    if (++store.uprogress.fileidx >= store.uprogress.filecount) statReset()
   }
 }
 const statNextFile = () => {
-  const f = uprogress.files.shift()
+  const f = store.uprogress.files.shift()
   if (!f) return statReset()
-  uprogress.filepos = 0
-  uprogress.filesize = f.file.size
-  uprogress.filename = f.cloudName
+  store.uprogress.filepos = 0
+  store.uprogress.filesize = f.file.size
+  store.uprogress.filename = f.cloudName
 }
 const statReset = () => {
-  Object.assign(uprogress, uprogress_init)
-  uprogress.t0 = Date.now()
-  uprogress.tlast = uprogress.t0 + 1
+  Object.assign(store.uprogress, uprogress_init)
+  store.uprogress.t0 = Date.now()
+  store.uprogress.tlast = store.uprogress.t0 + 1
 }
 const statsAdd = (f: CloudFile[]) => {
-  if (uprogress.files.length === 0) statReset()
-  uprogress.total += f.reduce((a, b) => a + b.file.size, 0)
-  uprogress.filecount += f.length
-  uprogress.files = [...uprogress.files, ...f]
+  if (store.uprogress.files.length === 0) statReset()
+  store.uprogress.total += f.reduce((a, b) => a + b.file.size, 0)
+  store.uprogress.filecount += f.length
+  store.uprogress.files = [...store.uprogress.files, ...f]
   statNextFile()
 }
 let upqueue = [] as CloudFile[]
@@ -181,7 +190,7 @@ const WSCreate = async () => await new Promise<WebSocket>(resolve => {
   // @ts-ignore
   ws.sendData = async (data: any) => {
     // Wait until the WS is ready to send another message
-    uprogress.status = "uploading"
+    store.uprogress.status = "uploading"
     await new Promise(resolve => {
       const t = setInterval(() => {
         if (ws.bufferedAmount > 1<<20) return
@@ -189,7 +198,7 @@ const WSCreate = async () => await new Promise<WebSocket>(resolve => {
         clearInterval(t)
       }, 1)
     })
-    uprogress.status = "processing"
+    store.uprogress.status = "processing"
     ws.send(data)
   }
 })
@@ -210,7 +219,7 @@ const worker = async () => {
     if (f.cloudPos === f.file.size) upqueue.shift()
   }
   if (upqueue.length) startWorker()
-  uprogress.status = "idle"
+  store.uprogress.status = "idle"
   workerRunning = false
 }
 let workerRunning: any = false
@@ -233,12 +242,3 @@ onUnmounted(() => {
   removeEventListener('drop', uploadHandler)
 })
 </script>
-<template>
-  <template>
-    <input ref="fileInput" @change="uploadHandler" type="file" multiple>
-    <input ref="folderInput" @change="uploadHandler" type="file" webkitdirectory>
-  </template>
-  <SvgButton name="add-file" data-tooltip="Upload files" @click="fileInput.click()" />
-  <SvgButton name="add-folder" data-tooltip="Upload folder" @click="folderInput.click()" />
-  <TransferBar :status=uprogress @cancel=cancelUploads />
-</template>

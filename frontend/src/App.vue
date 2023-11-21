@@ -10,6 +10,10 @@
   <main>
     <RouterView :path="path.pathList" :query="path.query" />
   </main>
+  <footer>
+    <TransferBar :status=store.uprogress @cancel=store.cancelUploads class=upload />
+    <TransferBar :status=store.dprogress @cancel=store.cancelDownloads class=download />
+  </footer>
 </template>
 
 <script setup lang="ts">

@@ -19,6 +19,8 @@ export const useMainStore = defineStore({
     cursor: '' as string,
     server: {} as Record<string, any>,
     dialog: '' as '' | 'login' | 'settings',
+    uprogress: {} as any,
+    dprogress: {} as any,
     prefs: {
       gallery: false,
       sortListing: '' as SortOrder,
@@ -89,7 +91,13 @@ export const useMainStore = defineStore({
     },
     focusBreadcrumb() {
       (document.querySelector('.breadcrumb') as HTMLAnchorElement).focus()
-    }
+    },
+    cancelDownloads() {
+      location.reload()  // FIXME
+    },
+    cancelUploads() {
+      location.reload()  // FIXME
+    },
   },
   getters: {
     sortOrder(): SortOrder { return this.query ? this.prefs.sortFiltered : this.prefs.sortListing },

@@ -57,13 +57,12 @@ const speeddisp = computed(() => speed.value ? speed.value.toFixed(speed.value <
   display: flex;
   flex-direction: column;
   color: var(--primary-color);
-  position: fixed;
-  left: 0;
-  bottom: 0;
-  width: 100vw;
+  width: 100%;
 }
 .statustext {
   display: flex;
+  align-items: center;
+  margin: 0 .5em;
   padding: 0.5rem 0;
 }
 span {
@@ -84,4 +83,12 @@ span {
 .position { min-width: 4em }
 .speed { min-width: 4em }
 
+.upload .statustext::before {
+  font-size: 1.5em;
+  content: '🔺'
+}
+.download .statustext::before {
+  font-size: 1.5em;
+  content: '🔻'
+}
 </style>
