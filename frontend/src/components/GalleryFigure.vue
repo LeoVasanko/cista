@@ -9,7 +9,7 @@
       <slot></slot>
       <MediaPreview ref=m :doc="doc" tabindex=-1 quality="sz=512" class="figcontent" />
       <div class="titlespacer"></div>
-      <figcaption @click.prevent>
+      <figcaption @click.prevent @contextmenu.prevent="$emit('menu', $event)">
         <template v-if="editing">
           <FileRenameInput :doc=doc :rename=editing.rename :exit=editing.exit />
         </template>

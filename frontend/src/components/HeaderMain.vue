@@ -8,7 +8,7 @@
     <SvgButton
       name="create-folder"
       data-tooltip="New folder"
-      @click="() => store.fileExplorer!.newFolder()"
+      @click="() => {  console.log('New', store.fileExplorer); store.fileExplorer!.newFolder(); console.log('Done')}"
     />
     <slot></slot>
     <div class="spacer smallgap"></div>

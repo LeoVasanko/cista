@@ -2,7 +2,7 @@
   <div v-if="props.documents.length || editing" class="gallery" ref="gallery">
     <GalleryFigure v-if="editing?.key === 'new'" :doc="editing" :key=editing.key :editing="{rename: mkdir, exit}" />
     <template v-for="(doc, index) in documents" :key=doc.key>
-      <GalleryFigure :doc=doc :editing="editing === doc ? {rename, exit} : null">
+      <GalleryFigure :doc=doc :editing="editing === doc ? {rename, exit} : null" @menu="contextMenu($event, doc)">
         <BreadCrumb v-if=showFolderBreadcrumb(index) :path="doc.loc ? doc.loc.split('/') : []" class="folder-change"/>
       </GalleryFigure>
     </template>
@@ -67,6 +67,7 @@ defineExpose({
       mtime: now,
       size: 0,
     })
+    store.cursor = editing.value.key
   },
   toggleSelectAll() {
     console.log('Select')

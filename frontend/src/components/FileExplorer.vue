@@ -115,6 +115,7 @@ const rename = (doc: Doc, newName: string) => {
 }
 defineExpose({
   newFolder() {
+    console.log("New folder")
     const now = Math.floor(Date.now() / 1000)
     editing.value = new Doc({
       loc: loc.value,
@@ -124,6 +125,7 @@ defineExpose({
       mtime: now,
       size: 0,
     })
+    store.cursor = editing.value.key
   },
   toggleSelectAll() {
     console.log('Select')
