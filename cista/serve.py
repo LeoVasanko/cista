@@ -1,7 +1,6 @@
 import os
 import re
 import signal
-import sys
 from pathlib import Path
 
 from sanic import Sanic
@@ -17,7 +16,7 @@ def run(*, dev=False):
     def signal_handler(signum, frame):
         print("\nReceived interrupt signal, exiting immediately...")
         os._exit(0)
-    
+
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
