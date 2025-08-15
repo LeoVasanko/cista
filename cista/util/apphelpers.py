@@ -29,6 +29,8 @@ async def handle_sanic_exception(request, e):
     if not message or not request.app.debug and code == 500:
         message = "Internal Server Error"
     message = f"⚠️ {message}" if code < 500 else f"🛑 {message}"
+    if code == 500:
+        logger.exception(e)
     # Non-browsers get JSON errors
     if "text/html" not in request.headers.accept:
         return jres(

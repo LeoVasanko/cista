@@ -127,8 +127,7 @@ class FileEntry(msgspec.Struct, array_like=True, frozen=True):
         return f"{self.name} ({self.size}, {self.mtime})"
 
 
-class Update(msgspec.Struct, array_like=True):
-    ...
+class Update(msgspec.Struct, array_like=True): ...
 
 
 class UpdKeep(Update, tag="k"):

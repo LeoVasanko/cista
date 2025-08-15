@@ -50,12 +50,11 @@ export function formatUnixDate(t: number) {
 }
 
 export function getFileExtension(filename: string) {
-  const parts = filename.split('.')
-  if (parts.length > 1) {
-    return parts[parts.length - 1]
-  } else {
-    return '' // No hay extensión
+  const dotIndex = filename.lastIndexOf('.')
+  if (dotIndex === -1 || dotIndex === filename.length - 1) {
+    return '' // No extension
   }
+  return filename.slice(dotIndex + 1)
 }
 interface FileTypes {
   [key: string]: string[]
@@ -68,8 +67,9 @@ const filetypes: FileTypes = {
 }
 
 export function getFileType(name: string): string {
-  const ext = name.split('.').pop()?.toLowerCase()
-  if (!ext || ext.length === name.length) return 'unknown'
+  const dotIndex = name.lastIndexOf('.')
+  if (dotIndex === -1 || dotIndex === name.length - 1) return 'unknown'
+  const ext = name.slice(dotIndex + 1).toLowerCase()
   return Object.keys(filetypes).find(type => filetypes[type].includes(ext)) || 'unknown'
 }
 

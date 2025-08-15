@@ -48,6 +48,7 @@ def treeiter(rootmod):
 def treeget(rootmod: list[FileEntry], path: PurePosixPath):
     begin = None
     ret = []
+
     for i, relpath, entry in treeiter(rootmod):
         if begin is None:
             if relpath == path:
@@ -57,6 +58,7 @@ def treeget(rootmod: list[FileEntry], path: PurePosixPath):
         if entry.level <= len(path.parts):
             break
         ret.append(entry)
+
     return begin, ret
 
 
@@ -77,28 +79,36 @@ def treeinspos(rootmod: list[FileEntry], relpath: PurePosixPath, relfile: int):
             # root
             level += 1
             continue
+
         ename = rel.parts[level - 1]
         name = relpath.parts[level - 1]
+
         esort = sortkey(ename)
         nsort = sortkey(name)
         # Non-leaf are always folders, only use relfile at leaf
         isfile = relfile if len(relpath.parts) == level else 0
+
         # First compare by isfile, then by sorting order and if that too matches then case sensitive
         cmp = (
             entry.isfile - isfile
             or (esort > nsort) - (esort < nsort)
             or (ename > name) - (ename < name)
         )
+
         if cmp > 0:
             return i
         if cmp < 0:
             continue
+
         level += 1
         if level > len(relpath.parts):
-            print("ERROR: insertpos", relpath, i, entry.name, entry.level, level)
+            logger.error(
+                f"insertpos level overflow: relpath={relpath}, i={i}, entry.name={entry.name}, entry.level={entry.level}, level={level}"
+            )
             break
     else:
         i += 1
+
     return i
 
 
@@ -179,21 +189,16 @@ def update_path(rootmod: list[FileEntry], relpath: PurePosixPath, loop):
     """Called on FS updates, check the filesystem and broadcast any changes."""
     new = walk(relpath)
     obegin, old = treeget(rootmod, relpath)
+
     if old == new:
-        logger.debug(
-            f"Watch: Event without changes needed {relpath}"
-            if old
-            else f"Watch: Event with old and new missing: {relpath}"
-        )
         return
+
     if obegin is not None:
         del rootmod[obegin : obegin + len(old)]
+
     if new:
-        logger.debug(f"Watch: Update {relpath}" if old else f"Watch: Created {relpath}")
         i = treeinspos(rootmod, relpath, new[0].isfile)
         rootmod[i:i] = new
-    else:
-        logger.debug(f"Watch: Removed {relpath}")
 
 
 def update_space(loop):
@@ -218,17 +223,35 @@ def format_update(old, new):
     oremain, nremain = set(old), set(new)
     update = []
     keep_count = 0
+    iteration_count = 0
+    # Precompute index maps to allow deterministic tie-breaking when both
+    # candidates exist in both sequences but are not equal (rename/move cases)
+    old_pos = {e: i for i, e in enumerate(old)}
+    new_pos = {e: i for i, e in enumerate(new)}
+
     while oidx < len(old) and nidx < len(new):
+        iteration_count += 1
+
+        # Emergency brake for potential infinite loops
+        if iteration_count > 50000:
+            logger.error(
+                f"format_update potential infinite loop! iteration={iteration_count}, oidx={oidx}, nidx={nidx}"
+            )
+            raise Exception(
+                f"format_update infinite loop detected at iteration {iteration_count}"
+            )
+
         modified = False
         # Matching entries are kept
         if old[oidx] == new[nidx]:
             entry = old[oidx]
-            oremain.remove(entry)
-            nremain.remove(entry)
+            oremain.discard(entry)
+            nremain.discard(entry)
             keep_count += 1
             oidx += 1
             nidx += 1
             continue
+
         if keep_count > 0:
             modified = True
             update.append(UpdKeep(keep_count))
@@ -248,7 +271,7 @@ def format_update(old, new):
         insert_items = []
         while nidx < len(new) and new[nidx] not in oremain:
             entry = new[nidx]
-            nremain.remove(entry)
+            nremain.discard(entry)
             insert_items.append(entry)
             nidx += 1
         if insert_items:
@@ -256,9 +279,32 @@ def format_update(old, new):
             update.append(UpdIns(insert_items))
 
         if not modified:
-            raise Exception(
-                f"Infinite loop in diff {nidx=} {oidx=} {len(old)=} {len(new)=}"
-            )
+            # Tie-break: both items exist in both lists but don't match here.
+            # Decide whether to delete old[oidx] first or insert new[nidx] first
+            # based on which alignment is closer.
+            if oidx >= len(old) or nidx >= len(new):
+                break
+            cur_old = old[oidx]
+            cur_new = new[nidx]
+
+            pos_old_in_new = new_pos.get(cur_old)
+            pos_new_in_old = old_pos.get(cur_new)
+
+            # Default distances if not present (shouldn't happen if in remain sets)
+            dist_del = (pos_old_in_new - nidx) if pos_old_in_new is not None else 1
+            dist_ins = (pos_new_in_old - oidx) if pos_new_in_old is not None else 1
+
+            # Prefer the operation with smaller forward distance; tie => delete
+            if dist_del <= dist_ins:
+                # Delete current old item
+                oremain.discard(cur_old)
+                update.append(UpdDel(1))
+                oidx += 1
+            else:
+                # Insert current new item
+                nremain.discard(cur_new)
+                update.append(UpdIns([cur_new]))
+                nidx += 1
 
     # Diff any remaining
     if keep_count > 0:
@@ -311,10 +357,7 @@ def watcher_inotify(loop):
     while not quit.is_set():
         i = inotify.adapters.InotifyTree(rootpath.as_posix())
         # Initialize the tree from filesystem
-        t0 = time.perf_counter()
         update_root(loop)
-        t1 = time.perf_counter()
-        logger.debug(f"Root update took {t1 - t0:.1f}s")
         trefresh = time.monotonic() + 300.0
         tspace = time.monotonic() + 5.0
         # Watch for changes (frequent wakeups needed for quiting)
@@ -335,32 +378,52 @@ def watcher_inotify(loop):
                 if quit.is_set():
                     return
                 interesting = any(f in modified_flags for f in event[1])
-                if event[2] == rootpath.as_posix() and event[3] == "zzz":
-                    logger.debug(f"Watch: {interesting=} {event=}")
                 if interesting:
                     # Update modified path
-                    t0 = time.perf_counter()
                     path = PurePosixPath(event[2]) / event[3]
-                    update_path(rootmod, path.relative_to(rootpath), loop)
-                    t1 = time.perf_counter()
-                    logger.debug(f"Watch: Update {event[3]} took {t1 - t0:.1f}s")
+                    try:
+                        rel_path = path.relative_to(rootpath)
+                        update_path(rootmod, rel_path, loop)
+                    except Exception as e:
+                        logger.error(
+                            f"Error processing inotify event for path {path}: {e}"
+                        )
+                        raise
                     if not dirty:
                         t = time.monotonic()
                         dirty = True
-                # Wait a maximum of 0.5s to push the updates
-                if dirty and time.monotonic() >= t + 0.5:
+                # Wait a maximum of 0.2s to push the updates
+                if dirty and time.monotonic() >= t + 0.2:
                     break
             if dirty and state.root != rootmod:
-                t0 = time.perf_counter()
-                update = format_update(state.root, rootmod)
-                t1 = time.perf_counter()
-                with state.lock:
-                    broadcast(update, loop)
-                    state.root = rootmod
-                t2 = time.perf_counter()
-                logger.debug(
-                    f"Format update took {t1 - t0:.1f}s, broadcast {t2 - t1:.1f}s"
-                )
+                try:
+                    update = format_update(state.root, rootmod)
+                    with state.lock:
+                        broadcast(update, loop)
+                        state.root = rootmod
+                except Exception:
+                    logger.exception(
+                        "format_update failed; falling back to full rescan"
+                    )
+                    # Fallback: full rescan and try diff again; last resort send full root
+                    try:
+                        fresh = walk(PurePosixPath())
+                        try:
+                            update = format_update(state.root, fresh)
+                            with state.lock:
+                                broadcast(update, loop)
+                                state.root = fresh
+                        except Exception:
+                            logger.exception(
+                                "Fallback diff failed; sending full root snapshot"
+                            )
+                            with state.lock:
+                                broadcast(format_root(fresh), loop)
+                                state.root = fresh
+                    except Exception:
+                        logger.exception(
+                            "Full rescan failed; dropping this batch of updates"
+                        )
 
         del i  # Free the inotify object
 

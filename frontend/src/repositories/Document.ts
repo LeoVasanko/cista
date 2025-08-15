@@ -37,21 +37,24 @@ export class Doc {
     return this.url.replace(/^\/#/, '')
   }
   get img(): boolean {
-    const ext = this.name.split('.').pop()?.toLowerCase()
-    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg'].includes(ext || '')
+    // Folders cannot be images
+    if (this.dir) return false
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'heic', 'heif', 'svg'].includes(this.ext)
   }
   get previewable(): boolean {
+    // Folders cannot be previewable
+    if (this.dir) return false
     if (this.img) return true
-    const ext = this.name.split('.').pop()?.toLowerCase()
     // Not a comprehensive list, but good enough for now
-    return ['mp4', 'mkv', 'webm', 'ogg', 'mp3', 'flac', 'aac', 'pdf'].includes(ext || '')
+    return ['mp4', 'mkv', 'webm', 'ogg', 'mp3', 'flac', 'aac', 'pdf'].includes(this.ext)
   }
   get previewurl(): string {
     return this.url.replace(/^\/files/, '/preview')
   }
   get ext(): string {
-    const ext = this.name.split('.').pop()
-    return ext ? ext.toLowerCase() : ''
+    const dotIndex = this.name.lastIndexOf('.')
+    if (dotIndex === -1 || dotIndex === this.name.length - 1) return ''
+    return this.name.slice(dotIndex + 1).toLowerCase()
   }
 }
 export type errorEvent = {

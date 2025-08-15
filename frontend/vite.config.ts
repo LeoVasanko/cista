@@ -8,7 +8,7 @@ import svgLoader from 'vite-svg-loader'
 import Components from 'unplugin-vue-components/vite'
 
 // Development mode:
-// npm run dev           # Run frontend that proxies to dev_backend
+// bun run dev           # Run frontend that proxies to dev_backend
 // cista -l :8000 --dev  # Run backend
 const dev_backend = {
   target: "http://localhost:8000",

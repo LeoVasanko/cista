@@ -1,4 +1,5 @@
 .*
+*.lock
 !.gitignore
 __pycache__/
 *.egg-info/

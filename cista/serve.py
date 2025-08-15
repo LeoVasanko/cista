@@ -1,5 +1,7 @@
 import os
 import re
+import signal
+import sys
 from pathlib import Path
 
 from sanic import Sanic
@@ -10,6 +12,14 @@ from cista import config, server80
 def run(*, dev=False):
     """Run Sanic main process that spawns worker processes to serve HTTP requests."""
     from .app import app
+
+    # Set up immediate exit on Ctrl+C for faster termination
+    def signal_handler(signum, frame):
+        print("\nReceived interrupt signal, exiting immediately...")
+        os._exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     url, opts = parse_listen(config.config.listen)
     # Silence Sanic's warning about running in production rather than debug

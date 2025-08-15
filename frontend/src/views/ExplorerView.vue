@@ -13,15 +13,11 @@
     :path="props.path"
     :documents="documents"
   />
-  <div v-if="!store.prefs.gallery && documents.some(doc => doc.previewable)" class="suggest-gallery">
-    <SvgButton name="eye" taborder=0 @click="() => { store.prefs.gallery = true }"></SvgButton>
-    Gallery View
-  </div>
   <EmptyFolder :documents=documents :path=props.path />
 </template>
 
 <script setup lang="ts">
-import { watchEffect, ref, computed } from 'vue'
+import { watchEffect, ref, computed, watch } from 'vue'
 import { useMainStore } from '@/stores/main'
 import Router from '@/router/index'
 import { needleFormat, localeIncludes, collator } from '@/utils'
@@ -76,6 +72,10 @@ watchEffect(() => {
   store.fileExplorer = fileExplorer.value
   store.query = props.query
 })
+
+watch(documents, (docs) => {
+  store.prefs.gallery = docs.some(d => d.previewable)
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -89,15 +89,4 @@ watchEffect(() => {
   text-shadow: 0 0 .3rem #000, 0 0 2rem #0008;
   color: var(--accent-color);
 }
-.suggest-gallery p {
-  font-size: 2rem;
-  color: var(--accent-color);
-}
-.suggest-gallery {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
 </style>

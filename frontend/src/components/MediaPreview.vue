@@ -101,7 +101,7 @@ const video = () => ['mkv', 'mp4', 'webm', 'mov', 'avi'].includes(props.doc.ext)
 const audio = () => ['mp3', 'flac', 'ogg', 'aac'].includes(props.doc.ext)
 const archive = () => ['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar'].includes(props.doc.ext)
 const preview = () => (
-  ['bmp', 'ico', 'tif', 'tiff', 'pdf'].includes(props.doc.ext) ||
+  ['bmp', 'ico', 'tif', 'tiff', 'heic', 'heif', 'pdf', 'epub', 'mobi'].includes(props.doc.ext) ||
   props.doc.size > 500000 &&
   ['avif', 'webp', 'png', 'jpg', 'jpeg'].includes(props.doc.ext)
 )

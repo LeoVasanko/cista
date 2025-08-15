@@ -22,25 +22,25 @@ If the standalone TypeScript plugin doesn't feel fast enough to you, Volar has a
 ### Run the backend
 
 ```fish
-hatch shell
-cista --dev -l :8000
+uv sync --dev
+uv run cista --dev -l :8000
 ```
 
 ### And the Vite server (in another terminal)
 
 ```fish
 cd frontend
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 Browse to Vite, which will proxy API requests to port 8000. Both servers live reload changes.
 
 
 ### Type-Check, Compile and Minify for Production
 
-This is also called by `hatch build` during Python packaging:
+This is also called by `uv build` during Python packaging:
 
 ```fish
-npm run build
+bun run build
 ```
 
