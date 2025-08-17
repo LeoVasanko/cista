@@ -24,6 +24,17 @@ pillow_heif.register_heif_opener()
 
 bp = Blueprint("preview", url_prefix="/preview")
 
+# Map EXIF Orientation value to a corresponding PIL transpose
+EXIF_ORI = {
+    2: Image.Transpose.FLIP_LEFT_RIGHT,
+    3: Image.Transpose.ROTATE_180,
+    4: Image.Transpose.FLIP_TOP_BOTTOM,
+    5: Image.Transpose.TRANSPOSE,
+    6: Image.Transpose.ROTATE_270,
+    7: Image.Transpose.TRANSVERSE,
+    8: Image.Transpose.ROTATE_90,
+}
+
 
 @bp.get("/<path:path>")
 async def preview(req, path):
@@ -69,34 +80,35 @@ def dispatch(path, quality, maxsize, maxzoom):
 
 
 def process_image(path, *, maxsize, quality):
-    t_load_start = perf_counter()
-    img = Image.open(path)
-    # Force decode to include I/O in load timing
-    img.load()
-    t_load_end = perf_counter()
-    # Resize
-    orig_w, orig_h = img.size
-    t_proc_start = perf_counter()
-    img.thumbnail((min(orig_w, maxsize), min(orig_h, maxsize)))
-    t_proc_end = perf_counter()
-    # Save as AVIF
-    imgdata = io.BytesIO()
-    t_save_start = perf_counter()
-    img.save(imgdata, format="avif", quality=quality, speed=10, max_threads=1)
-    t_save_end = perf_counter()
+    t_load = perf_counter()
+    with Image.open(path) as img:
+        # Force decode to include I/O in load timing
+        img.load()
+        t_proc = perf_counter()
+        # Resize
+        w, h = img.size
+        img.thumbnail((min(w, maxsize), min(h, maxsize)))
+        # Transpose pixels according to EXIF Orientation
+        orientation = img.getexif().get(274, 1)
+        if orientation in EXIF_ORI:
+            img = img.transpose(EXIF_ORI[orientation])
+        # Save as AVIF
+        imgdata = io.BytesIO()
+        t_save = perf_counter()
+        img.save(imgdata, format="avif", quality=quality, speed=10, max_threads=1)
 
+    t_end = perf_counter()
     ret = imgdata.getvalue()
 
-    load_ms = (t_load_end - t_load_start) * 1000
-    proc_ms = (t_proc_end - t_proc_start) * 1000
-    save_ms = (t_save_end - t_save_start) * 1000
+    load_ms = (t_proc - t_load) * 1000
+    proc_ms = (t_save - t_proc) * 1000
+    save_ms = (t_end - t_save) * 1000
     logger.debug(
-        "Preview image %s: load=%.1fms process=%.1fms save=%.1fms out=%.1fKB",
+        "Preview image %s: load=%.1fms process=%.1fms save=%.1fms",
         path.name,
         load_ms,
         proc_ms,
         save_ms,
-        len(ret) / 1024,
     )
 
     return ret
