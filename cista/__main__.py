@@ -10,8 +10,24 @@ from cista.util import pwgen
 
 del app, server80.app  # Only import needed, for Sanic multiprocessing
 
-doc = f"""Cista {cista.__version__} - A file storage for the web.
 
+def create_banner():
+    """Create a framed banner with the Cista version."""
+    title = f"Cista {cista.__version__}"
+    subtitle = "A file storage for the web"
+    width = max(len(title), len(subtitle)) + 4
+
+    return f"""\
+╭{"─" * width}╮
+│{title:^{width}}│
+│{subtitle:^{width}}│
+╰{"─" * width}╯
+"""
+
+
+banner = create_banner()
+
+doc = """\
 Usage:
   cista [-c <confdir>] [-l <host>] [--import-droppy] [--dev] [<path>]
   cista [-c <confdir>] --user <name> [--privileged] [--password]
@@ -35,6 +51,14 @@ User management:
   --password        Reset password
 """
 
+first_time_help = """\
+No config file found! Get started with:
+  cista --user yourname --privileged     # If you want user accounts
+  cista -l :8000 /path/to/files          # Run the server on localhost:8000
+
+See cista --help for other options!
+"""
+
 
 def main():
     # Dev mode doesn't catch exceptions
@@ -44,11 +68,19 @@ def main():
     try:
         return _main()
     except Exception as e:
-        print("Error:", e)
+        sys.stderr.write(f"Error: {e}\n")
         return 1
 
 
 def _main():
+    # The banner printing differs by mode, and needs to be done before docopt() printing its messages
+    if any(arg in sys.argv for arg in ("--help", "-h")):
+        sys.stdout.write(banner)
+    elif "--version" in sys.argv:
+        sys.stdout.write(f"cista {cista.__version__}\n")
+        return 0
+    else:
+        sys.stderr.write(banner)
     args = docopt(doc)
     if args["--user"]:
         return _user(args)
@@ -62,18 +94,11 @@ def _main():
         path = None
     _confdir(args)
     exists = config.conffile.exists()
-    print(config.conffile, exists)
     import_droppy = args["--import-droppy"]
     necessary_opts = exists or import_droppy or path
     if not necessary_opts:
         # Maybe run without arguments
-        print(doc)
-        print(
-            "No config file found! Get started with one of:\n"
-            "  cista --user yourname --privileged\n"
-            "  cista --import-droppy\n"
-            "  cista -l :8000 /path/to/files\n"
-        )
+        sys.stderr.write(first_time_help)
         return 1
     settings = {}
     if import_droppy:
@@ -94,7 +119,7 @@ def _main():
         # We have no users, so make it public
         settings["public"] = True
     operation = config.update_config(settings)
-    print(f"Config {operation}: {config.conffile}")
+    sys.stderr.write(f"Config {operation}: {config.conffile}\n")
     # Prepare to serve
     unix = None
     url, _ = serve.parse_listen(config.config.listen)
@@ -104,7 +129,7 @@ def _main():
     dev = args["--dev"]
     if dev:
         extra += " (dev mode)"
-    print(f"Serving {config.config.path} at {url}{extra}")
+    sys.stderr.write(f"Serving {config.config.path} at {url}{extra}\n")
     # Run the server
     serve.run(dev=dev)
     return 0
@@ -137,7 +162,7 @@ def _user(args):
                 "public": False,
             }
         )
-        print(f"Config {operation}: {config.conffile}\n")
+        sys.stderr.write(f"Config {operation}: {config.conffile}\n\n")
 
     name = args["--user"]
     if not name or not name.isidentifier():
@@ -155,12 +180,12 @@ def _user(args):
         changes["password"] = pw = pwgen.generate()
         info += f"\n  Password: {pw}\n"
     res = config.update_user(name, changes)
-    print(info)
+    sys.stderr.write(f"{info}\n")
     if res == "read":
-        print("  No changes")
+        sys.stderr.write("  No changes\n")
 
     if operation == "created":
-        print(
+        sys.stderr.write(
             "Now you can run the server:\n  cista    # defaults set: -l :8000 ~/Downloads\n"
         )
 
