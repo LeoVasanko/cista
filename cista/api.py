@@ -119,8 +119,12 @@ async def watch(req, ws):
         # Send updates
         while True:
             await ws.send(await q.get())
+    except RuntimeError as e:
+        if str(e) == "cannot schedule new futures after shutdown":
+            return  # Server shutting down, drop the WebSocket
+        raise
     finally:
-        del watching.pubsub[uuid]
+        watching.pubsub.pop(uuid, None)  # Remove whether it got added yet or not
 
 
 def subscribe(uuid, ws):

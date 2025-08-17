@@ -440,7 +440,7 @@ def watcher_poll(loop):
         quit.wait(0.1 + 8 * dur)
 
 
-async def start(app, loop):
+def start(app, loop):
     global rootpath
     config.load_config()
     rootpath = config.config.path
@@ -454,6 +454,6 @@ async def start(app, loop):
     app.ctx.watcher.start()
 
 
-async def stop(app, loop):
+def stop(app):
     quit.set()
     app.ctx.watcher.join()

@@ -43,14 +43,16 @@ async def main_start(app, loop):
     app.ctx.threadexec = ThreadPoolExecutor(
         max_workers=workers, thread_name_prefix="cista-ioworker"
     )
-    await watching.start(app, loop)
+    watching.start(app, loop)
 
 
-@app.after_server_stop
+# Sanic sometimes fails to execute after_server_stop, so we do it before instead (potentially interrupting handlers)
+@app.before_server_stop
 async def main_stop(app, loop):
     quit.set()
-    await watching.stop(app, loop)
+    watching.stop(app)
     app.ctx.threadexec.shutdown()
+    logger.debug("Cista worker threads all finished")
 
 
 @app.on_request
