@@ -9,7 +9,6 @@ from stat import S_IFDIR, S_IFREG
 from urllib.parse import unquote
 from wsgiref.handlers import format_date_time
 
-import brotli
 import sanic.helpers
 from blake3 import blake3
 from sanic import Blueprint, Sanic, empty, raw, redirect
@@ -17,6 +16,7 @@ from sanic.exceptions import Forbidden, NotFound
 from sanic.log import logger
 from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
+from zstandard import ZstdCompressor
 
 from cista import auth, config, preview, session, watching
 from cista.api import bp
@@ -95,6 +95,7 @@ def _load_wwwroot(www):
     wwwnew = {}
     base = Path(__file__).with_name("wwwroot")
     paths = [PurePath()]
+    zstd = ZstdCompressor(level=10)
     while paths:
         path = paths.pop(0)
         current = base / path
@@ -126,11 +127,11 @@ def _load_wwwroot(www):
                 else "no-cache",
                 "content-type": mime,
             }
-            # Precompress with Brotli
-            br = brotli.compress(data)
-            if len(br) >= len(data):
-                br = False
-            wwwnew[name] = data, br, headers
+            # Precompress with ZSTD
+            zs = zstd.compress(data)
+            if len(zs) >= len(data):
+                zs = False
+            wwwnew[name] = data, zs, headers
     if not wwwnew:
         msg = f"Web frontend missing from {base}\n  Did you forget: hatch build\n"
         if not www:
@@ -196,14 +197,14 @@ async def wwwroot(req, path=""):
     name = unquote(path)
     if name not in www:
         raise NotFound(f"File not found: /{path}", extra={"name": name})
-    data, br, headers = www[name]
+    data, zs, headers = www[name]
     if req.headers.if_none_match == headers["etag"]:
         # The client has it cached, respond 304 Not Modified
         return empty(304, headers=headers)
-    # Brotli compressed?
-    if br and "br" in req.headers.accept_encoding.split(", "):
-        headers = {**headers, "content-encoding": "br"}
-        data = br
+    # Zstandard compressed?
+    if zs and "zstd" in req.headers.accept_encoding.split(", "):
+        headers = {**headers, "content-encoding": "zstd"}
+        data = zs
     return raw(data, headers=headers)
 
 
