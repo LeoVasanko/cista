@@ -183,9 +183,9 @@ async def refresh_wwwroot():
                 for name in sorted(set(wwwold) - set(www)):
                     changes += f"Deleted /{name}\n"
                 if changes:
-                    print(f"Updated wwwroot:\n{changes}", end="", flush=True)
+                    logger.info(f"Updated wwwroot:\n{changes}", end="", flush=True)
             except Exception as e:
-                print(f"Error loading wwwroot: {e!r}")
+                logger.error(f"Error loading wwwroot: {e!r}")
             await asyncio.sleep(0.5)
     except asyncio.CancelledError:
         pass

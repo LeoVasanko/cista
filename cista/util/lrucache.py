@@ -1,4 +1,5 @@
 from time import monotonic
+from typing import Callable
 
 
 class LRUCache:
@@ -12,7 +13,7 @@ class LRUCache:
         cache (list): Internal list storing the cache items.
     """
 
-    def __init__(self, open: callable, *, capacity: int, maxage: float):
+    def __init__(self, open: Callable, *, capacity: int, maxage: float):
         """
         Initialize LRUCache.
 
@@ -50,7 +51,6 @@ class LRUCache:
         # Add/restore to end of cache
         self.cache.insert(0, (key, f, monotonic()))
         self.expire_items()
-        print(self.cache)
         return f
 
     def expire_items(self):
