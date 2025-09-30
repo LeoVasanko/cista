@@ -73,7 +73,10 @@ watchEffect(() => {
 const settingsMenu = (e: Event) => {
   // show the context menu
   const items = []
-  items.push({ label: 'Settings', onClick: () => { store.dialog = 'settings' }})
+  items.push({ label: 'Change Password', onClick: () => { store.dialog = 'settings' }})
+  if (store.user.privileged) {
+    items.push({ label: 'Admin Settings', onClick: () => { store.dialog = 'usermgmt' }})
+  }
   if (store.user.isLoggedIn) {
     items.push({ label: `Logout ${store.user.username ?? ''}`, onClick: () => store.logout() })
   } else {

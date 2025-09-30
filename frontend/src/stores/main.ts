@@ -18,7 +18,7 @@ export const useMainStore = defineStore({
     connected: false,
     cursor: '' as string,
     server: {} as Record<string, any>,
-    dialog: '' as '' | 'login' | 'settings',
+    dialog: '' as '' | 'login' | 'settings' | 'usermgmt',
     uprogress: {} as any,
     dprogress: {} as any,
     prefs: {

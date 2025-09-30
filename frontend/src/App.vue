@@ -1,6 +1,7 @@
 <template>
   <LoginModal />
   <SettingsModal />
+  <UserManagementModal />
   <header>
     <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query">
       <HeaderSelected :path="path.pathList" />
@@ -28,6 +29,7 @@ import { computed } from 'vue'
 import Router from '@/router/index'
 import type { SortOrder } from './utils/docsort'
 import type SettingsModalVue from './components/SettingsModal.vue'
+import UserManagementModal from './components/UserManagementModal.vue'
 
 interface Path {
   path: string

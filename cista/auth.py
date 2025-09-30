@@ -10,6 +10,7 @@ from sanic import Blueprint, html, json, redirect
 from sanic.exceptions import BadRequest, Forbidden, Unauthorized
 
 from cista import config, session
+from cista.util import pwgen
 
 _argon = argon2.PasswordHasher()
 _droppyhash = re.compile(r"^([a-f0-9]{64})\$([a-f0-9]{8})$")
@@ -191,3 +192,91 @@ async def change_password(request):
         res = json({"message": "Password updated"})
     session.create(res, username)
     return res
+
+
+@bp.get("/users")
+async def list_users(request):
+    verify(request, privileged=True)
+    users = []
+    for name, user in config.config.users.items():
+        users.append(
+            {
+                "username": name,
+                "privileged": user.privileged,
+                "lastSeen": user.lastSeen,
+            }
+        )
+    return json({"users": users})
+
+
+@bp.post("/users")
+async def create_user(request):
+    verify(request, privileged=True)
+    try:
+        if request.headers.content_type == "application/json":
+            username = request.json["username"]
+            password = request.json.get("password")
+            privileged = request.json.get("privileged", False)
+        else:
+            username = request.form["username"][0]
+            password = request.form.get("password", [None])[0]
+            privileged = request.form.get("privileged", ["false"])[0].lower() == "true"
+        if not username or not username.isidentifier():
+            raise ValueError("Invalid username")
+    except (KeyError, ValueError) as e:
+        raise BadRequest(str(e)) from e
+    if username in config.config.users:
+        raise BadRequest("User already exists")
+    if not password:
+        password = pwgen.generate()
+    changes = {"privileged": privileged}
+    changes["hash"] = _argon.hash(_pwnorm(password))
+    try:
+        config.update_user(username, changes)
+    except Exception as e:
+        raise BadRequest(str(e)) from e
+    return json({"message": f"User {username} created", "password": password})
+
+
+@bp.put("/users/<username>")
+async def update_user(request, username):
+    verify(request, privileged=True)
+    try:
+        if request.headers.content_type == "application/json":
+            changes = request.json
+        else:
+            changes = {}
+            if "password" in request.form:
+                changes["password"] = request.form["password"][0]
+            if "privileged" in request.form:
+                changes["privileged"] = request.form["privileged"][0].lower() == "true"
+    except KeyError as e:
+        raise BadRequest("Missing fields") from e
+    password_response = None
+    if "password" in changes:
+        if changes["password"] == "":
+            changes["password"] = pwgen.generate()
+        password_response = changes["password"]
+        changes["hash"] = _argon.hash(_pwnorm(changes["password"]))
+        del changes["password"]
+    if not changes:
+        return json({"message": "No changes"})
+    try:
+        config.update_user(username, changes)
+    except Exception as e:
+        raise BadRequest(str(e)) from e
+    response = {"message": f"User {username} updated"}
+    if password_response:
+        response["password"] = password_response
+    return json(response)
+
+
+@bp.put("/config/public")
+async def update_public(request):
+    verify(request, privileged=True)
+    try:
+        public = request.json["public"]
+    except KeyError:
+        raise BadRequest("Missing public field") from None
+    config.update_config({"public": public})
+    return json({"message": "Public setting updated"})

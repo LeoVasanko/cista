@@ -24,3 +24,34 @@ export async function changePassword(username: string, passwordChange: string, p
   })
   return data
 }
+
+export const url_users = '/users'
+
+export async function listUsers() {
+  const data = await Client.get(url_users)
+  return data
+}
+
+export async function createUser(username: string, password?: string, privileged?: boolean) {
+  const data = await Client.post(url_users, {
+    username,
+    password,
+    privileged
+  })
+  return data
+}
+
+export async function updateUser(username: string, changes: { password?: string, privileged?: boolean }) {
+  const data = await Client.put(`${url_users}/${username}`, changes)
+  return data
+}
+
+export async function deleteUser(username: string) {
+  const data = await Client.delete(`${url_users}/${username}`)
+  return data
+}
+
+export async function updatePublic(publicFlag: boolean) {
+  const data = await Client.put('/config/public', { public: publicFlag })
+  return data
+}
