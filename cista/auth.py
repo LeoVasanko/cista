@@ -271,6 +271,18 @@ async def update_user(request, username):
     return json(response)
 
 
+@bp.delete("/users/<username>")
+async def delete_user(request, username):
+    verify(request, privileged=True)
+    if username not in config.config.users:
+        raise BadRequest("User does not exist")
+    try:
+        config.del_user(username)
+    except Exception as e:
+        raise BadRequest(str(e)) from e
+    return json({"message": f"User {username} deleted"})
+
+
 @bp.put("/config/public")
 async def update_public(request):
     verify(request, privileged=True)

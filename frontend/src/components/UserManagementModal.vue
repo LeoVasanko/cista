@@ -14,9 +14,9 @@
       </div>
       <h3>Users</h3>
       <button @click="addUser" class="button" title="Add new user">➕ Add User</button>
-      <div v-if="success" class="success-message">
+      <div v-if="success" class="success-message" @click="copySuccess(false)">
         {{ success }}
-        <button @click="copySuccess" class="button small" title="Copy to clipboard">�</button>
+        <button v-if="success.includes('Password:') || success.includes('New password:')" @click.stop="copySuccess(true)" class="button small" title="Copy to clipboard">{{ copyButtonText }}</button>
       </div>
       <table class="user-table">
         <thead>
@@ -70,6 +70,7 @@ const loading = ref(true)
 const users = ref<User[]>([])
 const error = ref('')
 const success = ref('')
+const copyButtonText = ref('📋')
 const serverSettings = reactive({
   public: false
 })
@@ -170,11 +171,25 @@ const deleteUserAction = async (username: string) => {
   }
 }
 
-const copySuccess = async () => {
-  const passwordMatch = success.value.match(/Password: (.+)/)
+const copySuccess = async (isButtonClick: boolean = false) => {
+  const passwordMatch = success.value.match(/(?:Password|New password): (.+)/)
   if (passwordMatch) {
     await navigator.clipboard.writeText(passwordMatch[1])
-    // Maybe flash or something, but for now just copy
+    if (isButtonClick) {
+      // Show "Copied!" indication on button
+      copyButtonText.value = '✅ Copied!'
+      // Hide password and button immediately after copying
+      const baseMessage = success.value.replace(/(?:Password|New password): .+/, 'Password copied to clipboard!')
+      success.value = baseMessage
+      // Hide the entire message after 3 seconds
+      setTimeout(() => {
+        success.value = ''
+        copyButtonText.value = '📋'
+      }, 3000)
+    } else {
+      // Just hide the message when clicking elsewhere
+      success.value = ''
+    }
   }
 }
 
