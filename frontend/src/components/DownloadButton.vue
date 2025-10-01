@@ -78,7 +78,7 @@ const filesystemdl = async (sel: SelectedItems, handle: FileSystemDirectoryHandl
         h = await h.getDirectoryHandle(dir.normalize('NFC'), { create: true })
       } catch (error) {
         console.error('Failed to create directory', hdir, error)
-        return
+        throw new Error(`Failed to create directory ${hdir}: ${error}`)
       }
       console.log('Created', hdir)
     }
@@ -90,37 +90,42 @@ const filesystemdl = async (sel: SelectedItems, handle: FileSystemDirectoryHandl
       fileHandle = await h.getFileHandle(name, { create: true })
     } catch (error) {
       console.error('Failed to create file', rel, full, hdir + name, error)
-      return
+      throw new Error(`Failed to create file ${hdir + name}: ${error}`)
     }
-    const writable = await fileHandle.createWritable()
-    const url = `/files/${rel}`
-    console.log('Fetching', url)
-    const res = await fetch(url)
-    if (!res.ok) {
-      store.error = `Failed to download ${url}: ${res.status} ${res.statusText}`
-      throw new Error(`Failed to download ${url}: ${res.status} ${res.statusText}`)
-    }
-    if (res.body) {
-      ++store.dprogress.fileidx
-      const reader = res.body.getReader()
-      await writable.truncate(0)
-      store.error = "Direct download."
-      store.dprogress.tlast = Date.now()
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        await writable.write(value)
-        const now = Date.now()
-        const size = value.byteLength
-        store.dprogress.xfer += size
-        store.dprogress.filepos += size
-        store.dprogress.statbytes += size
-        store.dprogress.statdur += now - store.dprogress.tlast
-        store.dprogress.tlast = now
+    try {
+      const writable = await fileHandle.createWritable()
+      const url = `/files/${rel}`
+      console.log('Fetching', url)
+      const res = await fetch(url)
+      if (!res.ok) {
+        store.error = `Failed to download ${url}: ${res.status} ${res.statusText}`
+        throw new Error(`Failed to download ${url}: ${res.status} ${res.statusText}`)
       }
+      if (res.body) {
+        ++store.dprogress.fileidx
+        const reader = res.body.getReader()
+        await writable.truncate(0)
+        store.error = "Direct download."
+        store.dprogress.tlast = Date.now()
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          await writable.write(value)
+          const now = Date.now()
+          const size = value.byteLength
+          store.dprogress.xfer += size
+          store.dprogress.filepos += size
+          store.dprogress.statbytes += size
+          store.dprogress.statdur += now - store.dprogress.tlast
+          store.dprogress.tlast = now
+        }
+      }
+      await writable.close()
+      console.log('Saved', hdir + name)
+    } catch (error) {
+      console.error('Failed to write file', hdir + name, error)
+      throw new Error(`Failed to write file ${hdir + name}: ${error}`)
     }
-    await writable.close()
-    console.log('Saved', hdir + name)
   }
   statReset()
 }
