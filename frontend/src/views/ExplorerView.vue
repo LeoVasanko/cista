@@ -73,8 +73,8 @@ watchEffect(() => {
   store.query = props.query
 })
 
-watch(documents, (docs) => {
-  store.prefs.gallery = docs.some(d => d.previewable)
+watch([() => props.path.join('/'), () => props.query], () => {
+  store.prefs.gallery = documents.value.some(d => d.previewable)
 }, { immediate: true })
 </script>
 
