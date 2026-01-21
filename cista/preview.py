@@ -13,7 +13,7 @@ import fitz  # PyMuPDF
 import numpy as np
 import pillow_heif
 from PIL import Image
-from sanic import Blueprint, empty, raw
+from sanic import Blueprint, empty, raw, redirect
 from sanic.exceptions import NotFound
 from sanic.log import logger
 
@@ -43,12 +43,12 @@ async def preview(req, path):
     maxzoom = float(req.args.get("zoom", 2.0))
     quality = int(req.args.get("q", 60))
     rel = PurePosixPath(sanitize(unquote(path)))
-    path = config.config.path / rel
-    stat = path.lstat()
+    filepath = config.config.path / rel
+    stat = filepath.lstat()
     etag = config.derived_secret(
         "preview", rel, stat.st_mtime_ns, quality, maxsize, maxzoom
     ).hex()
-    savename = PurePosixPath(path.name).with_suffix(".avif")
+    savename = PurePosixPath(filepath.name).with_suffix(".avif")
     headers = {
         "etag": etag,
         "last-modified": format_date_time(stat.st_mtime),
@@ -61,22 +61,30 @@ async def preview(req, path):
         # The client has it cached, respond 304 Not Modified
         return empty(304, headers=headers)
 
-    if not path.is_file():
+    if not filepath.is_file():
         raise NotFound("File not found")
 
     img = await asyncio.get_event_loop().run_in_executor(
-        req.app.ctx.threadexec, dispatch, path, quality, maxsize, maxzoom
+        req.app.ctx.threadexec, dispatch, filepath, quality, maxsize, maxzoom
     )
+    if not img:
+        # Preview generation failed, redirect to the file itself
+        return redirect(f"/files/{path}", status=303)
     return raw(img, headers=headers)
 
 
 def dispatch(path, quality, maxsize, maxzoom):
-    if path.suffix.lower() in (".pdf", ".xps", ".epub", ".mobi"):
-        return process_pdf(path, quality=quality, maxsize=maxsize, maxzoom=maxzoom)
-    type, _ = mimetypes.guess_type(path.name)
-    if type and type.startswith("video/"):
-        return process_video(path, quality=quality, maxsize=maxsize)
-    return process_image(path, quality=quality, maxsize=maxsize)
+    try:
+        if path.suffix.lower() in (".pdf", ".xps", ".epub", ".mobi"):
+            return process_pdf(path, quality=quality, maxsize=maxsize, maxzoom=maxzoom)
+        type, _ = mimetypes.guess_type(path.name)
+        if type and type.startswith("video/"):
+            return process_video(path, quality=quality, maxsize=maxsize)
+        return process_image(path, quality=quality, maxsize=maxsize)
+    except ValueError as e:
+        logger.warning(f"Cannot generate preview for {path.name}: {e}")
+    except Exception as e:
+        logger.exception(f"Error generating preview for {path.name}: {e}")
 
 
 def process_image(path, *, maxsize, quality):
@@ -121,7 +129,7 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     w, h = page.rect[2:4]
     zoom = min(maxsize / w, maxsize / h, maxzoom)
     mat = fitz.Matrix(zoom, zoom)
-    pix = page.get_pixmap(matrix=mat)  # type: ignore[attr-defined]
+    pix = page.get_pixmap(matrix=mat)
     t_load_end = perf_counter()
 
     t_save_start = perf_counter()
