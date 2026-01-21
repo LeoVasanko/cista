@@ -15,12 +15,12 @@ fileserver = FileServer()
 
 
 @bp.before_server_start
-async def start_fileserver(app, _):
+async def start_fileserver(app):
     await fileserver.start()
 
 
 @bp.after_server_stop
-async def stop_fileserver(app, _):
+async def stop_fileserver(app):
     await fileserver.stop()
 
 

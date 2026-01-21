@@ -36,19 +36,19 @@ setproctitle("cista-main")
 
 
 @app.before_server_start
-async def main_start(app, loop):
+async def main_start(app):
     config.load_config()
     setproctitle(f"cista {config.config.path.name}")
     workers = max(2, min(8, cpu_count()))
     app.ctx.threadexec = ThreadPoolExecutor(
         max_workers=workers, thread_name_prefix="cista-ioworker"
     )
-    watching.start(app, loop)
+    watching.start(app)
 
 
 # Sanic sometimes fails to execute after_server_stop, so we do it before instead (potentially interrupting handlers)
 @app.before_server_stop
-async def main_stop(app, loop):
+async def main_stop(app):
     quit.set()
     watching.stop(app)
     app.ctx.threadexec.shutdown()
@@ -75,7 +75,7 @@ async def use_session(req):
 
 
 @app.before_server_start
-def http_fileserver(app, _):
+def http_fileserver(app):
     bp = Blueprint("fileserver")
     bp.on_request(auth.verify)
     bp.static(
@@ -93,9 +93,9 @@ www = {}
 
 def _load_wwwroot(www):
     wwwnew = {}
-    base = Path(__file__).with_name("wwwroot")
+    base = Path(__file__).with_name("frontend-build")
     paths = [PurePath()]
-    zstd = ZstdCompressor(level=10)
+    zstd = ZstdCompressor(level=18)
     while paths:
         path = paths.pop(0)
         current = base / path

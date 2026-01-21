@@ -37,7 +37,7 @@ dependencies = [
     "pillow-heif>=1.1.0",
     "pyjwt>=2.10.1",
     "pymupdf>=1.26.3",
-    "sanic>=25.3.0",
+    "sanic>=25.12.0",
     "setproctitle>=1.3.6",
     "stream-zip>=0.0.83",
     "tomli_w>=1.2.0",
@@ -71,8 +71,8 @@ docs = [
 source = "vcs"
 
 [tool.hatch.build]
-artifacts = ["cista/wwwroot"]
-targets.sdist.hooks.custom.path = "scripts/build-frontend.py"
+artifacts = ["cista/frontend-build"]
+targets.sdist.hooks.custom.path = "scripts/fastapi-vue/build-frontend.py"
 targets.sdist.include = [
     "/cista",
 ]
@@ -82,6 +82,7 @@ hooks.vcs.template = """
 __version__ = {version!r}
 """
 only-packages = true
+packages = ["cista"]
 
 [tool.pytest.ini_options]
 addopts = [
@@ -119,6 +120,7 @@ dev = [
     "ruff>=0.8.0",
     "mypy>=1.13.0",
     "pre-commit>=4.0.0",
+    "httpx>=0.28.1",
 ]
 test = [
     "pytest>=8.4.1",

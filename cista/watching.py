@@ -440,14 +440,14 @@ def watcher_poll(loop):
         quit.wait(0.1 + 8 * dur)
 
 
-def start(app, loop):
+def start(app):
     global rootpath
     config.load_config()
     rootpath = config.config.path
     use_inotify = sys.platform == "linux"
     app.ctx.watcher = threading.Thread(
         target=watcher_inotify if use_inotify else watcher_poll,
-        args=[loop],
+        args=[app.loop],
         # Descriptive name for system monitoring
         name=f"cista-watcher {rootpath}",
     )

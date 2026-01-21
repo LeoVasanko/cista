@@ -7,11 +7,8 @@ import vue from '@vitejs/plugin-vue'
 import svgLoader from 'vite-svg-loader'
 import Components from 'unplugin-vue-components/vite'
 
-// Development mode:
-// bun run dev           # Run frontend that proxies to dev_backend
-// cista -l :8000 --dev  # Run backend
 const dev_backend = {
-  target: "http://localhost:8000",
+  target: process.env.CISTA_BACKEND_URL || "http://localhost:8989",
   changeOrigin: false,  // Use frontend "host" to match "origin" from browser
   ws: true,
 }
@@ -48,7 +45,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: "../cista/wwwroot",
+    outDir: "../cista/frontend-build",
     emptyOutDir: true,
   }
 })
