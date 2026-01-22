@@ -179,11 +179,10 @@ img::before {
   max-height: 100%;
 }
 .video-container video {
-  font-size: 8em;
-  overflow: hidden;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   border-radius: calc(.5em / 8);
+  object-fit: contain;
 }
 .play-overlay {
   position: absolute;

@@ -75,11 +75,14 @@ figure {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: end;
+  justify-content: center;
   overflow: hidden;
 }
 figure > article {
   flex: 0 0 auto;
+}
+figure :deep(.video-container) {
+  height: 15em;
 }
 .titlespacer {
   flex-shrink: 100000;
