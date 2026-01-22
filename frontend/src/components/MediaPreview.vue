@@ -2,7 +2,10 @@
   <img v-if=preview() :src="`${doc.previewurl}?${quality}&t=${doc.mtime}`" alt="">
   <img v-else-if=doc.img :src=doc.url alt="">
   <span v-else-if=doc.dir class="folder icon"></span>
-  <video ref=vid v-else-if=video() :src=doc.url :poster=poster preload=none @play=onplay @pause=onpaused @ended=next @seeking=media!.play()></video>
+  <div v-else-if=video() class="video-container">
+    <video ref=vid :src=doc.url :poster=poster preload=none @play=onplay @pause=onpaused @ended=next @seeking=media!.play()></video>
+    <div class="play-overlay"><PlayIcon /></div>
+  </div>
   <div v-else-if=audio() class="audio icon">
     <audio ref=aud :src=doc.url class=icon preload=none @play=onplay @pause=onpaused @ended=next @seeking=media!.play()></audio>
   </div>
@@ -13,6 +16,7 @@
 <script setup lang=ts>
 import { computed, ref } from 'vue'
 import type { Doc } from '@/repositories/Document'
+import PlayIcon from '@/assets/svg/play.svg'
 
 const aud = ref<HTMLAudioElement | null>(null)
 const vid = ref<HTMLVideoElement | null>(null)
@@ -164,5 +168,45 @@ img::before {
   text-shadow: 0 0 .5rem #000;
   filter: grayscale(1);
   content: '❌';
+}
+.video-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 50%;
+  max-width: 100%;
+  max-height: 100%;
+}
+.video-container video {
+  font-size: 8em;
+  overflow: hidden;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: calc(.5em / 8);
+}
+.play-overlay {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  width: 4em;
+  height: 4em;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 50%;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.play-overlay svg {
+  width: 2em;
+  height: 2em;
+  fill: white;
+  margin-left: 0.25em;  /* Visual centering for play triangle */
+}
+.video-container:hover .play-overlay {
+  transform: scale(1.1);
+}
+video[data-playing] + .play-overlay {
+  opacity: 0;
 }
 </style>
