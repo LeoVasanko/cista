@@ -10,7 +10,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps } from 'vue'
 import { useMainStore } from '@/stores/main'
 import cog from '@/assets/svg/cog.svg'
 import { exists } from '@/utils/fileutil'
