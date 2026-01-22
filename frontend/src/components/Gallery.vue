@@ -2,12 +2,8 @@
   <div v-if="props.documents.length || editing" class="gallery" ref="gallery">
     <GalleryFigure v-if="editing?.key === 'new'" :doc="editing" :key=editing.key :editing="{rename: mkdir, exit}" />
     <template v-for="(doc, index) in documents" :key=doc.key>
-      <GalleryFigure :doc=doc :editing="editing === doc ? {rename, exit} : null" @menu="contextMenu($event, doc)">
-        <template v-if=showFolderBreadcrumb(index)>
-          <BreadCrumb :path="doc.loc ? doc.loc.split('/') : []" class="folder-change"/>
-          <div class="spacer"></div>
-        </template>
-      </GalleryFigure>
+      <BreadCrumb v-if="showFolderBreadcrumb(index)" :path="doc.loc ? doc.loc.split('/') : []" class="folder-indicator"/>
+      <GalleryFigure :doc=doc :editing="editing === doc ? {rename, exit} : null" @menu="contextMenu($event, doc)" :class="{ 'folder-start': showFolderBreadcrumb(index) }" />
     </template>
   </div>
 </template>
@@ -55,10 +51,12 @@ const rename = (doc: Doc, newName: string) => {
   doc.name = newName // We should get an update from watch but this is quicker
 }
 const gallery = ref<HTMLElement>()
-const columns = computed(() => {
-  if (!gallery.value) return 1
-  return getComputedStyle(gallery.value).gridTemplateColumns.split(' ').length
-})
+const columnCount = ref(1)
+const updateColumns = () => {
+  if (!gallery.value) return
+  columnCount.value = getComputedStyle(gallery.value).gridTemplateColumns.split(' ').length
+}
+const columns = computed(() => columnCount.value)
 defineExpose({
   newFolder() {
     const now = Math.floor(Date.now() / 1000)
@@ -168,12 +166,21 @@ watchEffect(() => {
     focusBreadcrumb()
   }
 })
+let resizeObserver: ResizeObserver | null = null
 onMounted(() => {
   const active = document.querySelector('.cursor') as HTMLElement | null
   if (active) {
     active.scrollIntoView({ block: 'center', behavior: 'instant' })
     active.focus()
   }
+  updateColumns()
+  if (gallery.value) {
+    resizeObserver = new ResizeObserver(updateColumns)
+    resizeObserver.observe(gallery.value)
+  }
+})
+onUnmounted(() => {
+  resizeObserver?.disconnect()
 })
 const mkdir = (doc: Doc, name: string) => {
   const control = connect(controlUrl, {
@@ -205,6 +212,8 @@ const showFolderBreadcrumb = (i: number) => {
   const docloc = docs[i].loc
   return i === 0 ? docloc !== loc.value : docloc !== docs[i - 1].loc
 }
+
+
 const selectionIndeterminate = computed({
   get: () => {
     return (
@@ -254,13 +263,12 @@ const contextMenu = (ev: MouseEvent, doc: Doc) => {
   display: grid;
   gap: .5em;
   grid-template-columns: repeat(auto-fill, minmax(15em, 1fr));
-  grid-template-rows: repeat(minmax(auto, 15em));
   align-items: end;
 }
-.breadcrumb {
-  border-radius: .5em 0 0 .5em;
+.folder-indicator {
+  grid-column: 1 / -1;
 }
-.spacer {
-  flex: 0 1000000000 4rem;
+.folder-start {
+  grid-column-start: 1;
 }
 </style>

@@ -21,7 +21,7 @@ import { watchEffect, ref, computed, watch } from 'vue'
 import { useMainStore } from '@/stores/main'
 import Router from '@/router/index'
 import { needleFormat, localeIncludes, collator } from '@/utils'
-import { sorted } from '@/utils/docsort'
+import { sorted, sortedGrouped } from '@/utils/docsort'
 import FileExplorer from '@/components/FileExplorer.vue'
 
 const store = useMainStore()
@@ -49,9 +49,9 @@ const documents = computed(() => {
     }
   }
   const locsub = loc + '/'
-  // Custom sort override in effect?
+  // Custom sort override in effect? Use grouped sorting to keep folders together
   const order = store.prefs.sortFiltered
-  if (order) return sorted(docs, order)
+  if (order) return sortedGrouped(docs, order)
   // Sort by relevance - current folder, then subfolders, then others
   docs.sort((a, b) => (
     // @ts-ignore
