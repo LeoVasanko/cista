@@ -17,7 +17,7 @@
         <td class="name">
           <FileRenameInput :doc="editing" :rename="mkdir" :exit="() => {editing = null}" />
         </td>
-        <FileModified :doc=editing :key=nowkey />
+        <FileModified :doc=editing :now=nowkey />
         <FileSize :doc=editing />
         <td class="menu"></td>
       </tr>
@@ -55,7 +55,7 @@
               <button tabindex=-1 v-if="store.cursor == doc.key" class="rename-button" @click="() => (editing = doc)">🖊️</button>
             </template>
           </td>
-          <FileModified :doc=doc :key=nowkey />
+          <FileModified :doc=doc :now=nowkey />
           <FileSize :doc=doc />
           <td class="menu">
             <button tabindex=-1 @click.stop="contextMenu($event, doc)">⋮</button>
