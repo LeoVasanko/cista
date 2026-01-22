@@ -4,6 +4,9 @@
     @contextmenu.stop
     @focus.stop="store.cursor = doc.key"
     @click=onclick
+    @mouseenter="tooltip?.startHover"
+    @mousemove="tooltip?.updatePosition"
+    @mouseleave="tooltip?.endHover"
   >
     <figure>
       <slot></slot>
@@ -15,19 +18,24 @@
         </template>
         <template v-else>
           <SelectBox :doc=doc @click="store.cursor = doc.key"/>
-          <span :title="doc.name + '\n' + doc.modified + '\n' + doc.sizedisp">{{ doc.name }}</span>
+          <span>{{ doc.name }}</span>
           <div class=namespacer></div>
         </template>
       </figcaption>
     </figure>
+    <CursorTooltip ref="tooltip" :text="tooltipText">
+      <div class="tooltip-name">{{ doc.name }}</div>
+      <div class="tooltip-details">{{ doc.modified }} — {{ doc.sizedisp }}</div>
+    </CursorTooltip>
   </a>
 </template>
 
 <script setup lang=ts>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useMainStore } from '@/stores/main'
 import { Doc } from '@/repositories/Document'
 import MediaPreview from '@/components/MediaPreview.vue'
+import CursorTooltip from './CursorTooltip.vue'
 
 const store = useMainStore()
 type EditingProp = {
@@ -40,6 +48,9 @@ const props = defineProps<{
   editing?: EditingProp,
 }>()
 const m = ref<typeof MediaPreview | null>(null)
+const tooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)
+
+const tooltipText = computed(() => props.doc.key)
 
 const onclick = (ev: Event) => {
   if (m.value!.play()) ev.preventDefault()
@@ -48,6 +59,13 @@ const onclick = (ev: Event) => {
 </script>
 
 <style scoped>
+.tooltip-name {
+  font-weight: 600;
+  text-align: center;
+}
+.tooltip-details {
+  text-align: center;
+}
 figure {
   max-height: 15em;
   position: relative;
