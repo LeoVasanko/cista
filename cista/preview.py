@@ -174,35 +174,49 @@ def process_video(path, *, maxsize, quality):
             new_height = int(frame.height * scale_factor)
             frame = frame.reformat(width=new_width, height=new_height)
 
-        # Simple rotation detection and logging
+        # Apply EXIF rotation if present
         if frame.rotation:
-            try:
-                fplanes = frame.to_ndarray()
-                # Split into Y, U, V planes of proper dimensions
-                planes = [
-                    fplanes[: frame.height],
-                    fplanes[frame.height : frame.height + frame.height // 4].reshape(
-                        frame.height // 2, frame.width // 2
-                    ),
-                    fplanes[frame.height + frame.height // 4 :].reshape(
-                        frame.height // 2, frame.width // 2
-                    ),
-                ]
-                # Rotate
-                planes = [np.rot90(p, frame.rotation // 90) for p in planes]
-                # Restore PyAV format
-                planes = np.hstack([p.flat for p in planes]).reshape(
-                    -1, planes[0].shape[1]
-                )
-                frame = av.VideoFrame.from_ndarray(planes, format=frame.format.name)
-                del planes, fplanes
-            except Exception as e:
-                if "not yet supported" in str(e):
-                    logger.warning(
-                        f"Not rotating {path.name} preview image by {frame.rotation}°:\n  PyAV: {e}"
+            # frame.rotation indicates clockwise rotation needed to display correctly
+            # np.rot90 rotates counter-clockwise, so we negate k
+            k = (frame.rotation // 90) % 4  # Convert to counter-clockwise rotations
+            if k == 2:
+                # 180° rotation can be done in YUV420p, preserving HDR
+                try:
+                    fplanes = frame.to_ndarray()
+                    # Split into Y, U, V planes of proper dimensions
+                    planes = [
+                        fplanes[: frame.height],
+                        fplanes[
+                            frame.height : frame.height + frame.height // 4
+                        ].reshape(frame.height // 2, frame.width // 2),
+                        fplanes[frame.height + frame.height // 4 :].reshape(
+                            frame.height // 2, frame.width // 2
+                        ),
+                    ]
+                    # Rotate each plane by 180°
+                    planes = [np.rot90(p, 2) for p in planes]
+                    # Restore PyAV format
+                    planes = np.hstack([p.flat for p in planes]).reshape(
+                        -1, planes[0].shape[1]
                     )
-                else:
-                    logger.exception(f"Error rotating video frame: {e}")
+                    frame = av.VideoFrame.from_ndarray(planes, format=frame.format.name)
+                    del planes, fplanes
+                except Exception as e:
+                    logger.exception(f"Error rotating video frame by 180°: {e}")
+            elif k in (1, 3):
+                # 90° or 270° rotation requires RGB conversion (loses HDR)
+                try:
+                    rgb = frame.to_ndarray(format="rgb24")
+                    rgb = np.rot90(rgb, k)
+                    frame = av.VideoFrame.from_ndarray(rgb, format="rgb24")
+                    frame = frame.reformat(
+                        format="yuv420p"
+                    )  # Convert back for encoding
+                    del rgb
+                except Exception as e:
+                    logger.exception(
+                        f"Error rotating video frame by {frame.rotation}°: {e}"
+                    )
         t_load_end = perf_counter()
 
         t_save_start = perf_counter()
@@ -219,6 +233,7 @@ def process_video(path, *, maxsize, quality):
         assert isinstance(ostream, av.VideoStream)
         ostream.width = frame.width
         ostream.height = frame.height
+        ostream.pix_fmt = frame.format.name
         icc = istream.codec_context
         occ = ostream.codec_context
 
