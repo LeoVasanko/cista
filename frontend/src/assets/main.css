@@ -110,6 +110,7 @@
     margin: 0 .5rem 0 1rem !important;
   }
   body#app {
+    position: static !important;
     height: auto !important;
   }
   main {
@@ -165,6 +166,11 @@ body {
   font-family: 'Roboto';
   color: var(--primary-color);
   margin: 0;
+  /* Prevent any scrolling on body */
+  overflow: hidden;
+  /* Fallback for older browsers */
+  height: 100vh;
+  height: 100dvh;
 }
 tbody .size,
 tbody .modified {
@@ -214,12 +220,14 @@ table {
   gap: 0;
 }
 body#app {
-  height: 100vh;
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
 }
 main {
   flex: 1 1 auto;
+  min-height: 0; /* Allow flex child to shrink below content size */
   padding-bottom: 3em; /* convenience space on the bottom */
   overflow-y: scroll;
   text-align: center;
