@@ -73,7 +73,10 @@ watchEffect(() => {
   store.query = props.query
 })
 
-watch([() => props.path.join('/'), () => props.query], () => {
+// Only auto-switch gallery mode when entering a new folder or on initial file list load
+watch([() => props.path.join('/'), () => store.document.length], ([path, len], [oldPath, oldLen]) => {
+  // React to path change or initial document load (0 → non-zero)
+  if (path === oldPath && oldLen !== undefined && oldLen > 0) return
   store.prefs.gallery = documents.value.some(d => d.previewable)
 }, { immediate: true })
 </script>
