@@ -1,18 +1,16 @@
 <template>
   <button class="action-button">
-    <component :is="icon" />
+    <component :is="icons[name]" />
     <slot></slot>
   </button>
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { icons, type IconName } from '@/assets/svg'
 
-const props = defineProps<{
-  name: string
+defineProps<{
+  name: IconName
 }>()
-
-const icon = defineAsyncComponent(() => import(`@/assets/svg/${props.name}.svg`))
 </script>
 
 <style>

@@ -221,7 +221,7 @@ async def wwwroot(req, path=""):
 @app.route("/favicon.ico", methods=["GET", "HEAD"])
 async def favicon(req):
     # Browsers keep asking for it when viewing files (not HTML with icon link)
-    return redirect("/assets/logo-97d1d7eb.svg", status=308)
+    return redirect("/assets/logo-ctv8tVwU.svg", status=308)
 
 
 def get_files(wanted: set) -> list[tuple[PurePosixPath, Path]]:

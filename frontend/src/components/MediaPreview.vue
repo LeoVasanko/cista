@@ -16,7 +16,7 @@
 <script setup lang=ts>
 import { computed, ref } from 'vue'
 import type { Doc } from '@/repositories/Document'
-import PlayIcon from '@/assets/svg/play.svg'
+import { Play as PlayIcon } from '@/assets/svg'
 
 const aud = ref<HTMLAudioElement | null>(null)
 const vid = ref<HTMLVideoElement | null>(null)

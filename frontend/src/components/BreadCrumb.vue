@@ -31,11 +31,12 @@
 </template>
 
 <script setup lang="ts">
-import home from '@/assets/svg/home.svg'
+import { Home } from '@/assets/svg'
 import { nextTick, onBeforeUpdate, ref, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { exists } from '@/utils/fileutil'
 
+const home = Home
 const router = useRouter()
 
 const links = [] as Array<HTMLElement>

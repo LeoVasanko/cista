@@ -11,9 +11,10 @@
 
 <script setup lang="ts">
 import { useMainStore } from '@/stores/main'
-import cog from '@/assets/svg/cog.svg'
+import { Cog } from '@/assets/svg'
 import { exists } from '@/utils/fileutil'
 
+const cog = Cog
 const store = useMainStore()
 const props = defineProps<{
   path: string[],

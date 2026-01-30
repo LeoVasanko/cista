@@ -30,4 +30,16 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Bundle all SVG icons into a single chunk
+          icons: [
+            '/src/assets/svg/index.ts',
+          ],
+        },
+      },
+    },
+  },
 })
