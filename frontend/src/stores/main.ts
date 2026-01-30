@@ -124,7 +124,7 @@ export const useMainStore = defineStore('main', {
         ret.recursive.push([rel, full, doc])
       }
       for (const key of ret.keys) {
-        const base = ret.docs[key]
+        const base = ret.docs[key]!
         const basepath = base.loc ? `${base.loc}/${base.name}` : base.name
         const nremove = base.loc.length
         add(base.name, basepath, base)

@@ -26,7 +26,7 @@ const op = (op: string, dst?: string) => {
   const msg = {
     op,
     sel: sel.keys.map(key => {
-      const doc = sel.docs[key]
+      const doc = sel.docs[key]!
       return doc.loc ? `${doc.loc}/${doc.name}` : doc.name
     })
   }

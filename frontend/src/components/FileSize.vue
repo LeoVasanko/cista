@@ -7,7 +7,7 @@ import { Doc } from '@/repositories/Document'
 import { computed } from 'vue'
 
 const sizeClass = computed(() => {
-  const unit = props.doc.sizedisp.split('\u202F').slice(-1)[0]
+  const unit = props.doc.sizedisp.split('\u202F').slice(-1)[0]!
   return +unit ? "bytes" : unit
 })
 

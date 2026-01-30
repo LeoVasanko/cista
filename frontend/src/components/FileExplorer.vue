@@ -175,7 +175,7 @@ defineExpose({
       let [begin, end] = d > 0 ? [index, moveto] : [moveto, index]
       for (let p = begin; p !== end; p = increment(p, 1)) {
         if (p === N) continue
-        const key = docs[p].key
+        const key = docs[p]!.key
         if (store.selected.has(key)) store.selected.delete(key)
         else store.selected.add(key)
       }
@@ -255,8 +255,8 @@ const mkdir = (doc: Doc, name: string) => {
 }
 const showFolderBreadcrumb = (i: number) => {
   const docs = props.documents
-  const docloc = docs[i].loc
-  return i === 0 ? docloc !== loc.value : docloc !== docs[i - 1].loc
+  const docloc = docs[i]!.loc
+  return i === 0 ? docloc !== loc.value : docloc !== docs[i - 1]!.loc
 }
 const selectionIndeterminate = computed({
   get: () => {

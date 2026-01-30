@@ -70,7 +70,7 @@ export function getFileType(name: string): string {
   const dotIndex = name.lastIndexOf('.')
   if (dotIndex === -1 || dotIndex === name.length - 1) return 'unknown'
   const ext = name.slice(dotIndex + 1).toLowerCase()
-  return Object.keys(filetypes).find(type => filetypes[type].includes(ext)) || 'unknown'
+  return Object.keys(filetypes).find(type => filetypes[type]!.includes(ext)) || 'unknown'
 }
 
 // Prebuilt for fast & consistent sorting

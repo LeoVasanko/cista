@@ -41,7 +41,7 @@ export const sortedGrouped = (documents: Doc[], order: SortOrder) => {
   // Find the "best" item in each folder (first after sorting = best according to criteria)
   const folderBest = new Map<string, Doc>()
   for (const [folder, docs] of byFolder) {
-    folderBest.set(folder, docs[0])
+    folderBest.set(folder, docs[0]!)
   }
 
   // Sort folders: by path for name sort, by best item for modified/size

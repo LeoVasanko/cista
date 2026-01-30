@@ -46,7 +46,7 @@ const next = () => {
   let el: HTMLAudioElement | HTMLVideoElement | null = null
   for (const i in medias) {
     if (medias[i] === (fscurrent || media.value)) {
-      el = medias[+i + 1] || medias[0]
+      el = medias[+i + 1] ?? medias[0] ?? null
       break
     }
   }

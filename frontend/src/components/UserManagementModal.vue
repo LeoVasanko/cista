@@ -179,7 +179,7 @@ const deleteUserAction = async (username: string) => {
 const copySuccess = async (isButtonClick: boolean = false) => {
   const passwordMatch = success.value.match(/(?:Password|New password): (.+)/)
   if (passwordMatch) {
-    await navigator.clipboard.writeText(passwordMatch[1])
+    await navigator.clipboard.writeText(passwordMatch[1]!)
     if (isButtonClick) {
       // Show "Copied!" indication on button
       copyButtonText.value = '✅ Copied!'

@@ -38,10 +38,10 @@ interface Path {
 const store = useMainStore()
 const path: ComputedRef<Path> = computed(() => {
   const p = decodeURIComponent(Router.currentRoute.value.path).split('//')
-  const pathList = p[0].split('/').filter(value => value !== '')
+  const pathList = (p[0] ?? '').split('/').filter(value => value !== '')
   const query = p.slice(1).join('//')
   return {
-    path: p[0],
+    path: p[0] ?? '',
     pathList,
     query
   }

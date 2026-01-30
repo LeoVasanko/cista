@@ -205,7 +205,7 @@ const WSCreate = async () => await new Promise<WebSocket>(resolve => {
 const worker = async () => {
   const ws = await WSCreate()
   while (upqueue.length) {
-    const f = upqueue[0]
+    const f = upqueue[0]!
     const start = f.cloudPos
     const end = Math.min(f.file.size, start + (1<<20))
     const control = { name: f.cloudName, size: f.file.size, start, end }

@@ -145,7 +145,7 @@ const download = async () => {
   if (files.length === 1) {
     store.selected.clear()
     store.error = "Single file via browser downloads"
-    return linkdl(`/files/${files[0][1]}`)
+    return linkdl(`/files/${files[0]![1]}`)
   }
   // Use FileSystem API if multiple files and the browser supports it
   if ('showDirectoryPicker' in window) {
@@ -164,7 +164,7 @@ const download = async () => {
   }
   // Otherwise, zip and download
   console.log("Falling back to zip download")
-  const name = sel.keys.length === 1 ? sel.docs[sel.keys[0]].name : 'download'
+  const name = sel.keys.length === 1 ? sel.docs[sel.keys[0]!]!.name : 'download'
   linkdl(`/zip/${Array.from(sel.keys).join('+')}/${name}.zip`)
   store.error = "Downloading as ZIP via browser downloads"
   store.selected.clear()

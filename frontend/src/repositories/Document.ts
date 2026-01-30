@@ -12,15 +12,20 @@ export type DocProps = {
 }
 
 export class Doc {
-  private _name: string = ""
   public loc: string = ""
   public key: FUID = ""
   public size: number = 0
   public mtime: number = 0
   public haystack: string = ""
   public dir: boolean = false
+  /** @internal Use the name getter/setter instead */
+  public _name: string = ""
 
-  constructor(props: Partial<DocProps> = {}) { Object.assign(this, props) }
+  constructor(props: Partial<DocProps> = {}) {
+    const { name, ...rest } = props
+    Object.assign(this, rest)
+    if (name) this.name = name  // Use setter for validation
+  }
   get name() { return this._name }
   set name(name: string) {
     if (name.includes('/') || name.startsWith('.')) throw Error(`Invalid name: ${name}`)

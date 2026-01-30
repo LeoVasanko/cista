@@ -54,7 +54,7 @@ const isCurrent = (index: number) => index == props.path.length ? 'location' : u
 const focusCurrent = () => {
   nextTick(() => {
     const index = props.path.length
-    if (index < links.length) links[index].focus()
+    if (index < links.length) links[index]!.focus()
   })
 }
 
@@ -63,7 +63,7 @@ const navigate = (index: number) => {
   if (!link) throw Error(`No link at index ${index} (path: ${props.path})`)
   const url = index ? `/${longest.value.slice(0, index).join('/')}/` : '/'
   const long = longest.value.length ? `/${longest.value.join('/')}/` : '/'
-  const browser = decodeURIComponent(location.hash.slice(1).split('//')[0])
+  const browser = decodeURIComponent(location.hash.slice(1).split('//')[0] ?? '')
   const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
   // Clicking on current link clears the rest of the path and adds new history
   if (isCurrent(index)) { longest.value.splice(index); router.push(u) }
