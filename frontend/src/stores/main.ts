@@ -4,13 +4,11 @@ import { defineStore, type StateTree } from 'pinia'
 import { collator } from '@/utils'
 import { logoutUser } from '@/repositories/User'
 import { watchConnect, resumeWatching } from '@/repositories/WS'
-import { shallowRef } from 'vue'
 import { sorted, type SortOrder } from '@/utils/docsort'
 
-export const useMainStore = defineStore({
-  id: 'main',
+export const useMainStore = defineStore('main', {
   state: () => ({
-    document: shallowRef<Doc[]>([]),
+    document: [] as Doc[],
     selected: new Set<FUID>([]),
     query: '' as string,
     fileExplorer: null as any,
@@ -33,7 +31,7 @@ export const useMainStore = defineStore({
     }
   }),
   persist: {
-    paths: ['prefs', 'cursor', 'selected'],
+    pick: ['prefs', 'cursor', 'selected'],
     serializer: {
       deserialize: (data: string): StateTree => {
         const ret = JSON.parse(data)
