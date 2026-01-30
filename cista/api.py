@@ -3,9 +3,7 @@ import typing
 from secrets import token_bytes
 
 import msgspec
-from sanic import Blueprint
-
-from sanic import json
+from sanic import Blueprint, json
 from sanic.exceptions import BadRequest
 
 from cista import __version__, auth, config, watching

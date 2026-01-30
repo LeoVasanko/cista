@@ -128,7 +128,9 @@ def _main():
     auth_mode = args["--auth"]
     if auth_mode:
         if auth_mode not in ("none", "password", "paskia"):
-            raise ValueError(f"Invalid auth mode: {auth_mode}. Use: none, password, paskia")
+            raise ValueError(
+                f"Invalid auth mode: {auth_mode}. Use: none, password, paskia"
+            )
         settings["authentication"] = auth_mode
     elif not exists and not import_droppy:
         # We have no users, so make it public

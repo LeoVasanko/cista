@@ -18,7 +18,9 @@ from sanic.log import logger
 from cista import config
 
 # Auth backend URL for SSO validation (from env with default, no trailing slash)
-PASKIA_BACKEND_URL = os.environ.get("PASKIA_BACKEND_URL", "http://localhost:4401").rstrip("/")
+PASKIA_BACKEND_URL = os.environ.get(
+    "PASKIA_BACKEND_URL", "http://localhost:4401"
+).rstrip("/")
 
 # Shared httpx client for SSO requests (reused for connection pooling)
 _client: httpx.AsyncClient | None = None
