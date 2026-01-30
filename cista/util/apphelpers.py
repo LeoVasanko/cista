@@ -33,8 +33,11 @@ async def handle_sanic_exception(request, e):
         logger.exception(e)
     # Non-browsers get JSON errors
     if "text/html" not in request.headers.accept:
+        # Include auth context if present (for SSO auth required responses)
+        # Auth must be at top level for paskia library to detect it
+        response_data = {"code": code, "message": message, "detail": message, **context}
         return jres(
-            ErrorMsg({"code": code, "message": message, **context}),
+            response_data,
             status=code,
         )
     # Redirections flash the error message via cookies
@@ -52,7 +55,7 @@ def websocket_wrapper(handler):
     @wraps(handler)
     async def wrapper(request, ws, *args, **kwargs):
         try:
-            auth.verify(request)
+            await auth.verify(request)
             await handler(request, ws, *args, **kwargs)
         except Exception as e:
             context, code, message = {}, 500, str(e) or "Internal Server Error"

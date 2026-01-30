@@ -12,6 +12,174 @@ from sanic.exceptions import BadRequest, Forbidden, Unauthorized
 from cista import config, session
 from cista.util import pwgen
 
+_LOGIN_PAGE_CSS = """\
+/* ===========================================
+   LOGIN PAGE STYLES
+   Must match ModalDialog.vue global styles.
+   =========================================== */
+* { box-sizing: border-box; }
+body {
+    font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+    font-size: 1rem;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+}
+.login-card {
+    background: #ddd;
+    color: #000;
+    border-radius: 0.5rem;
+    box-shadow: 0 0 1rem #0008;
+    width: 100%;
+    max-width: 320px;
+}
+h1 {
+    background: #146;
+    color: #fff;
+    margin: 0;
+    padding: 0.5rem 1rem;
+    font-size: 1.2rem;
+    font-weight: normal;
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+.content {
+    padding: 1rem;
+}
+.message {
+    color: #444;
+    margin: 0 0 0.5rem 0;
+    font-size: 0.875rem;
+}
+form {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 1rem;
+    align-items: center;
+}
+label {
+    font-size: 1rem;
+}
+input[type="text"],
+input[type="password"] {
+    font: inherit;
+    font-size: 1rem;
+    padding: 0.5rem;
+    border: 2px solid #888;
+    border-radius: 0.25rem;
+    background: #fff;
+    color: #000;
+    min-width: 0;
+}
+input:focus {
+    outline: none;
+    border-color: #f80;
+}
+.button-row {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+}
+button {
+    font: inherit;
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+    background: #146;
+    color: #fff;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+}
+button:hover { background: #f80; }
+button:disabled {
+    background: #888;
+    cursor: not-allowed;
+}
+.error {
+    grid-column: 1 / -1;
+    color: #c00;
+    font-size: 0.875rem;
+    min-height: 1.2em;
+    margin: 0;
+}
+"""
+
+_LOGIN_PAGE_JS = """\
+const form = document.getElementById('loginForm');
+const error = document.getElementById('error');
+const submitBtn = document.getElementById('submitBtn');
+const usernameField = document.getElementById('username');
+const passwordField = document.getElementById('password');
+const isInIframe = window.parent !== window;
+
+// Focus username field on load
+usernameField.focus();
+
+const showError = (msg) => {
+    error.textContent = msg;
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Log in';
+    // Focus and select the relevant field
+    if (msg.toLowerCase().includes('password')) {
+        passwordField.focus();
+        passwordField.select();
+    } else {
+        usernameField.focus();
+        usernameField.select();
+    }
+};
+
+form.onsubmit = async (e) => {
+    e.preventDefault();
+    error.textContent = '';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Logging in...';
+
+    try {
+        const res = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                username: usernameField.value,
+                password: passwordField.value
+            })
+        });
+
+        if (res.ok) {
+            if (isInIframe) {
+                window.parent.postMessage({type: 'auth-success'}, '*');
+            } else {
+                window.location.href = '/';
+            }
+        } else {
+            const data = await res.json();
+            showError(data.message || data.detail || 'Login failed');
+        }
+    } catch (err) {
+        showError('Connection error. Please try again.');
+    }
+};
+"""
+
+# Import for SSO validation (lazily loaded to avoid circular imports)
+_sso_module = None
+
+
+def _get_sso():
+    global _sso_module
+    if _sso_module is None:
+        from cista import sso
+
+        _sso_module = sso
+    return _sso_module
+
+
 _argon = argon2.PasswordHasher()
 _droppyhash = re.compile(r"^([a-f0-9]{64})\$([a-f0-9]{8})$")
 
@@ -63,60 +231,131 @@ class LoginResponse(msgspec.Struct):
     error: str = ""
 
 
-def verify(request, *, privileged=False):
-    """Raise Unauthorized or Forbidden if the request is not authorized"""
-    if privileged:
-        if request.ctx.user:
-            if request.ctx.user.privileged:
-                return
-            raise Forbidden("Access Forbidden: Only for privileged users", quiet=True)
-    elif config.config.public or request.ctx.user:
+async def verify(request, *, privileged=False):
+    """Verify that the request is authorized.
+
+    For paskia mode, validates against the SSO backend.
+    For password mode, checks session-based authentication.
+    For none mode, allows all requests.
+
+    All 401/403 responses include auth.iframe URL for consistent frontend handling
+    via the paskia library's showAuthIframe().
+
+    Args:
+        request: The Sanic request object
+        privileged: If True, requires admin privileges
+
+    Raises:
+        Unauthorized: If authentication is required
+        Forbidden: If access is denied
+    """
+    if config.config.authentication == "paskia":
+        # SSO validation against auth backend
+        sso = _get_sso()
+        perm = "cista:login cista:admin" if privileged else "cista:login"
+        await sso.validate_sso_request(request, perm=perm)
         return
-    raise Unauthorized(f"Login required for {request.path}", "cookie", quiet=True)
+
+    user = getattr(request.ctx, "user", None)
+    if privileged:
+        if user:
+            if user.privileged:
+                return
+            raise Forbidden(
+                "Access Forbidden: Only for privileged users",
+                context={"auth": {"iframe": "/auth/api/restricted?mode=forbidden"}},
+                quiet=True,
+            )
+    elif config.config.authentication == "none" or user:
+        return
+    # Return iframe URL for paskia library to show login dialog
+    raise Unauthorized(
+        f"Login required for {request.path}",
+        "cookie",
+        context={"auth": {"iframe": "/auth/api/restricted?mode=login"}},
+        quiet=True,
+    )
 
 
-bp = Blueprint("auth")
+bp = Blueprint("auth", url_prefix="/auth")
 
 
-@bp.get("/login")
+@bp.on_request
+async def check_external_auth(request):
+    """Disable built-in auth routes when external auth is enabled"""
+    if config.config.authentication == "paskia":
+        from sanic.exceptions import NotFound
+
+        raise NotFound("Not available in external auth mode")
+
+
+@bp.get("/api/restricted")
 async def login_page(request):
-    doc = Document("Cista Login")
-    with doc.div(id="login"):
-        with doc.form(method="POST", autocomplete="on"):
-            doc.h1("Login")
-            doc.input(
-                name="username",
-                placeholder="Username",
-                autocomplete="username",
-                required=True,
-            ).br
-            doc.input(
-                type="password",
-                name="password",
-                placeholder="Password",
-                autocomplete="current-password",
-                required=True,
-            ).br
-            doc.input(type="submit", value="Login")
-        s = session.get(request)
-        if s:
-            name = s["username"]
-            with doc.form(method="POST", action="/logout"):
-                doc.input(type="submit", value=f"Logout {name}")
-    flash = request.cookies.message
-    if flash:
-        doc.dialog(
-            flash,
-            id="flash",
-            open=True,
-            style="position: fixed; top: 0; left: 0; width: 100%; opacity: .8",
-        )
+    """Login page that works both standalone and in paskia iframe.
+
+    Query params:
+    - mode: 'login' (default), 'reauth', or 'forbidden' - affects messaging
+    """
+    mode = request.args.get("mode", "login")
+    s = session.get(request)
+
+    # Check if already logged in
+    if s and mode == "login":
+        # Already authenticated - signal success if in iframe
+        return html(_login_success_page(s["username"]))
+
+    title = {
+        "forbidden": "Access Denied",
+        "reauth": "Re-authenticate",
+    }.get(mode, "Login Required")
+
+    message = {
+        "forbidden": "You don't have permission. Try logging in with a different account.",
+        "reauth": "Your session has expired. Please log in again.",
+    }.get(mode, "Please log in to continue.")
+
+    doc = Document(f"Cista - {title}")
+    # Add paskia-compatible styling and scripts
+    doc.style(_LOGIN_PAGE_CSS)
+    with doc.div(class_="login-card"):
+        doc.h1(title)
+        with doc.div(class_="content"):
+            doc.p(message, class_="message")
+            with doc.form(method="POST", id="loginForm", autocomplete="on"):
+                doc.label("Username:", for_="username")
+                doc.input(
+                    type="text",
+                    id="username",
+                    name="username",
+                    autocomplete="username webauthn",
+                    required=True,
+                )
+                doc.label("Password:", for_="password")
+                doc.input(
+                    type="password",
+                    id="password",
+                    name="password",
+                    autocomplete="current-password webauthn",
+                    required=True,
+                )
+                with doc.div(class_="button-row"):
+                    doc.button("Log in", type="submit", id="submitBtn")
+                doc.p("", class_="error", id="error")
+
+    # JavaScript for AJAX login and postMessage communication
+    doc.script_(_LOGIN_PAGE_JS)
+
     res = html(doc)
-    if flash:
-        res.cookies.delete_cookie("flash")
     if s is False:
         session.delete(res)
     return res
+
+
+def _login_success_page(username: str) -> str:
+    """Minimal page that signals auth-success to parent iframe."""
+    return str(
+        Document().script_("window.parent.postMessage({type:'auth-success'},'*')")
+    )
 
 
 @bp.post("/login")
@@ -196,7 +435,7 @@ async def change_password(request):
 
 @bp.get("/users")
 async def list_users(request):
-    verify(request, privileged=True)
+    await verify(request, privileged=True)
     users = []
     for name, user in config.config.users.items():
         users.append(
@@ -211,7 +450,7 @@ async def list_users(request):
 
 @bp.post("/users")
 async def create_user(request):
-    verify(request, privileged=True)
+    await verify(request, privileged=True)
     try:
         if request.headers.content_type == "application/json":
             username = request.json["username"]
@@ -240,7 +479,7 @@ async def create_user(request):
 
 @bp.put("/users/<username>")
 async def update_user(request, username):
-    verify(request, privileged=True)
+    await verify(request, privileged=True)
     try:
         if request.headers.content_type == "application/json":
             changes = request.json
@@ -273,7 +512,7 @@ async def update_user(request, username):
 
 @bp.delete("/users/<username>")
 async def delete_user(request, username):
-    verify(request, privileged=True)
+    await verify(request, privileged=True)
     if username not in config.config.users:
         raise BadRequest("User does not exist")
     try:
@@ -281,14 +520,3 @@ async def delete_user(request, username):
     except Exception as e:
         raise BadRequest(str(e)) from e
     return json({"message": f"User {username} deleted"})
-
-
-@bp.put("/config/public")
-async def update_public(request):
-    verify(request, privileged=True)
-    try:
-        public = request.json["public"]
-    except KeyError:
-        raise BadRequest("Missing public field") from None
-    config.update_config({"public": public})
-    return json({"message": "Public setting updated"})

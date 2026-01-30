@@ -3,7 +3,7 @@ import { Doc } from '@/repositories/Document'
 import { defineStore, type StateTree } from 'pinia'
 import { collator } from '@/utils'
 import { logoutUser } from '@/repositories/User'
-import { watchConnect } from '@/repositories/WS'
+import { watchConnect, resumeWatching } from '@/repositories/WS'
 import { shallowRef } from 'vue'
 import { sorted, type SortOrder } from '@/utils/docsort'
 
@@ -17,8 +17,8 @@ export const useMainStore = defineStore({
     error: '' as string,
     connected: false,
     cursor: '' as string,
-    server: {} as Record<string, any>,
-    dialog: '' as '' | 'login' | 'settings' | 'usermgmt',
+    server: {} as Record<string, any> & { authentication?: 'none' | 'paskia' | 'password' },
+    dialog: '' as '' | 'settings' | 'usermgmt',
     uprogress: {} as any,
     dprogress: {} as any,
     prefs: {
@@ -69,10 +69,7 @@ export const useMainStore = defineStore({
       this.user.privileged = privileged
       this.user.isLoggedIn = true
       this.dialog = ''
-      if (!this.connected) watchConnect()
-    },
-    loginDialog() {
-      this.dialog = 'login'
+      if (!this.connected) resumeWatching()
     },
     async logout() {
       console.log("Logout")

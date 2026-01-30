@@ -4,6 +4,7 @@
 
 <script setup lang="ts">
 import { useMainStore } from '@/stores/main'
+import { apiFetch } from '@/repositories/Client'
 import type { SelectedItems } from '@/repositories/Document'
 import { reactive } from 'vue';
 
@@ -96,7 +97,7 @@ const filesystemdl = async (sel: SelectedItems, handle: FileSystemDirectoryHandl
       const writable = await fileHandle.createWritable()
       const url = `/files/${rel}`
       console.log('Fetching', url)
-      const res = await fetch(url)
+      const res = await apiFetch(url)
       if (!res.ok) {
         store.error = `Failed to download ${url}: ${res.status} ${res.statusText}`
         throw new Error(`Failed to download ${url}: ${res.status} ${res.statusText}`)

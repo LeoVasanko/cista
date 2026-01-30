@@ -13,12 +13,15 @@ from typing import Callable, Concatenate, Literal, ParamSpec
 import msgspec
 import msgspec.toml
 
+# Authentication modes
+AuthMode = Literal["none", "paskia", "password"]
+
 
 class Config(msgspec.Struct):
     path: Path
     listen: str
     secret: str = secrets.token_hex(12)
-    public: bool = False
+    authentication: AuthMode = "password"
     name: str = ""
     users: dict[str, User] = {}
     links: dict[str, Link] = {}
@@ -152,7 +155,15 @@ def modifies_config(
 def load_config():
     global config
     init_confdir()
-    config = msgspec.toml.decode(conffile.read_bytes(), type=Config, dec_hook=dec_hook)
+    raw = conffile.read_bytes()
+    config = msgspec.toml.decode(raw, type=Config, dec_hook=dec_hook)
+    # Migrate from old public flag if present
+    raw_dict = msgspec.toml.decode(raw)
+    if "public" in raw_dict and "authentication" not in raw_dict:
+        # Old config: migrate public flag to authentication mode
+        new_auth = "none" if raw_dict["public"] else "password"
+        config = msgspec.structs.replace(config, authentication=new_auth)
+        update_config({})  # Save the migrated config
 
 
 @modifies_config

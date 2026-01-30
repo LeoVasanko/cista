@@ -4,21 +4,25 @@
     <div v-else>
       <h3>Server Settings</h3>
       <div class="form-row">
-        <input
-          id="publicServer"
-          type="checkbox"
-          v-model="serverSettings.public"
+        <label for="authMode">Authentication:</label>
+        <select
+          id="authMode"
+          v-model="serverSettings.authentication"
           @change="updateServerSettings"
-        />
-        <label for="publicServer">Publicly accessible without any user account.</label>
+        >
+          <option value="password">Password (built-in users)</option>
+          <option value="paskia">Paskia (external SSO)</option>
+          <option value="none">None (public access)</option>
+        </select>
       </div>
+      <template v-if="serverSettings.authentication === 'password'">
       <h3>Users</h3>
       <button @click="addUser" class="button" title="Add new user">➕ Add User</button>
       <div v-if="success" class="success-message" @click="copySuccess(false)">
         {{ success }}
         <button v-if="success.includes('Password:') || success.includes('New password:')" @click.stop="copySuccess(true)" class="button small" title="Copy to clipboard">{{ copyButtonText }}</button>
       </div>
-      <table class="user-table">
+      <table>
         <thead>
           <tr>
             <th>Username</th>
@@ -45,7 +49,8 @@
           </tr>
         </tbody>
       </table>
-      <h3 class="error-text">{{ error || '\u00A0' }}</h3>
+      </template>
+      <p class="error-text">{{ error || '\u00A0' }}</p>
       <div class="dialog-buttons">
         <button @click="close" class="button">Close</button>
       </div>
@@ -55,7 +60,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { listUsers, createUser, updateUser, deleteUser, updatePublic } from '@/repositories/User'
+import { listUsers, createUser, updateUser, deleteUser, updateAuthentication, type AuthMode } from '@/repositories/User'
 import type { ISimpleError } from '@/repositories/Client'
 import { useMainStore } from '@/stores/main'
 
@@ -72,7 +77,7 @@ const error = ref('')
 const success = ref('')
 const copyButtonText = ref('📋')
 const serverSettings = reactive({
-  public: false
+  authentication: 'password' as AuthMode
 })
 
 const close = () => {
@@ -197,9 +202,9 @@ const updateServerSettings = async () => {
   try {
     error.value = ''
     success.value = ''
-    await updatePublic(serverSettings.public)
+    await updateAuthentication(serverSettings.authentication)
     // Update store
-    store.server.public = serverSettings.public
+    store.server.authentication = serverSettings.authentication
     success.value = 'Server settings updated'
   } catch (e) {
     const httpError = e as ISimpleError
@@ -208,58 +213,15 @@ const updateServerSettings = async () => {
 }
 
 onMounted(() => {
-  serverSettings.public = store.server.public
+  serverSettings.authentication = store.server.authentication || 'password'
   loadUsers()
 })
 
-watch(() => store.server.public, (newVal) => {
-  serverSettings.public = newVal
+watch(() => store.server.authentication, (newVal) => {
+  serverSettings.authentication = newVal || 'password'
 })
 </script>
 
 <style scoped>
-.user-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-}
-.user-table th, .user-table td {
-  border: 1px solid var(--border-color);
-  padding: 0.5rem;
-  text-align: left;
-}
-.user-table th {
-  background: var(--soft-color);
-}
-.button.small {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
-  margin-right: 0.25rem;
-}
-.button.danger {
-  background: var(--red-color);
-  color: white;
-}
-.button.danger:hover {
-  background: #d00;
-}
-.form-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 0.5rem;
-}
-.form-row label {
-  min-width: 100px;
-}
-.success-message {
-  background: var(--accent-color);
-  color: white;
-  padding: 0.5rem;
-  border-radius: 0.25rem;
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
+/* Component-specific styles - most styling comes from ModalDialog.vue global styles */
 </style>

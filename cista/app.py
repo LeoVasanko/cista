@@ -18,7 +18,7 @@ from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
 from zstandard import ZstdCompressor
 
-from cista import auth, config, preview, session, watching
+from cista import auth, config, preview, session, sso, watching
 from cista.api import bp
 from cista.util.apphelpers import handle_sanic_exception
 
@@ -27,6 +27,7 @@ sanic.helpers._ENTITY_HEADERS = frozenset()
 
 app = Sanic("cista", strict_slashes=True)
 app.blueprint(auth.bp)
+app.blueprint(sso.bp)  # SSO proxy for /auth/* routes (when paskia mode enabled)
 app.blueprint(preview.bp)
 app.blueprint(bp)
 app.exception(Exception)(handle_sanic_exception)
@@ -52,6 +53,7 @@ async def main_stop(app):
     quit.set()
     watching.stop(app)
     app.ctx.threadexec.shutdown()
+    await sso.close_client()
     logger.debug("Cista worker threads all finished")
 
 
@@ -77,7 +79,15 @@ async def use_session(req):
 @app.before_server_start
 def http_fileserver(app):
     bp = Blueprint("fileserver")
-    bp.on_request(auth.verify)
+
+    @bp.on_request
+    async def verify_fileserver(request):
+        """Verify access to file server routes."""
+        if config.config.authentication == "paskia":
+            await auth.verify_sso(request)
+        else:
+            await auth.verify(request)
+
     bp.static(
         "/files/",
         config.config.path,
@@ -239,6 +249,10 @@ def get_files(wanted: set) -> list[tuple[PurePosixPath, Path]]:
 @app.get("/zip/<keys>/<zipfile:ext=zip>")
 async def zip_download(req, keys, zipfile, ext):
     """Download a zip archive of the given keys"""
+    if config.config.authentication == "paskia":
+        await auth.verify_sso(req)
+    else:
+        auth.verify(req)
 
     wanted = set(keys.split("+"))
     files = get_files(wanted)

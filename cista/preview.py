@@ -17,12 +17,19 @@ from sanic import Blueprint, empty, raw, redirect
 from sanic.exceptions import NotFound
 from sanic.log import logger
 
-from cista import config
+from cista import auth, config
 from cista.util.filename import sanitize
 
 pillow_heif.register_heif_opener()
 
 bp = Blueprint("preview", url_prefix="/preview")
+
+
+@bp.on_request
+async def verify_preview(request):
+    """Verify access to preview routes."""
+    await auth.verify(request)
+
 
 # Map EXIF Orientation value to a corresponding PIL transpose
 EXIF_ORI = {
@@ -53,7 +60,7 @@ async def preview(req, path):
         "etag": etag,
         "last-modified": format_date_time(stat.st_mtime),
         "cache-control": "max-age=604800, immutable"
-        + ("" if config.config.public else ", private"),
+        + ("" if config.config.authentication == "none" else ", private"),
         "content-type": "image/avif",
         "content-disposition": f"inline; filename*=UTF-8''{urllib.parse.quote(savename.as_posix())}",
     }

@@ -29,7 +29,7 @@ banner = create_banner()
 
 doc = """\
 Usage:
-  cista [-c <confdir>] [-l <host>] [--import-droppy] [--dev] [<path>]
+  cista [-c <confdir>] [-l <host>] [--auth <mode>] [--import-droppy] [--dev] [<path>]
   cista [-c <confdir>] --user <name> [--privileged] [--password]
 
 Options:
@@ -39,11 +39,15 @@ Options:
                        <addr>:3000 (bind another address, port)
                        /path/to/unix.sock (unix socket)
                        example.com (run on 80 and 443 with LetsEncrypt)
+  --auth MODE       Authentication mode: none, password, paskia
+                       none     - public access, no login required
+                       password - built-in user accounts (default)
+                       paskia   - external SSO via PASKIA_BACKEND_URL
   --import-droppy   Import Droppy config from ~/.droppy/config
   --dev             Developer mode (reloads, friendlier crashes, more logs)
 
-Listen address, path and imported options are preserved in config, and only
-custom config dir and dev mode need to be specified on subsequent runs.
+Listen address, path, auth mode and imported options are preserved in config,
+and only config dir and dev mode need to be specified on subsequent runs.
 
 User management:
   --user NAME       Create or modify user
@@ -107,6 +111,11 @@ def _main():
                 f"Importing Droppy: First remove the existing configuration:\n  rm {config.conffile}",
             )
         settings = droppy.readconf()
+        # Convert Droppy's public flag to authentication mode
+        if "public" in settings:
+            settings["authentication"] = (
+                "none" if settings.pop("public") else "password"
+            )
     if path:
         settings["path"] = path
     elif not exists:
@@ -115,9 +124,15 @@ def _main():
         settings["listen"] = listen
     elif not exists:
         settings["listen"] = ":8000"
-    if not exists and not import_droppy:
+    # Authentication mode
+    auth_mode = args["--auth"]
+    if auth_mode:
+        if auth_mode not in ("none", "password", "paskia"):
+            raise ValueError(f"Invalid auth mode: {auth_mode}. Use: none, password, paskia")
+        settings["authentication"] = auth_mode
+    elif not exists and not import_droppy:
         # We have no users, so make it public
-        settings["public"] = True
+        settings["authentication"] = "none"
     operation = config.update_config(settings)
     sys.stderr.write(f"Config {operation}: {config.conffile}\n")
     # Prepare to serve
@@ -159,7 +174,7 @@ def _user(args):
             {
                 "listen": ":8000",
                 "path": Path.home() / "Downloads",
-                "public": False,
+                "authentication": "password",
             }
         )
         sys.stderr.write(f"Config {operation}: {config.conffile}\n\n")

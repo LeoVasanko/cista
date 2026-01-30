@@ -3,8 +3,8 @@
     <form>
       <template v-if="store.user.isLoggedIn">
         <h3>Update your authentication</h3>
-        <div class="login-container">
-          <label for="username">New password:</label>
+        <div class="form-grid">
+          <label for="passwordChange">New password:</label>
           <input
             ref="passwordChange"
             id="passwordChange"
@@ -26,9 +26,9 @@
             v-model="form.password"
           />
         </div>
-        <h3 class="error-text">
+        <p class="error-text">
           {{ form.error || '\u00A0' }}
-        </h3>
+        </p>
         <div class="dialog-buttons">
           <input id="close" type="reset" value="Close" class="button" @click=close />
           <div class="spacer"></div>
@@ -92,36 +92,5 @@ const submit = async (ev: Event) => {
 </script>
 
 <style scoped>
-.login-container {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: 1fr 2fr;
-  justify-content: center;
-  align-items: center;
-  margin: 1rem 0;
-}
-.dialog-buttons {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.button-login {
-  color: #fff;
-  background: var(--soft-color);
-  cursor: pointer;
-  font-weight: bold;
-  border: 0;
-  border-radius: .5rem;
-  padding: .5rem 2rem;
-  margin-left: auto;
-  transition: all var(--transition-time) linear;
-}
-.button-login:hover, .button-login:focus {
-  background: var(--accent-color);
-  box-shadow: 0 0 .3rem #000;
-}
-.error-text {
-  color: var(--red-color);
-  height: 1em;
-}
+/* Component-specific styles - most styling comes from ModalDialog.vue global styles */
 </style>

@@ -5,7 +5,10 @@ from secrets import token_bytes
 import msgspec
 from sanic import Blueprint
 
-from cista import __version__, config, watching
+from sanic import json
+from sanic.exceptions import BadRequest
+
+from cista import __version__, auth, config, watching
 from cista.fileio import FileServer
 from cista.protocol import ControlTypes, FileRange, StatusMsg
 from cista.util.apphelpers import asend, websocket_wrapper
@@ -98,7 +101,7 @@ async def watch(req, ws):
                 "server": {
                     "name": config.config.name or config.config.path.name,
                     "version": __version__,
-                    "public": config.config.public,
+                    "authentication": config.config.authentication,
                 },
                 "user": {
                     "username": req.ctx.username,
@@ -136,3 +139,18 @@ def subscribe(uuid, ws):
             watching.format_space(watching.state.space),
             watching.format_root(watching.state.root),
         )
+
+
+@bp.put("config/authentication")
+async def update_authentication(request):
+    await auth.verify(request, privileged=True)
+    try:
+        mode = request.json["authentication"]
+        if mode not in ("none", "paskia", "password"):
+            raise ValueError("Invalid authentication mode")
+    except KeyError:
+        raise BadRequest("Missing authentication field") from None
+    except ValueError as e:
+        raise BadRequest(str(e)) from None
+    config.update_config({"authentication": mode})
+    return json({"message": "Authentication setting updated", "authentication": mode})

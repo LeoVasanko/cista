@@ -36,10 +36,8 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": dev_backend,
+      "/auth": dev_backend,
       "/files": dev_backend,
-      "/login": dev_backend,
-      "/logout": dev_backend,
-      "/password-change": dev_backend,
       "/zip": dev_backend,
       "/preview": dev_backend,
     }

@@ -1,5 +1,4 @@
 <template>
-  <LoginModal />
   <SettingsModal />
   <UserManagementModal />
   <header>

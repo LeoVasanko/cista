@@ -1,71 +1,71 @@
+import { apiJson, apiFetch, AuthCancelledError } from 'paskia'
+
+// Type for API error responses
+interface ApiError {
+  error: {
+    code: number
+    message: string
+  }
+}
+
+function hasError(msg: unknown): msg is ApiError {
+  return typeof msg === 'object' && msg !== null && 'error' in msg
+}
+
 class ClientClass {
   async get(url: string): Promise<any> {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        accept: 'application/json'
-      }
-    })
-    let msg
     try {
-      msg = await res.json()
+      const msg = await apiJson(url, { method: 'GET' })
+      if (hasError(msg)) throw new SimpleError(msg.error.code, msg.error.message)
+      return msg
     } catch (e) {
-      throw new SimpleError(res.status, `🛑 ${res.status} ${res.statusText}`)
+      if (e instanceof AuthCancelledError) {
+        throw new SimpleError(401, 'Authentication cancelled')
+      }
+      throw e
     }
-    if ('error' in msg) throw new SimpleError(msg.error.code, msg.error.message)
-    return msg
   }
   async post(url: string, data?: Record<string, any>): Promise<any> {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        accept: 'application/json',
-        'content-type': 'application/json'
-      },
-      body: data !== undefined ? JSON.stringify(data) : undefined
-    })
-    let msg
     try {
-      msg = await res.json()
+      const msg = await apiJson(url, {
+        method: 'POST',
+        body: data
+      })
+      if (hasError(msg)) throw new SimpleError(msg.error.code, msg.error.message)
+      return msg
     } catch (e) {
-      throw new SimpleError(res.status, `🛑 ${res.status} ${res.statusText}`)
+      if (e instanceof AuthCancelledError) {
+        throw new SimpleError(401, 'Authentication cancelled')
+      }
+      throw e
     }
-    if ('error' in msg) throw new SimpleError(msg.error.code, msg.error.message)
-    return msg
   }
   async put(url: string, data?: Record<string, any>): Promise<any> {
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        accept: 'application/json',
-        'content-type': 'application/json'
-      },
-      body: data !== undefined ? JSON.stringify(data) : undefined
-    })
-    let msg
     try {
-      msg = await res.json()
+      const msg = await apiJson(url, {
+        method: 'PUT',
+        body: data
+      })
+      if (hasError(msg)) throw new SimpleError(msg.error.code, msg.error.message)
+      return msg
     } catch (e) {
-      throw new SimpleError(res.status, `🛑 ${res.status} ${res.statusText}`)
+      if (e instanceof AuthCancelledError) {
+        throw new SimpleError(401, 'Authentication cancelled')
+      }
+      throw e
     }
-    if ('error' in msg) throw new SimpleError(msg.error.code, msg.error.message)
-    return msg
   }
   async delete(url: string): Promise<any> {
-    const res = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        accept: 'application/json'
-      }
-    })
-    let msg
     try {
-      msg = await res.json()
+      const msg = await apiJson(url, { method: 'DELETE' })
+      if (hasError(msg)) throw new SimpleError(msg.error.code, msg.error.message)
+      return msg
     } catch (e) {
-      throw new SimpleError(res.status, `🛑 ${res.status} ${res.statusText}`)
+      if (e instanceof AuthCancelledError) {
+        throw new SimpleError(401, 'Authentication cancelled')
+      }
+      throw e
     }
-    if ('error' in msg) throw new SimpleError(msg.error.code, msg.error.message)
-    return msg
   }
 }
 
@@ -82,4 +82,5 @@ class SimpleError extends Error implements ISimpleError {
   }
 }
 
+export { apiFetch }
 export default Client

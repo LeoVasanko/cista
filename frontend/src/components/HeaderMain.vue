@@ -30,14 +30,27 @@
 
 <script setup lang="ts">
 import { useMainStore } from '@/stores/main'
-import { ref, nextTick, watchEffect } from 'vue'
+import { useSsoAuthStore } from '@/stores/ssoAuth'
+import { ref, nextTick, watchEffect, computed } from 'vue'
 import ContextMenu from '@imengyu/vue3-context-menu'
+import { showAuthIframe } from 'paskia'
+import { resumeWatching } from '@/repositories/WS'
 import router from '@/router';
 
 const store = useMainStore()
+const ssoStore = useSsoAuthStore()
 const showSearchInput = ref<boolean>(false)
 const search = ref<HTMLInputElement | null>()
 const searchButton = ref<HTMLButtonElement | null>()
+
+// Display name for SSO users
+const displayUserName = computed(() => {
+  if (ssoStore.isExternalAuth && ssoStore.userName) {
+    return ssoStore.userName
+  }
+  return store.user.username
+})
+
   const props = defineProps<{
   path: Array<string>
   query: string
@@ -73,14 +86,42 @@ watchEffect(() => {
 const settingsMenu = (e: Event) => {
   // show the context menu
   const items = []
-  items.push({ label: 'Change Password', onClick: () => { store.dialog = 'settings' }})
+
+  // For external auth, show user name as link to /auth/
+  if (ssoStore.isExternalAuth && store.user.isLoggedIn) {
+    items.push({
+      label: displayUserName.value || 'User Account',
+      onClick: () => { window.location.href = '/auth/' }
+    })
+    items.push({ divided: true })
+  }
+
+  // Only show password change for non-SSO users
+  if (!ssoStore.isExternalAuth) {
+    items.push({ label: 'Change Password', onClick: () => { store.dialog = 'settings' }})
+  }
+
   if (store.user.privileged) {
     items.push({ label: 'Admin Settings', onClick: () => { store.dialog = 'usermgmt' }})
   }
+
   if (store.user.isLoggedIn) {
-    items.push({ label: `Logout ${store.user.username ?? ''}`, onClick: () => store.logout() })
-  } else {
-    items.push({ label: 'Login', onClick: () => store.loginDialog() })
+    if (ssoStore.isExternalAuth) {
+      // For SSO, link to auth logout
+      items.push({ label: 'Logout', onClick: () => { window.location.href = '/auth/' }})
+    } else {
+      items.push({ label: `Logout ${store.user.username ?? ''}`, onClick: () => store.logout() })
+    }
+  } else if (!ssoStore.isExternalAuth) {
+    // Show login in paskia iframe overlay
+    items.push({ label: 'Login', onClick: async () => {
+      try {
+        await showAuthIframe('/auth/api/restricted')
+        resumeWatching()
+      } catch (e) {
+        console.log('Login cancelled')
+      }
+    }})
   }
   ContextMenu.showContextMenu({
     // @ts-ignore

@@ -1,4 +1,6 @@
 import { useMainStore } from "@/stores/main"
+import { useSsoAuthStore } from "@/stores/ssoAuth"
+import { showAuthIframe, AuthCancelledError, isAuthIframeOpen } from 'paskia'
 import type { FileEntry, UpdateEntry, errorEvent } from "./Document"
 
 export const controlUrl = '/api/control'
@@ -8,6 +10,8 @@ export const watchUrl = '/api/watch'
 let tree = [] as FileEntry[]
 let reconnDelay = 500
 let wsWatch = null as WebSocket | null
+// Track when we're awaiting authentication to prevent reconnection loops
+let awaitingAuth = false
 
 export const loadSession = () => {
   const s = localStorage['cista-files']
@@ -34,6 +38,35 @@ export const connect = (path: string, handlers: Partial<Record<keyof WebSocketEv
   return webSocket
 }
 
+// Handle auth error from WebSocket - show paskia iframe and reconnect on success
+async function handleWsAuthError(msg: any) {
+  const iframe = msg.error?.auth?.iframe
+  if (iframe) {
+    // Stop reconnection attempts while showing auth dialog
+    awaitingAuth = true
+    if (watchTimeout !== null) {
+      clearTimeout(watchTimeout)
+      watchTimeout = null
+    }
+    try {
+      await showAuthIframe(iframe)
+      // Auth succeeded - reconnect
+      awaitingAuth = false
+      watchConnect()
+    } catch (e) {
+      awaitingAuth = false
+      if (e instanceof AuthCancelledError) {
+        console.log('User cancelled authentication')
+        // User cancelled - don't automatically retry, wait for user action
+      } else {
+        console.error('Auth iframe error:', e)
+      }
+    }
+    return true
+  }
+  return false
+}
+
 export const watchConnect = () => {
   if (watchTimeout !== null) {
     clearTimeout(watchTimeout)
@@ -51,9 +84,9 @@ export const watchConnect = () => {
     if (store.connected) return
     const msg = JSON.parse(event.data)
     if ('error' in msg) {
-      if (msg.error.code === 401) {
-        store.user.isLoggedIn = false
-        store.dialog = 'login'
+      if (msg.error.code === 401 || msg.error.code === 403) {
+        // Show paskia auth iframe (works for both password and paskia modes)
+        handleWsAuthError(msg)
       } else {
         store.error = msg.error.message
       }
@@ -67,7 +100,11 @@ export const watchConnect = () => {
       store.error = ''
       if (msg.user) store.login(msg.user.username, msg.user.privileged)
       else if (store.isUserLogged) store.logout()
-      if (!msg.server.public && !msg.user) store.dialog = 'login'
+      // Start SSO validation polling only in paskia mode
+      if (msg.server.authentication === 'paskia') {
+        const ssoStore = useSsoAuthStore()
+        ssoStore.startValidationPolling()
+      }
     }
   })
 }
@@ -78,21 +115,31 @@ export const watchDisconnect = () => {
   wsWatch = null
 }
 
+// Reset auth state and reconnect - call after successful authentication
+export const resumeWatching = () => {
+  awaitingAuth = false
+  if (watchTimeout !== null) {
+    clearTimeout(watchTimeout)
+    watchTimeout = null
+  }
+  watchConnect()
+}
+
 let watchTimeout: any = null
 
 const watchReconnect = (event: MessageEvent) => {
   const store = useMainStore()
+  // Don't reconnect if we're awaiting authentication or auth iframe is showing
+  if (awaitingAuth || isAuthIframeOpen()) {
+    console.log('Skipping reconnect - awaiting authentication')
+    return
+  }
   if (store.connected) {
     console.warn("Disconnected from server", event)
     store.connected = false
     store.error = 'Reconnecting...'
   }
   if (watchTimeout !== null) clearTimeout(watchTimeout)
-  // Don't hammer the server while on login dialog
-  if (store.dialog === 'login') {
-    watchTimeout = setTimeout(watchReconnect, 100)
-    return
-  }
   reconnDelay = Math.min(5000, reconnDelay + 500)
   // The server closes the websocket after errors, so we need to reopen it
   watchTimeout = setTimeout(watchConnect, reconnDelay)
@@ -152,9 +199,9 @@ function handleUpdateMessage(updateData: { update: UpdateEntry[] }) {
 
 function handleError(msg: errorEvent) {
   const store = useMainStore()
-  if (msg.error.code === 401) {
-    store.user.isLoggedIn = false
-    store.dialog = 'login'
+  if (msg.error.code === 401 || msg.error.code === 403) {
+    // Show paskia auth iframe (works for both password and paskia modes)
+    handleWsAuthError(msg as any)
     return
   }
 }
