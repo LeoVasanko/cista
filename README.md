@@ -38,6 +38,39 @@ pip install cista --break-system-packages
 
 The server remembers its settings in the config folder (default `~/.local/share/cista/`), including the listen port and directory, for future runs without arguments.
 
+## Authentication
+
+Cista supports three authentication modes:
+
+### Built-in Authentication (default)
+
+User accounts are managed directly by Cista. Create users with the `--user` flag:
+
+```fish
+uvx cista --user admin --privileged  # Create admin user
+uvx cista --user guest               # Create regular user
+```
+
+Privileged users can manage other users and change settings via the Admin Settings menu.
+
+### Public Mode
+
+In public mode, anyone can read, send and even delete files without without logging in. Privileged users can still log in via the menu to access admin settings, from where the public mode can be toggled on or off.
+
+### Paskia SSO Authentication
+
+For centralized authentication, Cista can integrate with [Paskia](https://git.zi.fi/LeoVasanko/paskia) SSO server. Set the `PASKIA_BACKEND_URL` environment variable:
+
+```fish
+PASKIA_BACKEND_URL=http://localhost:4401 uvx cista
+```
+
+In Paskia mode:
+- All `/auth/*` requests are proxied to the Paskia backend
+- Users with `cista:login` permission can access files
+- Users with `cista:admin` permission get privileged access (Admin Settings)
+- Public mode works with Paskia: unauthenticated users can browse, while the menu has option to login
+
 ### Internet Access
 
 Most admins find the [Caddy](https://caddyserver.com/) web server convenient for its auto TLS certificates and all. A proxy also allows running multiple web services or Cista instances on the same IP address but different (sub)domains.
