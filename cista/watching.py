@@ -9,6 +9,10 @@ from pathlib import Path, PurePosixPath
 from stat import S_ISDIR, S_ISREG
 
 import msgspec
+
+# Debug instrumentation
+def _dbg(msg):
+    print(f"[watch] {time.perf_counter():.3f} {msg}", file=sys.stderr, flush=True)
 from natsort import humansorted, natsort_keygen, ns
 from sanic.log import logger
 
@@ -46,6 +50,7 @@ def treeiter(rootmod):
 
 
 def treeget(rootmod: list[FileEntry], path: PurePosixPath):
+    t0 = time.perf_counter()
     begin = None
     ret = []
 
@@ -59,16 +64,22 @@ def treeget(rootmod: list[FileEntry], path: PurePosixPath):
             break
         ret.append(entry)
 
+    dur = time.perf_counter() - t0
+    if dur > 0.01:
+        _dbg(f"treeget({path}) scanned {len(rootmod)} entries in {dur*1000:.1f}ms, found {len(ret)} items")
     return begin, ret
 
 
 def treeinspos(rootmod: list[FileEntry], relpath: PurePosixPath, relfile: int):
     # Find the first entry greater than the new one
     # precondition: the new entry doesn't exist
+    t0 = time.perf_counter()
     isfile = 0
     level = 0
     i = 0
+    iter_count = 0
     for i, rel, entry in treeiter(rootmod):
+        iter_count += 1
         if entry.level > level:
             # We haven't found item at level, skip subdirectories
             continue
@@ -109,6 +120,9 @@ def treeinspos(rootmod: list[FileEntry], relpath: PurePosixPath, relfile: int):
     else:
         i += 1
 
+    dur = time.perf_counter() - t0
+    if dur > 0.01:
+        _dbg(f"treeinspos({relpath}) iterated {iter_count}/{len(rootmod)} entries in {dur*1000:.1f}ms -> pos {i}")
     return i
 
 
@@ -120,6 +134,7 @@ quit = threading.Event()
 
 
 def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]:
+    t0 = time.perf_counter()
     path = rootpath / rel
     ret = []
     try:
@@ -171,34 +186,54 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
         logger.error(f"Watching {path=}: {e!r}")
     if ret:
         ret[0] = entry
+    dur = time.perf_counter() - t0
+    if dur > 0.05:
+        _dbg(f"walk({rel}) returned {len(ret)} entries in {dur*1000:.1f}ms")
     return ret
 
 
 def update_root(loop):
     """Full filesystem scan"""
+    t0 = time.perf_counter()
     old = state.root
     new = walk(PurePosixPath())
+    t_walk = time.perf_counter()
     if old != new:
         update = format_update(old, new)
+        t_format = time.perf_counter()
         with state.lock:
             broadcast(update, loop)
             state.root = new
+        t_done = time.perf_counter()
+        _dbg(f"update_root: walk={t_walk-t0:.3f}s format={t_format-t_walk:.3f}s broadcast={t_done-t_format:.3f}s total={t_done-t0:.3f}s ({len(new)} entries)")
 
 
 def update_path(rootmod: list[FileEntry], relpath: PurePosixPath, loop):
     """Called on FS updates, check the filesystem and broadcast any changes."""
+    t0 = time.perf_counter()
     new = walk(relpath)
+    t_walk = time.perf_counter()
     obegin, old = treeget(rootmod, relpath)
+    t_get = time.perf_counter()
 
     if old == new:
+        dur = time.perf_counter() - t0
+        if dur > 0.01:
+            _dbg(f"update_path({relpath}) no change, walk={t_walk-t0:.3f}s get={t_get-t_walk:.3f}s")
         return
 
     if obegin is not None:
         del rootmod[obegin : obegin + len(old)]
+    t_del = time.perf_counter()
 
     if new:
         i = treeinspos(rootmod, relpath, new[0].isfile)
+        t_inspos = time.perf_counter()
         rootmod[i:i] = new
+        t_ins = time.perf_counter()
+        _dbg(f"update_path({relpath}) walk={t_walk-t0:.3f}s get={t_get-t_walk:.3f}s del={t_del-t_get:.3f}s inspos={t_inspos-t_del:.3f}s ins={t_ins-t_inspos:.3f}s total={t_ins-t0:.3f}s (old={len(old)} new={len(new)} tree={len(rootmod)})")
+    else:
+        _dbg(f"update_path({relpath}) DELETED walk={t_walk-t0:.3f}s get={t_get-t_walk:.3f}s del={t_del-t_get:.3f}s (old={len(old)})")
 
 
 def update_space(loop):
@@ -218,6 +253,7 @@ def update_space(loop):
 
 
 def format_update(old, new):
+    t0 = time.perf_counter()
     # Make keep/del/insert diff until one of the lists ends
     oidx, nidx = 0, 0
     oremain, nremain = set(old), set(new)
@@ -228,6 +264,7 @@ def format_update(old, new):
     # candidates exist in both sequences but are not equal (rename/move cases)
     old_pos = {e: i for i, e in enumerate(old)}
     new_pos = {e: i for i, e in enumerate(new)}
+    t_setup = time.perf_counter()
 
     while oidx < len(old) and nidx < len(new):
         iteration_count += 1
@@ -314,7 +351,11 @@ def format_update(old, new):
     elif nremain:
         update.append(UpdIns(new[nidx:]))
 
-    return msgspec.json.encode({"update": update}).decode()
+    t_diff = time.perf_counter()
+    result = msgspec.json.encode({"update": update}).decode()
+    t_encode = time.perf_counter()
+    _dbg(f"format_update: setup={t_setup-t0:.3f}s diff={t_diff-t_setup:.3f}s ({iteration_count} iters) encode={t_encode-t_diff:.3f}s total={t_encode-t0:.3f}s (old={len(old)} new={len(new)} ops={len(update)} msg={len(result)}B)")
+    return result
 
 
 def format_space(usage):
@@ -326,16 +367,30 @@ def format_root(root):
 
 
 def broadcast(msg, loop):
-    return asyncio.run_coroutine_threadsafe(abroadcast(msg), loop).result()
+    t0 = time.perf_counter()
+    fut = asyncio.run_coroutine_threadsafe(abroadcast(msg), loop)
+    t_scheduled = time.perf_counter()
+    result = fut.result()
+    t_done = time.perf_counter()
+    if t_done - t0 > 0.01:
+        _dbg(f"broadcast: schedule={t_scheduled-t0:.3f}s wait={t_done-t_scheduled:.3f}s total={t_done-t0:.3f}s ({len(msg)}B to {result} clients)")
+    return result
 
 
 async def abroadcast(msg):
+    t0 = time.perf_counter()
+    client_count = 0
     try:
         for queue in pubsub.values():
             queue.put_nowait(msg)
+            client_count += 1
     except Exception:
         # Log because asyncio would silently eat the error
         logger.exception("Broadcast error")
+    dur = time.perf_counter() - t0
+    if dur > 0.001:
+        _dbg(f"abroadcast: {client_count} clients in {dur*1000:.2f}ms")
+    return client_count
 
 
 ## Watcher thread
@@ -372,17 +427,25 @@ def watcher_inotify(loop):
                 update_space(loop)
             # Inotify events, update the tree
             dirty = False
+            t_batch_start = time.perf_counter()
             rootmod = state.root[:]
+            t_copy = time.perf_counter()
+            event_count = 0
+            interesting_count = 0
+            paths_updated = []
             for event in i.event_gen(yield_nones=False, timeout_s=0.1):
                 assert event
+                event_count += 1
                 if quit.is_set():
                     return
                 interesting = any(f in modified_flags for f in event[1])
                 if interesting:
+                    interesting_count += 1
                     # Update modified path
                     path = PurePosixPath(event[2]) / event[3]
                     try:
                         rel_path = path.relative_to(rootpath)
+                        paths_updated.append(str(rel_path))
                         update_path(rootmod, rel_path, loop)
                     except Exception as e:
                         logger.error(
@@ -395,12 +458,19 @@ def watcher_inotify(loop):
                 # Wait a maximum of 0.2s to push the updates
                 if dirty and time.monotonic() >= t + 0.2:
                     break
+            t_events_done = time.perf_counter()
+            if event_count > 0:
+                _dbg(f"inotify batch: {event_count} events, {interesting_count} interesting, copy={t_copy-t_batch_start:.3f}s events={t_events_done-t_copy:.3f}s paths={paths_updated[:5]}{'...' if len(paths_updated) > 5 else ''}")
             if dirty and state.root != rootmod:
+                t_diff_start = time.perf_counter()
                 try:
                     update = format_update(state.root, rootmod)
+                    t_format_done = time.perf_counter()
                     with state.lock:
                         broadcast(update, loop)
                         state.root = rootmod
+                    t_broadcast_done = time.perf_counter()
+                    _dbg(f"inotify->broadcast TOTAL: batch_to_format={t_diff_start-t_batch_start:.3f}s format={t_format_done-t_diff_start:.3f}s broadcast={t_broadcast_done-t_format_done:.3f}s TOTAL={t_broadcast_done-t_batch_start:.3f}s")
                 except Exception:
                     logger.exception(
                         "format_update failed; falling back to full rescan"
