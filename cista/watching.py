@@ -10,9 +10,12 @@ from stat import S_ISDIR, S_ISREG
 
 import msgspec
 
+
 # Debug instrumentation
 def _dbg(msg):
     print(f"[watch] {time.perf_counter():.3f} {msg}", file=sys.stderr, flush=True)
+
+
 from natsort import humansorted, natsort_keygen, ns
 from sanic.log import logger
 
@@ -66,7 +69,9 @@ def treeget(rootmod: list[FileEntry], path: PurePosixPath):
 
     dur = time.perf_counter() - t0
     if dur > 0.01:
-        _dbg(f"treeget({path}) scanned {len(rootmod)} entries in {dur*1000:.1f}ms, found {len(ret)} items")
+        _dbg(
+            f"treeget({path}) scanned {len(rootmod)} entries in {dur * 1000:.1f}ms, found {len(ret)} items"
+        )
     return begin, ret
 
 
@@ -122,7 +127,9 @@ def treeinspos(rootmod: list[FileEntry], relpath: PurePosixPath, relfile: int):
 
     dur = time.perf_counter() - t0
     if dur > 0.01:
-        _dbg(f"treeinspos({relpath}) iterated {iter_count}/{len(rootmod)} entries in {dur*1000:.1f}ms -> pos {i}")
+        _dbg(
+            f"treeinspos({relpath}) iterated {iter_count}/{len(rootmod)} entries in {dur * 1000:.1f}ms -> pos {i}"
+        )
     return i
 
 
@@ -188,7 +195,7 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
         ret[0] = entry
     dur = time.perf_counter() - t0
     if dur > 0.05:
-        _dbg(f"walk({rel}) returned {len(ret)} entries in {dur*1000:.1f}ms")
+        _dbg(f"walk({rel}) returned {len(ret)} entries in {dur * 1000:.1f}ms")
     return ret
 
 
@@ -205,7 +212,9 @@ def update_root(loop):
             broadcast(update, loop)
             state.root = new
         t_done = time.perf_counter()
-        _dbg(f"update_root: walk={t_walk-t0:.3f}s format={t_format-t_walk:.3f}s broadcast={t_done-t_format:.3f}s total={t_done-t0:.3f}s ({len(new)} entries)")
+        _dbg(
+            f"update_root: walk={t_walk - t0:.3f}s format={t_format - t_walk:.3f}s broadcast={t_done - t_format:.3f}s total={t_done - t0:.3f}s ({len(new)} entries)"
+        )
 
 
 def update_path(rootmod: list[FileEntry], relpath: PurePosixPath, loop):
@@ -219,7 +228,9 @@ def update_path(rootmod: list[FileEntry], relpath: PurePosixPath, loop):
     if old == new:
         dur = time.perf_counter() - t0
         if dur > 0.01:
-            _dbg(f"update_path({relpath}) no change, walk={t_walk-t0:.3f}s get={t_get-t_walk:.3f}s")
+            _dbg(
+                f"update_path({relpath}) no change, walk={t_walk - t0:.3f}s get={t_get - t_walk:.3f}s"
+            )
         return
 
     if obegin is not None:
@@ -231,9 +242,13 @@ def update_path(rootmod: list[FileEntry], relpath: PurePosixPath, loop):
         t_inspos = time.perf_counter()
         rootmod[i:i] = new
         t_ins = time.perf_counter()
-        _dbg(f"update_path({relpath}) walk={t_walk-t0:.3f}s get={t_get-t_walk:.3f}s del={t_del-t_get:.3f}s inspos={t_inspos-t_del:.3f}s ins={t_ins-t_inspos:.3f}s total={t_ins-t0:.3f}s (old={len(old)} new={len(new)} tree={len(rootmod)})")
+        _dbg(
+            f"update_path({relpath}) walk={t_walk - t0:.3f}s get={t_get - t_walk:.3f}s del={t_del - t_get:.3f}s inspos={t_inspos - t_del:.3f}s ins={t_ins - t_inspos:.3f}s total={t_ins - t0:.3f}s (old={len(old)} new={len(new)} tree={len(rootmod)})"
+        )
     else:
-        _dbg(f"update_path({relpath}) DELETED walk={t_walk-t0:.3f}s get={t_get-t_walk:.3f}s del={t_del-t_get:.3f}s (old={len(old)})")
+        _dbg(
+            f"update_path({relpath}) DELETED walk={t_walk - t0:.3f}s get={t_get - t_walk:.3f}s del={t_del - t_get:.3f}s (old={len(old)})"
+        )
 
 
 def update_space(loop):
@@ -354,7 +369,9 @@ def format_update(old, new):
     t_diff = time.perf_counter()
     result = msgspec.json.encode({"update": update}).decode()
     t_encode = time.perf_counter()
-    _dbg(f"format_update: setup={t_setup-t0:.3f}s diff={t_diff-t_setup:.3f}s ({iteration_count} iters) encode={t_encode-t_diff:.3f}s total={t_encode-t0:.3f}s (old={len(old)} new={len(new)} ops={len(update)} msg={len(result)}B)")
+    _dbg(
+        f"format_update: setup={t_setup - t0:.3f}s diff={t_diff - t_setup:.3f}s ({iteration_count} iters) encode={t_encode - t_diff:.3f}s total={t_encode - t0:.3f}s (old={len(old)} new={len(new)} ops={len(update)} msg={len(result)}B)"
+    )
     return result
 
 
@@ -373,7 +390,9 @@ def broadcast(msg, loop):
     result = fut.result()
     t_done = time.perf_counter()
     if t_done - t0 > 0.01:
-        _dbg(f"broadcast: schedule={t_scheduled-t0:.3f}s wait={t_done-t_scheduled:.3f}s total={t_done-t0:.3f}s ({len(msg)}B to {result} clients)")
+        _dbg(
+            f"broadcast: schedule={t_scheduled - t0:.3f}s wait={t_done - t_scheduled:.3f}s total={t_done - t0:.3f}s ({len(msg)}B to {result} clients)"
+        )
     return result
 
 
@@ -389,113 +408,310 @@ async def abroadcast(msg):
         logger.exception("Broadcast error")
     dur = time.perf_counter() - t0
     if dur > 0.001:
-        _dbg(f"abroadcast: {client_count} clients in {dur*1000:.2f}ms")
+        _dbg(f"abroadcast: {client_count} clients in {dur * 1000:.2f}ms")
     return client_count
 
 
 ## Watcher thread
 
 
+class PathIndex:
+    """O(1) path lookup index for the flat FileEntry tree."""
+
+    def __init__(self, root: list[FileEntry]):
+        self.root = root
+        self._index: dict[PurePosixPath, tuple[int, int]] = {}
+        self._rebuild()
+
+    def _rebuild(self):
+        """Build path -> (start_idx, count) mapping in single O(n) pass."""
+        index: dict[PurePosixPath, tuple[int, int]] = {}
+        path_stack: list[tuple[PurePosixPath, int]] = []  # (path, start_idx)
+
+        for i, entry in enumerate(self.root):
+            # Pop completed paths from stack
+            while path_stack and entry.level <= len(path_stack[-1][0].parts):
+                completed_path, start_idx = path_stack.pop()
+                index[completed_path] = (start_idx, i - start_idx)
+
+            # Build current path
+            if entry.level == 0:
+                current_path = PurePosixPath()
+            else:
+                parent = path_stack[-1][0] if path_stack else PurePosixPath()
+                current_path = parent / entry.name
+
+            path_stack.append((current_path, i))
+
+        # Close remaining paths
+        for path, start_idx in path_stack:
+            index[path] = (start_idx, len(self.root) - start_idx)
+
+        self._index = index
+
+    def get(self, path: PurePosixPath) -> tuple[int | None, list[FileEntry]]:
+        """O(1) lookup: returns (start_idx, entries) or (None, [])."""
+        if path not in self._index:
+            return None, []
+        start, count = self._index[path]
+        return start, self.root[start : start + count]
+
+    def find_insert_pos(self, path: PurePosixPath, isfile: int) -> int:
+        """Find insertion position using index + binary search."""
+        if not path.parts:
+            return 0
+
+        parent = path.parent
+        name = path.name
+
+        # Find parent's range
+        if parent == PurePosixPath():
+            # Insert at root level - scan root's direct children
+            start, count = 0, len(self.root)
+            target_level = 1
+        elif parent in self._index:
+            start, count = self._index[parent]
+            start += 1  # Skip parent entry itself
+            count -= 1
+            target_level = len(parent.parts) + 1
+        else:
+            # Parent doesn't exist, shouldn't happen
+            return len(self.root)
+
+        # Binary search among direct children at target_level
+        # Collect children indices first
+        children = []
+        i = start
+        end = start + count
+        while i < end:
+            entry = self.root[i]
+            if entry.level == target_level:
+                children.append(i)
+            i += 1
+
+        if not children:
+            return start
+
+        # Binary search for insertion point
+        nsort = sortkey(name)
+        lo, hi = 0, len(children)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            idx = children[mid]
+            entry = self.root[idx]
+            ename = entry.name
+            esort = sortkey(ename)
+            # Compare: isfile, then sort key, then case-sensitive
+            cmp = (
+                entry.isfile - isfile
+                or (esort > nsort) - (esort < nsort)
+                or (ename > name) - (ename < name)
+            )
+            if cmp < 0:
+                lo = mid + 1
+            else:
+                hi = mid
+
+        if lo < len(children):
+            return children[lo]
+        elif children:
+            # Insert after last child's subtree
+            last_idx = children[-1]
+            last_entry = self.root[last_idx]
+            if last_entry.isfile:
+                return last_idx + 1
+            # Find end of last child's subtree
+            last_path = parent / last_entry.name
+            if last_path in self._index:
+                s, c = self._index[last_path]
+                return s + c
+            return last_idx + 1
+        return start
+
+    def apply_update(
+        self, path: PurePosixPath, new_entries: list[FileEntry]
+    ) -> list[FileEntry]:
+        """Apply an update and return the new root. Rebuilds index."""
+        start, old_entries = self.get(path)
+
+        if old_entries == new_entries:
+            return self.root
+
+        new_root = self.root[:]
+
+        if start is not None:
+            del new_root[start : start + len(old_entries)]
+
+        if new_entries:
+            # Rebuild index on modified list to find insert pos
+            self.root = new_root
+            self._rebuild()
+            insert_pos = self.find_insert_pos(path, new_entries[0].isfile)
+            new_root[insert_pos:insert_pos] = new_entries
+
+        self.root = new_root
+        self._rebuild()
+        return new_root
+
+
+def collapse_paths(paths: set[PurePosixPath]) -> set[PurePosixPath]:
+    """Remove child paths if parent is in set."""
+    if not paths:
+        return paths
+    # Sort by depth (fewest parts first)
+    sorted_paths = sorted(paths, key=lambda p: len(p.parts))
+    result = set()
+    for path in sorted_paths:
+        # Check if any ancestor is already in result
+        is_child = False
+        for i in range(len(path.parts)):
+            ancestor = PurePosixPath(*path.parts[:i]) if i > 0 else PurePosixPath()
+            if ancestor in result:
+                is_child = True
+                break
+        if not is_child:
+            result.add(path)
+    return result
+
+
 def watcher_inotify(loop):
     """Inotify watcher thread (Linux only)"""
     import inotify.adapters
 
-    modified_flags = (
-        "IN_CREATE",
-        "IN_DELETE",
-        "IN_DELETE_SELF",
-        "IN_MODIFY",
-        "IN_MOVE_SELF",
-        "IN_MOVED_FROM",
-        "IN_MOVED_TO",
+    modified_flags = frozenset(
+        (
+            "IN_CREATE",
+            "IN_DELETE",
+            "IN_DELETE_SELF",
+            "IN_MODIFY",
+            "IN_MOVE_SELF",
+            "IN_MOVED_FROM",
+            "IN_MOVED_TO",
+        )
     )
+
+    # Debounce settings
+    DEBOUNCE_DELAY = 0.1  # Wait 100ms after last event
+    DEBOUNCE_MAX = 0.5  # But no more than 500ms total
+
     while not quit.is_set():
-        i = inotify.adapters.InotifyTree(rootpath.as_posix())
+        inotify_tree = inotify.adapters.InotifyTree(rootpath.as_posix())
+
         # Initialize the tree from filesystem
         update_root(loop)
+        path_index = PathIndex(state.root[:])
+
         trefresh = time.monotonic() + 300.0
         tspace = time.monotonic() + 5.0
-        # Watch for changes (frequent wakeups needed for quiting)
+
+        # Pending changes
+        dirty_paths: set[PurePosixPath] = set()
+        first_event_time: float | None = None
+        last_event_time: float | None = None
+        event_count = 0
+
         while not quit.is_set():
-            t = time.monotonic()
-            # The watching is not entirely reliable, so do a full refresh every 30 seconds
-            if t >= trefresh:
+            now = time.monotonic()
+
+            # Full refresh every 300s
+            if now >= trefresh:
                 break
-            # Disk usage update
-            if t >= tspace:
-                tspace = time.monotonic() + 5.0
+
+            # Disk usage update every 5s
+            if now >= tspace:
+                tspace = now + 5.0
                 update_space(loop)
-            # Inotify events, update the tree
-            dirty = False
-            t_batch_start = time.perf_counter()
-            rootmod = state.root[:]
-            t_copy = time.perf_counter()
-            event_count = 0
-            interesting_count = 0
-            paths_updated = []
-            for event in i.event_gen(yield_nones=False, timeout_s=0.1):
-                assert event
-                event_count += 1
-                if quit.is_set():
-                    return
-                interesting = any(f in modified_flags for f in event[1])
-                if interesting:
-                    interesting_count += 1
-                    # Update modified path
-                    path = PurePosixPath(event[2]) / event[3]
+
+            # Check if we should flush pending changes
+            should_flush = False
+            if dirty_paths:
+                time_since_last = now - last_event_time if last_event_time else 0
+                time_since_first = now - first_event_time if first_event_time else 0
+                if time_since_last >= DEBOUNCE_DELAY or time_since_first >= DEBOUNCE_MAX:
+                    should_flush = True
+
+            if should_flush:
+                t_start = time.perf_counter()
+
+                # Collapse paths (remove children if parent present)
+                collapsed = collapse_paths(dirty_paths)
+                t_collapse = time.perf_counter()
+
+                _dbg(
+                    f"flush: {event_count} events -> {len(dirty_paths)} paths -> {len(collapsed)} collapsed"
+                )
+
+                # Process each collapsed path
+                new_root = path_index.root
+                for path in collapsed:
+                    new_entries = walk(path)
+                    new_root = path_index.apply_update(path, new_entries)
+
+                t_update = time.perf_counter()
+
+                # Broadcast if changed
+                if new_root != state.root:
                     try:
-                        rel_path = path.relative_to(rootpath)
-                        paths_updated.append(str(rel_path))
-                        update_path(rootmod, rel_path, loop)
-                    except Exception as e:
-                        logger.error(
-                            f"Error processing inotify event for path {path}: {e}"
+                        update_msg = format_update(state.root, new_root)
+                        t_format = time.perf_counter()
+                        with state.lock:
+                            broadcast(update_msg, loop)
+                            state.root = new_root
+                        t_broadcast = time.perf_counter()
+                        _dbg(
+                            f"inotify->broadcast: collapse={t_collapse - t_start:.3f}s update={t_update - t_collapse:.3f}s format={t_format - t_update:.3f}s broadcast={t_broadcast - t_format:.3f}s TOTAL={t_broadcast - t_start:.3f}s"
                         )
-                        raise
-                    if not dirty:
-                        t = time.monotonic()
-                        dirty = True
-                # Wait a maximum of 0.2s to push the updates
-                if dirty and time.monotonic() >= t + 0.2:
-                    break
-            t_events_done = time.perf_counter()
-            if event_count > 0:
-                _dbg(f"inotify batch: {event_count} events, {interesting_count} interesting, copy={t_copy-t_batch_start:.3f}s events={t_events_done-t_copy:.3f}s paths={paths_updated[:5]}{'...' if len(paths_updated) > 5 else ''}")
-            if dirty and state.root != rootmod:
-                t_diff_start = time.perf_counter()
-                try:
-                    update = format_update(state.root, rootmod)
-                    t_format_done = time.perf_counter()
-                    with state.lock:
-                        broadcast(update, loop)
-                        state.root = rootmod
-                    t_broadcast_done = time.perf_counter()
-                    _dbg(f"inotify->broadcast TOTAL: batch_to_format={t_diff_start-t_batch_start:.3f}s format={t_format_done-t_diff_start:.3f}s broadcast={t_broadcast_done-t_format_done:.3f}s TOTAL={t_broadcast_done-t_batch_start:.3f}s")
-                except Exception:
-                    logger.exception(
-                        "format_update failed; falling back to full rescan"
-                    )
-                    # Fallback: full rescan and try diff again; last resort send full root
-                    try:
-                        fresh = walk(PurePosixPath())
+                    except Exception:
+                        logger.exception("format_update failed; full rescan")
                         try:
-                            update = format_update(state.root, fresh)
+                            fresh = walk(PurePosixPath())
+                            path_index = PathIndex(fresh)
+                            update_msg = format_update(state.root, fresh)
                             with state.lock:
-                                broadcast(update, loop)
+                                broadcast(update_msg, loop)
                                 state.root = fresh
                         except Exception:
-                            logger.exception(
-                                "Fallback diff failed; sending full root snapshot"
-                            )
+                            logger.exception("Fallback failed; sending full root")
                             with state.lock:
                                 broadcast(format_root(fresh), loop)
                                 state.root = fresh
-                    except Exception:
-                        logger.exception(
-                            "Full rescan failed; dropping this batch of updates"
-                        )
 
-        del i  # Free the inotify object
+                # Reset pending state
+                dirty_paths.clear()
+                first_event_time = None
+                last_event_time = None
+                event_count = 0
+
+            # Collect inotify events (short timeout for responsiveness)
+            for event in inotify_tree.event_gen(yield_nones=False, timeout_s=0.05):
+                if quit.is_set():
+                    return
+                if not (modified_flags & set(event[1])):
+                    continue
+
+                # Extract relative path
+                path = PurePosixPath(event[2]) / event[3]
+                try:
+                    rel_path = path.relative_to(rootpath)
+                except ValueError:
+                    continue
+
+                # Skip dotfiles
+                if any(part.startswith(".") for part in rel_path.parts):
+                    continue
+
+                dirty_paths.add(rel_path)
+                event_count += 1
+                now = time.monotonic()
+                if first_event_time is None:
+                    first_event_time = now
+                last_event_time = now
+
+                # Don't block too long collecting events
+                if now - first_event_time >= DEBOUNCE_MAX:
+                    break
+
+        del inotify_tree
 
 
 def watcher_poll(loop):
