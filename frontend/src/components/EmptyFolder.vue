@@ -1,7 +1,8 @@
 <template>
   <div v-if="!props.path || documents.length === 0" class="empty-container">
-    <component :is="cog" class="cog"/>
-    <p v-if="!store.connected">No Connection</p>
+    <component :is="cog" :class="['cog', { stopped: store.dialog === 'accessdenied' || store.authInProgress }]"/>
+    <p v-if="store.dialog === 'accessdenied'">Access Denied</p>
+    <p v-else-if="!store.connected">No Connection</p>
     <p v-else-if="store.document.length === 0">Waiting for File List</p>
     <p v-else-if="store.query">No matches!</p>
     <p v-else-if="!exists(props.path)">Folder not found</p>
@@ -34,5 +35,8 @@ svg.cog {
   animation: rotate 10s linear infinite;
   filter: drop-shadow(0 0 1rem black);
   fill: #888;
+}
+svg.cog.stopped {
+  animation: none;
 }
 </style>

@@ -26,8 +26,11 @@ from cista.util.apphelpers import handle_sanic_exception
 sanic.helpers._ENTITY_HEADERS = frozenset()
 
 app = Sanic("cista", strict_slashes=True)
-app.blueprint(auth.bp)
-app.blueprint(sso.bp)  # SSO proxy for /auth/* routes (when paskia mode enabled)
+# Register either SSO proxy or built-in auth routes based on PASKIA_BACKEND_URL
+if sso.paskia_enabled():
+    app.blueprint(sso.bp)  # SSO proxy for /auth/* routes
+else:
+    app.blueprint(auth.bp)  # Built-in auth routes
 app.blueprint(preview.bp)
 app.blueprint(bp)
 app.exception(Exception)(handle_sanic_exception)
@@ -76,6 +79,14 @@ async def use_session(req):
         raise Forbidden("Invalid origin: Cross-Site requests not permitted")
 
 
+@app.on_response
+async def forward_sso_cookies(req, res):
+    """Forward Set-Cookie headers from SSO validation to client."""
+    if cookies := getattr(req.ctx, "sso_cookies", None):
+        for cookie in cookies:
+            res.headers.add("set-cookie", cookie)
+
+
 @app.before_server_start
 def http_fileserver(app):
     bp = Blueprint("fileserver")
@@ -83,10 +94,7 @@ def http_fileserver(app):
     @bp.on_request
     async def verify_fileserver(request):
         """Verify access to file server routes."""
-        if config.config.authentication == "paskia":
-            await auth.verify_sso(request)
-        else:
-            await auth.verify(request)
+        await auth.verify(request)
 
     bp.static(
         "/files/",

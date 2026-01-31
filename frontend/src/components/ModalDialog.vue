@@ -1,25 +1,27 @@
 <template>
-  <dialog v-if="store.dialog === name" ref="dialog" :id=props.name @keydown.escape=close>
-    <h1 v-if="props.title">{{ props.title }}</h1>
-    <div>
-      <slot>
-        Dialog with no content
-        <button @click=close>OK</button>
-      </slot>
+  <div v-if="store.dialog === name" class="modal-overlay" @click.self="close" @keydown.escape="close" tabindex="-1" ref="overlay">
+    <div class="modal-dialog" :id="props.name" ref="dialog">
+      <h1 v-if="props.title">{{ props.title }}</h1>
+      <div class="modal-content">
+        <slot>
+          Dialog with no content
+          <button @click="close">OK</button>
+        </slot>
+      </div>
     </div>
-  </dialog>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watchEffect, nextTick } from 'vue'
+import { ref, watchEffect, nextTick } from 'vue'
 import { useMainStore } from '@/stores/main'
 import { holdGlobalBackdrop, releaseGlobalBackdrop } from 'paskia'
 
-const dialog = ref<HTMLDialogElement | null>(null)
+const overlay = ref<HTMLDivElement | null>(null)
+const dialog = ref<HTMLDivElement | null>(null)
 const store = useMainStore()
 
 const close = () => {
-  dialog.value!.close()
   store.dialog = ''
   releaseGlobalBackdrop()
 }
@@ -32,44 +34,48 @@ const props = defineProps<{
 const show = () => {
   store.dialog = props.name
   holdGlobalBackdrop()
-  setTimeout(() => {
-    dialog.value!.showModal()
-    nextTick(() => {
-      const input = dialog.value!.querySelector('input')
-      if (input) input.focus()
-    })
-  }, 0)
+  nextTick(() => {
+    overlay.value?.focus()
+    const input = dialog.value?.querySelector('input')
+    if (input) input.focus()
+  })
 }
 defineExpose({ show, close })
 watchEffect(() => {
-  if (dialog.value) show()
+  if (overlay.value) {
+    overlay.value.focus()
+    const input = dialog.value?.querySelector('input')
+    if (input) input.focus()
+  }
 })
 </script>
 
 <style>
 /* ===========================================
-   DIALOG GLOBAL STYLES
+   MODAL DIALOG GLOBAL STYLES
    Shared styling for all modal dialogs.
    Login page (auth.py) has matching CSS.
    =========================================== */
 
-dialog::backdrop {
-  display: none;
+/* Overlay - covers entire viewport */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* No backdrop - paskia handles that */
 }
 
 /* Dialog container */
-dialog[open] {
+.modal-dialog {
   background: #ddd;
   color: #000;
   border: none;
   border-radius: 0.5rem;
   box-shadow: 0 0 1rem #0008;
   padding: 0;
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 1100;
   max-width: 90vw;
   max-height: 90vh;
   overflow: auto;
@@ -77,7 +83,7 @@ dialog[open] {
 }
 
 /* Dialog title bar */
-dialog[open] > h1 {
+.modal-dialog > h1 {
   background: #146;
   color: #fff;
   font-size: 1.2rem;
@@ -89,24 +95,32 @@ dialog[open] > h1 {
 }
 
 /* Dialog content area */
-dialog[open] > div {
+.modal-dialog > .modal-content {
   padding: 1rem;
 }
 
 /* Section headings inside dialog */
-dialog h3 {
+.modal-dialog h3 {
   font-size: 1rem;
   font-weight: 600;
   margin: 1rem 0 0.5rem 0;
 }
-dialog h3:first-child {
+.modal-dialog h3:first-child {
   margin-top: 0;
 }
 
+/* Links */
+.modal-dialog a {
+  color: #146;
+}
+.modal-dialog a:hover {
+  color: #f80;
+}
+
 /* Form inputs */
-dialog input[type="text"],
-dialog input[type="password"],
-dialog select {
+.modal-dialog input[type="text"],
+.modal-dialog input[type="password"],
+.modal-dialog select {
   font: inherit;
   font-size: 1rem;
   padding: 0.5rem;
@@ -117,23 +131,23 @@ dialog select {
   min-width: 12rem;
 }
 
-dialog input[type="text"]:focus,
-dialog input[type="password"]:focus,
-dialog select:focus {
+.modal-dialog input[type="text"]:focus,
+.modal-dialog input[type="password"]:focus,
+.modal-dialog select:focus {
   outline: none;
   border-color: #f80;
 }
 
 /* Labels */
-dialog label {
+.modal-dialog label {
   font-size: 1rem;
 }
 
 /* Buttons */
-dialog button,
-dialog input[type="submit"],
-dialog input[type="reset"],
-dialog .button {
+.modal-dialog button,
+.modal-dialog input[type="submit"],
+.modal-dialog input[type="reset"],
+.modal-dialog .button {
   font: inherit;
   font-size: 1rem;
   padding: 0.5rem 1rem;
@@ -144,37 +158,37 @@ dialog .button {
   cursor: pointer;
 }
 
-dialog button:hover,
-dialog input[type="submit"]:hover,
-dialog input[type="reset"]:hover,
-dialog .button:hover {
+.modal-dialog button:hover,
+.modal-dialog input[type="submit"]:hover,
+.modal-dialog input[type="reset"]:hover,
+.modal-dialog .button:hover {
   background: #f80;
 }
 
-dialog button:disabled,
-dialog input[type="submit"]:disabled,
-dialog input[type="reset"]:disabled,
-dialog .button:disabled {
+.modal-dialog button:disabled,
+.modal-dialog input[type="submit"]:disabled,
+.modal-dialog input[type="reset"]:disabled,
+.modal-dialog .button:disabled {
   background: #888;
   cursor: not-allowed;
 }
 
 /* Small button variant */
-dialog .button.small {
+.modal-dialog .button.small {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
 }
 
 /* Danger button variant */
-dialog .button.danger {
+.modal-dialog .button.danger {
   background: #c00;
 }
-dialog .button.danger:hover:not(:disabled) {
+.modal-dialog .button.danger:hover:not(:disabled) {
   background: #f00;
 }
 
 /* Form row layout (label + input side by side) */
-dialog .form-row {
+.modal-dialog .form-row {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.5rem 1rem;
@@ -183,7 +197,7 @@ dialog .form-row {
 }
 
 /* Form grid for multiple label+input pairs */
-dialog .form-grid {
+.modal-dialog .form-grid {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.5rem 1rem;
@@ -191,7 +205,7 @@ dialog .form-grid {
 }
 
 /* Dialog button row (footer) */
-dialog .dialog-buttons {
+.modal-dialog .dialog-buttons {
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -200,7 +214,7 @@ dialog .dialog-buttons {
 }
 
 /* Error text */
-dialog .error-text {
+.modal-dialog .error-text {
   color: #c00;
   font-size: 0.875rem;
   min-height: 1.2em;
@@ -208,7 +222,7 @@ dialog .error-text {
 }
 
 /* Success message */
-dialog .success-message {
+.modal-dialog .success-message {
   background: #f80;
   color: #000;
   padding: 0.5rem;
@@ -221,43 +235,43 @@ dialog .success-message {
 }
 
 /* Data tables inside dialogs */
-dialog table {
+.modal-dialog table {
   width: 100%;
   border-collapse: collapse;
   margin: 0.5rem 0;
   font-size: 1rem;
 }
 
-dialog th,
-dialog td {
+.modal-dialog th,
+.modal-dialog td {
   border: 1px solid #888;
   padding: 0.5rem;
   text-align: left;
 }
 
-dialog th {
+.modal-dialog th {
   background: #146;
   color: #fff;
   font-weight: normal;
 }
 
-dialog td {
+.modal-dialog td {
   background: #fff;
 }
 
 /* Checkbox alignment in tables */
-dialog td input[type="checkbox"] {
+.modal-dialog td input[type="checkbox"] {
   margin: 0;
 }
 
 /* Paragraph text */
-dialog p {
+.modal-dialog p {
   margin: 0 0 0.5rem 0;
   font-size: 1rem;
 }
 
 /* Loading state */
-dialog .loading {
+.modal-dialog .loading {
   padding: 2rem;
   text-align: center;
   color: #666;

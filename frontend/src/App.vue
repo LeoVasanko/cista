@@ -1,6 +1,10 @@
 <template>
+  <div v-if="store.error && !store.authInProgress" class="toast-message" @click="store.error = ''">
+    {{ store.error }}
+  </div>
   <SettingsModal />
   <UserManagementModal />
+  <AccessDeniedModal />
   <header>
     <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query">
       <HeaderSelected :path="path.pathList" />
@@ -29,6 +33,7 @@ import Router from '@/router/index'
 import type { SortOrder } from './utils/docsort'
 import type SettingsModalVue from './components/SettingsModal.vue'
 import UserManagementModal from './components/UserManagementModal.vue'
+import AccessDeniedModal from './components/AccessDeniedModal.vue'
 
 interface Path {
   path: string
@@ -157,3 +162,23 @@ onUnmounted(() => {
 })
 export type { Path }
 </script>
+
+<style>
+/* Toast notifications - fixed at top center of viewport */
+.toast-message {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  padding: 0.75rem 1.5rem;
+  background: var(--accent-color);
+  color: #000;
+  font-weight: bold;
+  border-radius: 0.25rem;
+  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  max-width: 90vw;
+  text-align: center;
+}
+</style>

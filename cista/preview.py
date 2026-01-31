@@ -60,7 +60,7 @@ async def preview(req, path):
         "etag": etag,
         "last-modified": format_date_time(stat.st_mtime),
         "cache-control": "max-age=604800, immutable"
-        + ("" if config.config.authentication == "none" else ", private"),
+        + ("" if config.config.public else ", private"),
         "content-type": "image/avif",
         "content-disposition": f"inline; filename*=UTF-8''{urllib.parse.quote(savename.as_posix())}",
     }

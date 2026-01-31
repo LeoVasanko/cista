@@ -1,5 +1,4 @@
 import { useMainStore } from "@/stores/main"
-import { useSsoAuthStore } from "@/stores/ssoAuth"
 import { showAuthIframe, AuthCancelledError, isAuthIframeOpen } from 'paskia'
 import type { FileEntry, UpdateEntry, errorEvent } from "./Document"
 
@@ -12,6 +11,11 @@ let reconnDelay = 500
 let wsWatch = null as WebSocket | null
 // Track when we're awaiting authentication to prevent reconnection loops
 let awaitingAuth = false
+
+// Clear the local tree cache (called on logout/auth failure)
+export const clearTree = () => {
+  tree = []
+}
 
 export const loadSession = () => {
   const s = localStorage['cista-files']
@@ -42,8 +46,14 @@ export const connect = (path: string, handlers: Partial<Record<keyof WebSocketEv
 async function handleWsAuthError(msg: any) {
   const iframe = msg.error?.auth?.iframe
   if (iframe) {
+    // Clear sensitive data immediately on auth failure
+    const store = useMainStore()
+    store.clearSensitiveData()
+    clearTree()
     // Stop reconnection attempts while showing auth dialog
     awaitingAuth = true
+    store.authInProgress = true
+    store.error = ''  // Clear any connection message
     if (watchTimeout !== null) {
       clearTimeout(watchTimeout)
       watchTimeout = null
@@ -52,12 +62,15 @@ async function handleWsAuthError(msg: any) {
       await showAuthIframe(iframe)
       // Auth succeeded - reconnect
       awaitingAuth = false
+      store.authInProgress = false
       watchConnect()
     } catch (e) {
       awaitingAuth = false
+      store.authInProgress = false
       if (e instanceof AuthCancelledError) {
         console.log('User cancelled authentication')
-        // User cancelled - don't automatically retry, wait for user action
+        // Show access denied dialog
+        store.dialog = 'accessdenied'
       } else {
         console.error('Auth iframe error:', e)
       }
@@ -100,11 +113,6 @@ export const watchConnect = () => {
       store.error = ''
       if (msg.user) store.login(msg.user.username, msg.user.privileged)
       else if (store.isUserLogged) store.logout()
-      // Start SSO validation polling only in paskia mode
-      if (msg.server.authentication === 'paskia') {
-        const ssoStore = useSsoAuthStore()
-        ssoStore.startValidationPolling()
-      }
     }
   })
 }

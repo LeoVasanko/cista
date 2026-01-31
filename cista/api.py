@@ -6,7 +6,7 @@ import msgspec
 from sanic import Blueprint, json
 from sanic.exceptions import BadRequest
 
-from cista import __version__, auth, config, watching
+from cista import __version__, auth, config, sso, watching
 from cista.fileio import FileServer
 from cista.protocol import ControlTypes, FileRange, StatusMsg
 from cista.util.apphelpers import asend, websocket_wrapper
@@ -93,20 +93,33 @@ async def control(req, ws):
 @bp.websocket("watch")
 @websocket_wrapper
 async def watch(req, ws):
+    # Build user info from either built-in auth or SSO
+    user_info = None
+    if sso_user := getattr(req.ctx, "sso_user", None):
+        # SSO auth (paskia mode): extract from validation response
+        ctx = sso_user.get("ctx", {})
+        perms = ctx.get("permissions", [])
+        user_info = {
+            "username": ctx.get("user", {}).get("display_name", ""),
+            "privileged": "cista:admin" in perms,
+        }
+    elif req.ctx.user:
+        # Built-in auth: use local user database
+        user_info = {
+            "username": req.ctx.username,
+            "privileged": req.ctx.user.privileged,
+        }
+
     await ws.send(
         msgspec.json.encode(
             {
                 "server": {
                     "name": config.config.name or config.config.path.name,
                     "version": __version__,
-                    "authentication": config.config.authentication,
+                    "public": config.config.public,
+                    "paskia": sso.paskia_enabled(),
                 },
-                "user": {
-                    "username": req.ctx.username,
-                    "privileged": req.ctx.user.privileged,
-                }
-                if req.ctx.user
-                else None,
+                "user": user_info,
             }
         ).decode()
     )
@@ -139,16 +152,16 @@ def subscribe(uuid, ws):
         )
 
 
-@bp.put("config/authentication")
-async def update_authentication(request):
+@bp.put("config/public")
+async def update_public(request):
     await auth.verify(request, privileged=True)
     try:
-        mode = request.json["authentication"]
-        if mode not in ("none", "paskia", "password"):
-            raise ValueError("Invalid authentication mode")
+        public = request.json["public"]
+        if not isinstance(public, bool):
+            raise ValueError("public must be a boolean")
     except KeyError:
-        raise BadRequest("Missing authentication field") from None
+        raise BadRequest("Missing public field") from None
     except ValueError as e:
         raise BadRequest(str(e)) from None
-    config.update_config({"authentication": mode})
-    return json({"message": "Authentication setting updated", "authentication": mode})
+    config.update_config({"public": public})
+    return json({"message": "Public access setting updated", "public": public})

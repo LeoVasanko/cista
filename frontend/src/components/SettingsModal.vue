@@ -26,9 +26,6 @@
             v-model="form.password"
           />
         </div>
-        <p class="error-text">
-          {{ form.error || '\u00A0' }}
-        </p>
         <div class="dialog-buttons">
           <input id="close" type="reset" value="Close" class="button" @click=close />
           <div class="spacer"></div>
@@ -54,28 +51,26 @@ import { useMainStore } from '@/stores/main'
 
 const confirmLoading = ref<boolean>(false)
 const store = useMainStore()
+
 const passwordChange = ref()
 const password = ref()
 
 const form = reactive({
   passwordChange: '',
-  password: '',
-  error: ''
+  password: ''
 })
 
 const close = () => {
   form.passwordChange = ''
   form.password = ''
-  form.error = ''
   store.dialog = ''
 }
 const submit = async (ev: Event) => {
   ev.preventDefault()
   try {
-    form.error = ''
     if (form.passwordChange) {
       if (!form.password) {
-        form.error = '⚠️ Current password is required'
+        store.error = '⚠️ Current password is required'
         password.value!.focus()
         return
       }
@@ -84,7 +79,7 @@ const submit = async (ev: Event) => {
     close()
   } catch (error) {
     const httpError = error as ISimpleError
-    form.error = httpError.message || '🛑 Unknown error'
+    store.error = httpError.message || '🛑 Unknown error'
   } finally {
     confirmLoading.value = false
   }

@@ -1,7 +1,7 @@
 import Client from '@/repositories/Client'
 import { useMainStore } from '@/stores/main'
 export const url_login = '/auth/login'
-export const url_logout = '/auth/logout'
+export const url_logout = '/auth/api/logout'
 export const url_password = '/auth/password-change'
 
 export async function loginUser(username: string, password: string) {
@@ -51,9 +51,7 @@ export async function deleteUser(username: string) {
   return data
 }
 
-export type AuthMode = 'none' | 'paskia' | 'password'
-
-export async function updateAuthentication(mode: AuthMode) {
-  const data = await Client.put('/api/config/authentication', { authentication: mode })
+export async function updatePublic(isPublic: boolean) {
+  const data = await Client.put('/api/config/public', { public: isPublic })
   return data
 }

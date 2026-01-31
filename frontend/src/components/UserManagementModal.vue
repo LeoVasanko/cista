@@ -4,53 +4,55 @@
     <div v-else>
       <h3>Server Settings</h3>
       <div class="form-row">
-        <label for="authMode">Authentication:</label>
-        <select
-          id="authMode"
-          v-model="serverSettings.authentication"
-          @change="updateServerSettings"
-        >
-          <option value="password">Password (built-in users)</option>
-          <option value="paskia">Paskia (external SSO)</option>
-          <option value="none">None (public access)</option>
-        </select>
+        <label for="publicAccess">
+          <input
+            type="checkbox"
+            id="publicAccess"
+            v-model="serverSettings.public"
+            @change="updateServerSettings"
+          />
+          Public access (anyone can read and write)
+        </label>
       </div>
-      <template v-if="serverSettings.authentication === 'password'">
-      <h3>Users</h3>
-      <button @click="addUser" class="button" title="Add new user">➕ Add User</button>
-      <div v-if="success" class="success-message" @click="copySuccess(false)">
-        {{ success }}
-        <button v-if="success.includes('Password:') || success.includes('New password:')" @click.stop="copySuccess(true)" class="button small" title="Copy to clipboard">{{ copyButtonText }}</button>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Admin</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="user in users" :key="user.username">
-            <td>{{ user.username }}</td>
-            <td>
-              <input
-                type="checkbox"
-                :checked="user.privileged"
-                @change="toggleAdmin(user, $event)"
-                :disabled="user.username === store.user.username"
-              />
-            </td>
-            <td>
-              <button @click="renameUser(user)" class="button small" title="Rename user">✏️</button>
-              <button @click="resetPassword(user)" class="button small" title="Reset password">🔑</button>
-              <button @click="deleteUserAction(user.username)" class="button small danger" :disabled="user.username === store.user.username" title="Delete user">🗑️</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <template v-if="store.server.paskia">
+        <h3>User Management</h3>
+        <p>See <a href="/auth/admin/">Paskia Admin</a>.</p>
       </template>
-      <p class="error-text">{{ error || '\u00A0' }}</p>
+      <template v-else>
+        <h3>Users</h3>
+        <button @click="addUser" class="button" title="Add new user">➕ Add User</button>
+        <div v-if="success" class="success-message" @click="copySuccess(false)">
+          {{ success }}
+          <button v-if="success.includes('Password:') || success.includes('New password:')" @click.stop="copySuccess(true)" class="button small" title="Copy to clipboard">{{ copyButtonText }}</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Admin</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="user in users" :key="user.username">
+              <td>{{ user.username }}</td>
+              <td>
+                <input
+                  type="checkbox"
+                  :checked="user.privileged"
+                  @change="toggleAdmin(user, $event)"
+                  :disabled="user.username === store.user.username"
+                />
+              </td>
+              <td>
+                <button @click="renameUser(user)" class="button small" title="Rename user">✏️</button>
+                <button @click="resetPassword(user)" class="button small" title="Reset password">🔑</button>
+                <button @click="deleteUserAction(user.username)" class="button small danger" :disabled="user.username === store.user.username" title="Delete user">🗑️</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
       <div class="dialog-buttons">
         <button @click="close" class="button">Close</button>
       </div>
@@ -60,7 +62,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { listUsers, createUser, updateUser, deleteUser, updateAuthentication, type AuthMode } from '@/repositories/User'
+import { listUsers, createUser, updateUser, deleteUser, updatePublic } from '@/repositories/User'
 import type { ISimpleError } from '@/repositories/Client'
 import { useMainStore } from '@/stores/main'
 
@@ -73,16 +75,14 @@ interface User {
 const store = useMainStore()
 const loading = ref(true)
 const users = ref<User[]>([])
-const error = ref('')
 const success = ref('')
 const copyButtonText = ref('📋')
 const serverSettings = reactive({
-  authentication: 'password' as AuthMode
+  public: false
 })
 
 const close = () => {
   store.dialog = ''
-  error.value = ''
   success.value = ''
 }
 
@@ -93,7 +93,7 @@ const loadUsers = async () => {
     users.value = data.users
   } catch (e) {
     const httpError = e as ISimpleError
-    error.value = httpError.message || 'Failed to load users'
+    store.error = httpError.message || 'Failed to load users'
   } finally {
     loading.value = false
   }
@@ -103,7 +103,6 @@ const addUser = async () => {
   const username = window.prompt('Enter username for new user:')
   if (!username || !username.trim()) return
   try {
-    error.value = ''
     success.value = ''
     const result = await createUser(username.trim(), undefined, false)
     await loadUsers()
@@ -112,19 +111,18 @@ const addUser = async () => {
     }
   } catch (e) {
     const httpError = e as ISimpleError
-    error.value = httpError.message || 'Failed to add user'
+    store.error = httpError.message || 'Failed to add user'
   }
 }
 
 const toggleAdmin = async (user: User, event: Event) => {
   const target = event.target as HTMLInputElement
   try {
-    error.value = ''
     await updateUser(user.username, { privileged: target.checked })
     user.privileged = target.checked
   } catch (e) {
     const httpError = e as ISimpleError
-    error.value = httpError.message || 'Failed to update user'
+    store.error = httpError.message || 'Failed to update user'
     target.checked = user.privileged // revert
   }
 }
@@ -135,7 +133,6 @@ const renameUser = async (user: User) => {
   // For rename, we need to create new user and delete old, or have a rename endpoint
   // Since no rename endpoint, perhaps delete and create
   try {
-    error.value = ''
     success.value = ''
     const result = await createUser(newName.trim(), undefined, user.privileged)
     await deleteUser(user.username)
@@ -145,14 +142,13 @@ const renameUser = async (user: User) => {
     }
   } catch (e) {
     const httpError = e as ISimpleError
-    error.value = httpError.message || 'Failed to rename user'
+    store.error = httpError.message || 'Failed to rename user'
   }
 }
 
 const resetPassword = async (user: User) => {
   if (!confirm(`Reset password for ${user.username}? A new password will be generated.`)) return
   try {
-    error.value = ''
     success.value = ''
     const result = await updateUser(user.username, { password: "" })
     if (result.password) {
@@ -160,19 +156,18 @@ const resetPassword = async (user: User) => {
     }
   } catch (e) {
     const httpError = e as ISimpleError
-    error.value = httpError.message || 'Failed to reset password'
+    store.error = httpError.message || 'Failed to reset password'
   }
 }
 
 const deleteUserAction = async (username: string) => {
   if (!confirm(`Delete user ${username}?`)) return
   try {
-    error.value = ''
     await deleteUser(username)
     await loadUsers()
   } catch (e) {
     const httpError = e as ISimpleError
-    error.value = httpError.message || 'Failed to delete user'
+    store.error = httpError.message || 'Failed to delete user'
   }
 }
 
@@ -200,25 +195,31 @@ const copySuccess = async (isButtonClick: boolean = false) => {
 
 const updateServerSettings = async () => {
   try {
-    error.value = ''
     success.value = ''
-    await updateAuthentication(serverSettings.authentication)
+    await updatePublic(serverSettings.public)
     // Update store
-    store.server.authentication = serverSettings.authentication
+    store.server.public = serverSettings.public
     success.value = 'Server settings updated'
   } catch (e) {
     const httpError = e as ISimpleError
-    error.value = httpError.message || 'Failed to update settings'
+    store.error = httpError.message || 'Failed to update settings'
   }
 }
 
 onMounted(() => {
-  serverSettings.authentication = store.server.authentication || 'password'
-  loadUsers()
+  serverSettings.public = store.server.public || false
+  loading.value = false
 })
 
-watch(() => store.server.authentication, (newVal) => {
-  serverSettings.authentication = newVal || 'password'
+// Load users when dialog opens (only in built-in auth mode)
+watch(() => store.dialog, (newVal) => {
+  if (newVal === 'usermgmt' && !store.server.paskia) {
+    loadUsers()
+  }
+})
+
+watch(() => store.server.public, (newVal) => {
+  serverSettings.public = newVal || false
 })
 </script>
 

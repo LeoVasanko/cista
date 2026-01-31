@@ -139,7 +139,7 @@ form.onsubmit = async (e) => {
     submitBtn.textContent = 'Logging in...';
 
     try {
-        const res = await fetch('/login', {
+        const res = await fetch('/auth/login', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -234,9 +234,9 @@ class LoginResponse(msgspec.Struct):
 async def verify(request, *, privileged=False):
     """Verify that the request is authorized.
 
-    For paskia mode, validates against the SSO backend.
-    For password mode, checks session-based authentication.
-    For none mode, allows all requests.
+    For paskia mode (PASKIA_BACKEND_URL set), validates against the SSO backend.
+    For built-in mode, checks session-based authentication.
+    For public mode (config.public=True), allows all requests.
 
     All 401/403 responses include auth.iframe URL for consistent frontend handling
     via the paskia library's showAuthIframe().
@@ -249,10 +249,11 @@ async def verify(request, *, privileged=False):
         Unauthorized: If authentication is required
         Forbidden: If access is denied
     """
-    if config.config.authentication == "paskia":
+    sso = _get_sso()
+    if sso.paskia_enabled():
         # SSO validation against auth backend
-        sso = _get_sso()
-        perm = "cista:login cista:admin" if privileged else "cista:login"
+        # Always check cista:login; privileged flag comes from response perm list
+        perm = "cista:admin" if privileged else "cista:login"
         await sso.validate_sso_request(request, perm=perm)
         return
 
@@ -263,64 +264,39 @@ async def verify(request, *, privileged=False):
                 return
             raise Forbidden(
                 "Access Forbidden: Only for privileged users",
-                context={"auth": {"iframe": "/auth/api/restricted?mode=forbidden"}},
                 quiet=True,
             )
-    elif config.config.authentication == "none" or user:
+    elif config.config.public or user:
         return
     # Return iframe URL for paskia library to show login dialog
     raise Unauthorized(
         f"Login required for {request.path}",
         "cookie",
-        context={"auth": {"iframe": "/auth/api/restricted?mode=login"}},
+        context={"auth": {"iframe": "/auth/restricted"}},
         quiet=True,
     )
 
 
+# Blueprint for built-in auth (only registered when paskia is NOT enabled)
 bp = Blueprint("auth", url_prefix="/auth")
 
 
-@bp.on_request
-async def check_external_auth(request):
-    """Disable built-in auth routes when external auth is enabled"""
-    if config.config.authentication == "paskia":
-        from sanic.exceptions import NotFound
-
-        raise NotFound("Not available in external auth mode")
-
-
-@bp.get("/api/restricted")
+@bp.get("/restricted")
 async def login_page(request):
-    """Login page that works both standalone and in paskia iframe.
-
-    Query params:
-    - mode: 'login' (default), 'reauth', or 'forbidden' - affects messaging
-    """
-    mode = request.args.get("mode", "login")
+    """Login page that works both standalone and in paskia iframe."""
     s = session.get(request)
 
     # Check if already logged in
-    if s and mode == "login":
+    if s:
         # Already authenticated - signal success if in iframe
         return html(_login_success_page(s["username"]))
 
-    title = {
-        "forbidden": "Access Denied",
-        "reauth": "Re-authenticate",
-    }.get(mode, "Login Required")
-
-    message = {
-        "forbidden": "You don't have permission. Try logging in with a different account.",
-        "reauth": "Your session has expired. Please log in again.",
-    }.get(mode, "Please log in to continue.")
-
-    doc = Document(f"Cista - {title}")
+    doc = Document("Cista - Login")
     # Add paskia-compatible styling and scripts
     doc.style(_LOGIN_PAGE_CSS)
     with doc.div(class_="login-card"):
-        doc.h1(title)
+        doc.h1("Authentication Required")
         with doc.div(class_="content"):
-            doc.p(message, class_="message")
             with doc.form(method="POST", id="loginForm", autocomplete="on"):
                 doc.label("Username:", for_="username")
                 doc.input(
@@ -388,7 +364,7 @@ async def login_post(request):
     return res
 
 
-@bp.post("/logout")
+@bp.post("/api/logout")
 async def logout_post(request):
     s = request.ctx.session
     msg = "Logged out" if s else "Not logged in"

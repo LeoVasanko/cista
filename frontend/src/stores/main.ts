@@ -2,7 +2,6 @@ import type { FileEntry, FUID, SelectedItems } from '@/repositories/Document'
 import { Doc } from '@/repositories/Document'
 import { defineStore, type StateTree } from 'pinia'
 import { collator } from '@/utils'
-import { logoutUser } from '@/repositories/User'
 import { watchConnect, resumeWatching } from '@/repositories/WS'
 import { sorted, type SortOrder } from '@/utils/docsort'
 
@@ -14,9 +13,10 @@ export const useMainStore = defineStore('main', {
     fileExplorer: null as any,
     error: '' as string,
     connected: false,
+    authInProgress: false,
     cursor: '' as string,
-    server: {} as Record<string, any> & { authentication?: 'none' | 'paskia' | 'password' },
-    dialog: '' as '' | 'settings' | 'usermgmt',
+    server: {} as Record<string, any> & { public?: boolean, paskia?: boolean },
+    dialog: '' as '' | 'settings' | 'usermgmt' | 'accessdenied',
     uprogress: {} as any,
     dprogress: {} as any,
     prefs: {
@@ -69,12 +69,33 @@ export const useMainStore = defineStore('main', {
       this.dialog = ''
       if (!this.connected) resumeWatching()
     },
+    clearSensitiveData() {
+      // Clear all sensitive state on logout or auth failure
+      localStorage.removeItem('cista-files')
+      this.document = []
+      this.selected.clear()
+      this.user.username = ''
+      this.user.privileged = false
+      this.user.isLoggedIn = false
+      this.connected = false
+      this.dialog = ''
+      this.cursor = ''
+    },
     async logout() {
       console.log("Logout")
-      await logoutUser()
-      this.$reset()
-      localStorage.clear()
-      history.go() // Reload page
+      try {
+        const res = await fetch('/auth/api/logout', { method: 'POST' })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          this.error = data.message || data.detail || 'Logout failed'
+          return
+        }
+      } catch (e) {
+        this.error = 'Logout failed'
+        return
+      }
+      this.clearSensitiveData()
+      resumeWatching()
     },
     toggleSort(name: SortOrder) {
       if (this.query) this.prefs.sortFiltered = this.prefs.sortFiltered === name ? '' : name
