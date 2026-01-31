@@ -13,6 +13,7 @@
     :path="props.path"
     :documents="documents"
   />
+  <div v-if="store.searchLoading" class="search-loading">Searching...</div>
   <EmptyFolder :documents=documents :path=props.path />
 </template>
 
@@ -20,7 +21,7 @@
 import { watchEffect, ref, computed, watch } from 'vue'
 import { useMainStore } from '@/stores/main'
 import Router from '@/router/index'
-import { needleFormat, localeIncludes, collator } from '@/utils'
+import { collator } from '@/utils'
 import { sorted, sortedGrouped } from '@/utils/docsort'
 import FileExplorer from '@/components/FileExplorer.vue'
 
@@ -30,41 +31,34 @@ const props = defineProps<{
   path: Array<string>
   query: string
 }>()
+
+// Trigger search when query changes
+watch(
+  () => [props.query, props.path.join('/')] as const,
+  ([query, loc]) => {
+    store.search(query, loc)
+  },
+  { immediate: true }
+)
+
 const documents = computed(() => {
   const loc = props.path.join('/')
   const query = props.query
-  // List the current location
+
+  // List the current location (no search)
   if (!query) return sorted(
     store.document.filter(doc => doc.loc === loc),
     store.prefs.sortListing,
   )
-  // Find up to 100 newest documents that match the search
-  const needle = needleFormat(query)
-  let limit = 100
-  let docs = []
-  for (const doc of store.recentDocuments) {
-    if (localeIncludes(doc.haystack, needle)) {
-      docs.push(doc)
-      if (--limit === 0) break
-    }
-  }
-  const locsub = loc + '/'
+
+  // Search results from worker
+  const docs = store.searchResults
+
   // Custom sort override in effect? Use grouped sorting to keep folders together
   const order = store.prefs.sortFiltered
   if (order) return sortedGrouped(docs, order)
-  // Sort by relevance - current folder, then subfolders, then others
-  docs.sort((a, b) => (
-    // @ts-ignore
-    (b.loc === loc) - (a.loc === loc) ||
-    // @ts-ignore
-    (b.loc.slice(0, locsub.length) === locsub) - (a.loc.slice(0, locsub.length) === locsub) ||
-    collator.compare(a.loc, b.loc) ||
-    // @ts-ignore
-    (a.type === 'file') - (b.type === 'file') ||
-    // @ts-ignore
-    b.name.includes(query) - a.name.includes(query) ||
-    collator.compare(a.name, b.name)
-  ))
+
+  // Results are already sorted by relevance in the worker
   return docs
 })
 
@@ -91,5 +85,16 @@ watch([() => props.path.join('/'), () => store.document.length], ([path, len], [
   font-size: 2rem;
   text-shadow: 0 0 .3rem #000, 0 0 2rem #0008;
   color: var(--accent-color);
+}
+.search-loading {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--accent-color, #007bff);
+  color: white;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  opacity: 0.9;
 }
 </style>

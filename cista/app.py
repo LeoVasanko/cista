@@ -49,9 +49,7 @@ async def main_start(app):
         max_workers=preview_workers, thread_name_prefix="cista-preview"
     )
     # Larger pool for long-running but low-memory zip operations
-    app.ctx.zipexec = ThreadPoolExecutor(
-        max_workers=32, thread_name_prefix="cista-zip"
-    )
+    app.ctx.zipexec = ThreadPoolExecutor(max_workers=32, thread_name_prefix="cista-zip")
     watching.start(app)
 
 

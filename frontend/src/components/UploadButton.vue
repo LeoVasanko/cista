@@ -84,7 +84,7 @@ const uploadFiles = (infiles: File[]) => {
 const uploadCloudFiles = (files: CloudFile[]) => {
   const dotfiles = files.filter(f => f.cloudName.includes('/.'))
   if (dotfiles.length) {
-    store.error = "Won't upload dotfiles"
+    store.showToast("Won't upload dotfiles")
     console.log("Dotfiles omitted", dotfiles)
     files = files.filter(f => !f.cloudName.includes('/.'))
   }

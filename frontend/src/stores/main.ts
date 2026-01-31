@@ -4,14 +4,30 @@ import { defineStore, type StateTree } from 'pinia'
 import { collator } from '@/utils'
 import { watchConnect, resumeWatching } from '@/repositories/WS'
 import { sorted, type SortOrder } from '@/utils/docsort'
+import SearchWorker from '@/workers/searchWorker?worker'
+
+// Singleton search worker instance
+let searchWorker: Worker | null = null
+let searchId = 0
+
+function getSearchWorker(): Worker {
+  if (!searchWorker) {
+    searchWorker = new SearchWorker()
+  }
+  return searchWorker
+}
 
 export const useMainStore = defineStore('main', {
   state: () => ({
     document: [] as Doc[],
     selected: new Set<FUID>([]),
     query: '' as string,
+    searchResults: [] as Doc[],
+    searchLoading: false,
     fileExplorer: null as any,
-    error: '' as string,
+    error: '' as string,  // Permanent status message (e.g., "Reconnecting...")
+    toast: '' as string,  // Temporary toast (auto-dismisses)
+    toastTimeout: null as ReturnType<typeof setTimeout> | null,
     connected: false,
     authInProgress: false,
     cursor: '' as string,
@@ -61,6 +77,66 @@ export const useMainStore = defineStore('main', {
         loc.push(name)
       }
       this.document = docs
+      // Sync documents to search worker
+      this.syncSearchWorker()
+    },
+    /** Show a temporary toast message that auto-dismisses */
+    showToast(message: string, duration = 3000) {
+      if (this.toastTimeout) {
+        clearTimeout(this.toastTimeout)
+        this.toastTimeout = null
+      }
+      this.toast = message
+      this.toastTimeout = setTimeout(() => {
+        this.toast = ''
+        this.toastTimeout = null
+      }, duration)
+    },
+    /** Clear the current toast immediately */
+    clearToast() {
+      if (this.toastTimeout) {
+        clearTimeout(this.toastTimeout)
+        this.toastTimeout = null
+      }
+      this.toast = ''
+    },
+    syncSearchWorker() {
+      const worker = getSearchWorker()
+      // Send plain data to worker (no class instances)
+      const docData = this.document.map(doc => ({
+        loc: doc.loc,
+        name: doc.name,
+        key: doc.key,
+        size: doc.size,
+        mtime: doc.mtime,
+        dir: doc.dir,
+      }))
+      worker.postMessage({ type: 'update', documents: docData })
+    },
+    search(query: string, loc: string) {
+      const worker = getSearchWorker()
+      const id = ++searchId
+
+      if (!query) {
+        this.searchResults = []
+        this.searchLoading = false
+        return
+      }
+
+      this.searchLoading = true
+
+      worker.onmessage = (e) => {
+        if (e.data.id !== searchId) return  // Stale result
+
+        // Convert plain data back to Doc instances
+        this.searchResults = e.data.docs.map((d: any) => new Doc(d))
+
+        if (e.data.done) {
+          this.searchLoading = false
+        }
+      }
+
+      worker.postMessage({ type: 'search', query, loc, id })
     },
     login(username: string, privileged: boolean) {
       this.user.username = username

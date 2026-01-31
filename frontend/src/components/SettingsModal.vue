@@ -70,7 +70,7 @@ const submit = async (ev: Event) => {
   try {
     if (form.passwordChange) {
       if (!form.password) {
-        store.error = '⚠️ Current password is required'
+        store.showToast('⚠️ Current password is required')
         password.value!.focus()
         return
       }
@@ -79,7 +79,7 @@ const submit = async (ev: Event) => {
     close()
   } catch (error) {
     const httpError = error as ISimpleError
-    store.error = httpError.message || '🛑 Unknown error'
+    store.showToast(httpError.message || '🛑 Unknown error')
   } finally {
     confirmLoading.value = false
   }

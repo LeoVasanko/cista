@@ -93,7 +93,7 @@ const loadUsers = async () => {
     users.value = data.users
   } catch (e) {
     const httpError = e as ISimpleError
-    store.error = httpError.message || 'Failed to load users'
+    store.showToast(httpError.message || 'Failed to load users')
   } finally {
     loading.value = false
   }
@@ -111,7 +111,7 @@ const addUser = async () => {
     }
   } catch (e) {
     const httpError = e as ISimpleError
-    store.error = httpError.message || 'Failed to add user'
+    store.showToast(httpError.message || 'Failed to add user')
   }
 }
 
@@ -122,7 +122,7 @@ const toggleAdmin = async (user: User, event: Event) => {
     user.privileged = target.checked
   } catch (e) {
     const httpError = e as ISimpleError
-    store.error = httpError.message || 'Failed to update user'
+    store.showToast(httpError.message || 'Failed to update user')
     target.checked = user.privileged // revert
   }
 }
@@ -142,7 +142,7 @@ const renameUser = async (user: User) => {
     }
   } catch (e) {
     const httpError = e as ISimpleError
-    store.error = httpError.message || 'Failed to rename user'
+    store.showToast(httpError.message || 'Failed to rename user')
   }
 }
 
@@ -156,7 +156,7 @@ const resetPassword = async (user: User) => {
     }
   } catch (e) {
     const httpError = e as ISimpleError
-    store.error = httpError.message || 'Failed to reset password'
+    store.showToast(httpError.message || 'Failed to reset password')
   }
 }
 
@@ -167,7 +167,7 @@ const deleteUserAction = async (username: string) => {
     await loadUsers()
   } catch (e) {
     const httpError = e as ISimpleError
-    store.error = httpError.message || 'Failed to delete user'
+    store.showToast(httpError.message || 'Failed to delete user')
   }
 }
 
@@ -202,7 +202,7 @@ const updateServerSettings = async () => {
     success.value = 'Server settings updated'
   } catch (e) {
     const httpError = e as ISimpleError
-    store.error = httpError.message || 'Failed to update settings'
+    store.showToast(httpError.message || 'Failed to update settings')
   }
 }
 

@@ -1,5 +1,8 @@
 <template>
-  <div v-if="store.error && !store.authInProgress" class="toast-message" @click="store.error = ''">
+  <div v-if="store.toast" class="toast-message" @click="store.clearToast()">
+    {{ store.toast }}
+  </div>
+  <div v-else-if="store.error && !store.authInProgress" class="toast-message status" @click="store.error = ''">
     {{ store.error }}
   </div>
   <SettingsModal />
@@ -100,6 +103,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   // Globally close search, clear errors on Escape
   else if (keyup && event.key === 'Escape') {
     store.error = ''
+    store.clearToast()
     headerMain.value!.closeSearch(event)
     store.focusBreadcrumb()
   }
@@ -180,5 +184,9 @@ export type { Path }
   cursor: pointer;
   max-width: 90vw;
   text-align: center;
+}
+.toast-message.status {
+  background: #555;
+  color: #fff;
 }
 </style>
