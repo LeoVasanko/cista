@@ -51,14 +51,22 @@ const closeSearch = (ev: Event) => {
   breadcrumb.focus()
   updateSearch(ev)
 }
+
 const updateSearch = (ev: Event) => {
   const q = (ev.target as HTMLInputElement).value
   let p = props.path.join('/')
   p = p ? `/${p}` : ''
   const url = q ? `${p}//${q}` : (p || '/')
   const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
-  if (!props.query && q) router.push(u)
-  else router.replace(u)
+
+  // Start search immediately via store (worker handles it async)
+  store.search(q, props.path.join('/'))
+
+  // Update route in next frame to keep typing responsive
+  requestAnimationFrame(() => {
+    if (!props.query && q) router.push(u)
+    else router.replace(u)
+  })
 }
 const toggleSearchInput = (ev: Event) => {
   showSearchInput.value = !showSearchInput.value

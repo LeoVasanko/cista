@@ -9,10 +9,26 @@ import SearchWorker from '@/workers/searchWorker?worker'
 // Singleton search worker instance
 let searchWorker: Worker | null = null
 let searchId = 0
+let searchStore: ReturnType<typeof useMainStore> | null = null
 
 function getSearchWorker(): Worker {
   if (!searchWorker) {
     searchWorker = new SearchWorker()
+    // Set up message handler once
+    searchWorker.onmessage = (e) => {
+      if (!searchStore || e.data.id !== searchId) return  // Stale result
+
+      // Convert plain data back to Doc instances (constructor is now lightweight)
+      const docs = []
+      for (const d of e.data.docs) {
+        docs.push(new Doc(d))
+      }
+      searchStore.searchResults = docs
+
+      if (e.data.done) {
+        searchStore.searchLoading = false
+      }
+    }
   }
   return searchWorker
 }
@@ -24,6 +40,7 @@ export const useMainStore = defineStore('main', {
     query: '' as string,
     searchResults: [] as Doc[],
     searchLoading: false,
+    _searchRouteTimer: null as ReturnType<typeof setTimeout> | null,
     fileExplorer: null as any,
     error: '' as string,  // Permanent status message (e.g., "Reconnecting...")
     toast: '' as string,  // Temporary toast (auto-dismisses)
@@ -116,6 +133,7 @@ export const useMainStore = defineStore('main', {
     search(query: string, loc: string) {
       const worker = getSearchWorker()
       const id = ++searchId
+      searchStore = this  // Store reference for worker callback
 
       if (!query) {
         this.searchResults = []
@@ -124,18 +142,6 @@ export const useMainStore = defineStore('main', {
       }
 
       this.searchLoading = true
-
-      worker.onmessage = (e) => {
-        if (e.data.id !== searchId) return  // Stale result
-
-        // Convert plain data back to Doc instances
-        this.searchResults = e.data.docs.map((d: any) => new Doc(d))
-
-        if (e.data.done) {
-          this.searchLoading = false
-        }
-      }
-
       worker.postMessage({ type: 'search', query, loc, id })
     },
     login(username: string, privileged: boolean) {

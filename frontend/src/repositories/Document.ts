@@ -1,4 +1,4 @@
-import { formatSize, formatUnixDate, haystackFormat } from "@/utils"
+import { formatSize, formatUnixDate } from "@/utils"
 
 export type FUID = string
 
@@ -16,7 +16,6 @@ export class Doc {
   public key: FUID = ""
   public size: number = 0
   public mtime: number = 0
-  public haystack: string = ""
   public dir: boolean = false
   /** @internal Use the name getter/setter instead */
   public _name: string = ""
@@ -24,13 +23,12 @@ export class Doc {
   constructor(props: Partial<DocProps> = {}) {
     const { name, ...rest } = props
     Object.assign(this, rest)
-    if (name) this.name = name  // Use setter for validation
+    if (name) this._name = name  // Skip validation/haystack for bulk loading
   }
   get name() { return this._name }
   set name(name: string) {
     if (name.includes('/') || name.startsWith('.')) throw Error(`Invalid name: ${name}`)
     this._name = name
-    this.haystack = haystackFormat(name)
   }
   get sizedisp(): string { return formatSize(this.size) }
   get modified(): string { return formatUnixDate(this.mtime) }

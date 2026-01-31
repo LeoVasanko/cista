@@ -75,8 +75,9 @@ function yieldControl(): Promise<void> {
 async function performSearch(query: string, loc: string, searchId: number) {
   const needle = needleFormat(query)
   const limit = 100
-  const batchSize = 1000
+  const batchSize = 500  // Smaller batches for faster incremental feedback
   const results: WorkerDoc[] = []
+  let lastResultCount = 0
 
   for (let i = 0; i < recentDocuments.length && results.length < limit; i += batchSize) {
     // Check if search was superseded
@@ -91,8 +92,9 @@ async function performSearch(query: string, loc: string, searchId: number) {
       }
     }
 
-    // Post incremental results if we found any in this batch
-    if (results.length > 0 && currentSearchId === searchId) {
+    // Post incremental results if we found new matches
+    if (results.length > lastResultCount && currentSearchId === searchId) {
+      lastResultCount = results.length
       const sortedResults = sortResults(results, query, loc)
       postMessage({
         type: 'results',
@@ -102,7 +104,7 @@ async function performSearch(query: string, loc: string, searchId: number) {
       } as ResultMessage)
     }
 
-    // Yield control between batches
+    // Yield control between batches to allow new search requests to interrupt
     if (i + batchSize < recentDocuments.length && results.length < limit) {
       await yieldControl()
     }

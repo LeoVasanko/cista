@@ -2,14 +2,14 @@
   <Gallery
     v-if="store.prefs.gallery"
     ref="fileExplorer"
-    :key="`gallery-${Router.currentRoute.value.path}`"
+    :key="`gallery-${folderPath}`"
     :path="props.path"
     :documents="documents"
   />
   <FileExplorer
     v-else
     ref="fileExplorer"
-    :key="`explorer-${Router.currentRoute.value.path}`"
+    :key="`explorer-${folderPath}`"
     :path="props.path"
     :documents="documents"
   />
@@ -20,7 +20,6 @@
 <script setup lang="ts">
 import { watchEffect, ref, computed, watch } from 'vue'
 import { useMainStore } from '@/stores/main'
-import Router from '@/router/index'
 import { collator } from '@/utils'
 import { sorted, sortedGrouped } from '@/utils/docsort'
 import FileExplorer from '@/components/FileExplorer.vue'
@@ -32,11 +31,19 @@ const props = defineProps<{
   query: string
 }>()
 
-// Trigger search when query changes
+// Folder path for component keys - only recreate component when folder changes, not search
+const folderPath = computed(() => props.path.join('/'))
+// Trigger search when query changes (from route, e.g., page load or back button)
+// Note: Direct typing triggers search immediately via HeaderMain, this is for route-based changes
 watch(
   () => [props.query, props.path.join('/')] as const,
   ([query, loc]) => {
-    store.search(query, loc)
+    // Only trigger if results don't match current query (avoid duplicate searches)
+    if (query && store.searchResults.length === 0) {
+      store.search(query, loc)
+    } else if (!query) {
+      store.search('', loc)  // Clear search results
+    }
   },
   { immediate: true }
 )
