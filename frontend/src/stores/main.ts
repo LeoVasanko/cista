@@ -10,6 +10,9 @@ import SearchWorker from '@/workers/searchWorker?worker'
 let searchWorker: Worker | null = null
 let searchId = 0
 let searchStore: ReturnType<typeof useMainStore> | null = null
+let loadingTimer: ReturnType<typeof setTimeout> | null = null
+let clearOldResultsTimer: ReturnType<typeof setTimeout> | null = null
+let lastResultUpdate = 0
 
 function getSearchWorker(): Worker {
   if (!searchWorker) {
@@ -18,14 +21,30 @@ function getSearchWorker(): Worker {
     searchWorker.onmessage = (e) => {
       if (!searchStore || e.data.id !== searchId) return  // Stale result
 
-      // Convert plain data back to Doc instances (constructor is now lightweight)
-      const docs = []
-      for (const d of e.data.docs) {
-        docs.push(new Doc(d))
+      // Convert plain data back to Doc instances
+      const docs = e.data.docs.map((d: any) => new Doc(d))
+
+      // Cancel the clear-old-results timer since we have new results
+      if (clearOldResultsTimer) {
+        clearTimeout(clearOldResultsTimer)
+        clearOldResultsTimer = null
       }
+
+      // Throttle rapid intermediate updates to reduce UI flicker
+      const now = performance.now()
+      if (!e.data.done && now - lastResultUpdate < 50) {
+        return  // Skip intermediate update if too recent
+      }
+      lastResultUpdate = now
+
       searchStore.searchResults = docs
 
       if (e.data.done) {
+        // Clear the loading timer and hide spinner
+        if (loadingTimer) {
+          clearTimeout(loadingTimer)
+          loadingTimer = null
+        }
         searchStore.searchLoading = false
       }
     }
@@ -138,15 +157,40 @@ export const useMainStore = defineStore('main', {
       // Update query immediately so watchers know we're handling this
       this.query = query
 
-      // Clear old results immediately - don't show stale data
-      this.searchResults = []
+      // Cancel pending timers
+      if (loadingTimer) {
+        clearTimeout(loadingTimer)
+        loadingTimer = null
+      }
+      if (clearOldResultsTimer) {
+        clearTimeout(clearOldResultsTimer)
+        clearOldResultsTimer = null
+      }
 
       if (!query) {
+        // Clear results only when search is closed
+        this.searchResults = []
         this.searchLoading = false
         return
       }
 
-      this.searchLoading = true
+      // Keep old results briefly to avoid flicker on fast cached searches
+      // But clear them after 50ms if no new results have arrived
+      clearOldResultsTimer = setTimeout(() => {
+        if (searchId === id) {
+          this.searchResults = []
+        }
+        clearOldResultsTimer = null
+      }, 50)
+
+      // Delay showing loading indicator to avoid flicker on fast searches
+      loadingTimer = setTimeout(() => {
+        if (searchId === id) {  // Still the current search
+          this.searchLoading = true
+        }
+        loadingTimer = null
+      }, 100)
+
       worker.postMessage({ type: 'search', query, loc, id })
     },
     login(username: string, privileged: boolean) {
