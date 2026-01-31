@@ -28,7 +28,7 @@ def create_banner():
 def create_startup_box(*, folder, url, unix=None, dev=False, paskia_url=None):
     """Create a framed startup box with server information."""
     title = f"Cista {cista.__version__}"
-    listen = f"{url} ({unix})" if unix else url
+    listen = unix if unix else url
     location = f"{folder} @ {listen}"
     lines = [title, location]
     if paskia_url:
