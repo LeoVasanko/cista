@@ -52,20 +52,30 @@ const closeSearch = (ev: Event) => {
   updateSearch(ev)
 }
 
+// Track pending route update
+let pendingRouteUpdate: number | null = null
+
 const updateSearch = (ev: Event) => {
   const q = (ev.target as HTMLInputElement).value
-  let p = props.path.join('/')
-  p = p ? `/${p}` : ''
-  const url = q ? `${p}//${q}` : (p || '/')
-  const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
+  const loc = props.path.join('/')
 
   // Start search immediately via store (worker handles it async)
-  store.search(q, props.path.join('/'))
+  store.search(q, loc)
 
-  // Update route in next frame to keep typing responsive
-  requestAnimationFrame(() => {
-    if (!props.query && q) router.push(u)
-    else router.replace(u)
+  // Cancel any pending route update
+  if (pendingRouteUpdate !== null) {
+    cancelAnimationFrame(pendingRouteUpdate)
+  }
+
+  // Schedule route update - will be cancelled if user types again
+  pendingRouteUpdate = requestAnimationFrame(() => {
+    pendingRouteUpdate = null
+    let p = loc
+    p = p ? `/${p}` : ''
+    const url = q ? `${p}//${q}` : (p || '/')
+    const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
+    // Use replace to avoid building up history for each keystroke
+    router.replace(u)
   })
 }
 const toggleSearchInput = (ev: Event) => {

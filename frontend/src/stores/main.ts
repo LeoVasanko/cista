@@ -135,8 +135,13 @@ export const useMainStore = defineStore('main', {
       const id = ++searchId
       searchStore = this  // Store reference for worker callback
 
+      // Update query immediately so watchers know we're handling this
+      this.query = query
+
+      // Clear old results immediately - don't show stale data
+      this.searchResults = []
+
       if (!query) {
-        this.searchResults = []
         this.searchLoading = false
         return
       }

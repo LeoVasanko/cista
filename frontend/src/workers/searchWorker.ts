@@ -36,58 +36,118 @@ interface ResultMessage {
 }
 
 // Worker state
-let documents: WorkerDoc[] = []
 let recentDocuments: WorkerDoc[] = []  // Sorted by mtime descending
 let currentSearchId = 0
 
-// Haystack formatting (same as main thread utils)
-function haystackFormat(str: string): string {
-  const based = str.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  return '^' + based + '$'
+// Search result cache - cleared when documents change
+interface CacheEntry {
+  query: string         // Normalized query string
+  results: WorkerDoc[]  // Matched results (up to limit)
+  complete: boolean     // True if search scanned all documents
+}
+const searchCache: CacheEntry[] = []
+const MAX_CACHE_SIZE = 10
+const RESULT_LIMIT = 100
+
+// Normalize string for search (remove diacritics, lowercase)
+// Haystack adds ^ and $ markers to allow matching start/end of name
+function normalizeHaystack(str: string): string {
+  return '^' + str.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase() + '$'
 }
 
-// Needle formatting
-function needleFormat(query: string) {
-  const based = query.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  return { based, words: based.split(/\s+/) }
+function normalizeQuery(str: string): string {
+  return str.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
-// Test if haystack includes needle
-function localeIncludes(haystack: string, filter: { based: string; words: string[] }): boolean {
-  const { based, words } = filter
-  return haystack.includes(based) || (words && words.every(word => haystack.includes(word)))
+// Test if document matches search query
+function matches(haystack: string, query: string, words: string[]): boolean {
+  return haystack.includes(query) || words.every(word => haystack.includes(word))
 }
 
 // Collator for sorting
-const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true, usage: 'search' })
+const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
 
-// Sort by mtime descending
-function sortByRecent(docs: WorkerDoc[]): WorkerDoc[] {
-  return [...docs].sort((a, b) => b.mtime - a.mtime)
+// Yield control to allow new messages to be processed
+const yieldControl = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
+
+// Find best cache entry to filter from
+// Returns entry if new query's results are guaranteed to be a subset of cached results
+function findCacheSubset(query: string): CacheEntry | null {
+  // Look for a cached query that the new query starts with
+  // e.g., cached "foo" can be used for "foobar" or "foo bar"
+  // The longer the prefix, the better (fewer items to filter)
+  let best: CacheEntry | null = null
+  for (const entry of searchCache) {
+    if (query.startsWith(entry.query)) {
+      if (!best || entry.query.length > best.query.length) {
+        best = entry
+      }
+    }
+  }
+  return best
 }
 
-// Yield control to check for new messages
-function yieldControl(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0))
+// Add result to cache
+function addToCache(query: string, results: WorkerDoc[], complete: boolean) {
+  // Remove existing entry for same query if any
+  const idx = searchCache.findIndex(e => e.query === query)
+  if (idx !== -1) searchCache.splice(idx, 1)
+  // Add to front (most recent)
+  searchCache.unshift({ query, results, complete })
+  // Trim cache
+  if (searchCache.length > MAX_CACHE_SIZE) searchCache.pop()
+}
+
+// Clear cache (called when documents change)
+function clearCache() {
+  searchCache.length = 0
 }
 
 // Perform search with incremental results
-async function performSearch(query: string, loc: string, searchId: number) {
-  const needle = needleFormat(query)
-  const limit = 100
-  const batchSize = 500  // Smaller batches for faster incremental feedback
+async function performSearch(rawQuery: string, loc: string, searchId: number) {
+  const query = normalizeQuery(rawQuery)
+  const words = query.split(/\s+/)
   const results: WorkerDoc[] = []
   let lastResultCount = 0
 
-  for (let i = 0; i < recentDocuments.length && results.length < limit; i += batchSize) {
-    // Check if search was superseded
-    if (currentSearchId !== searchId) return
+  // Check cache for exact match
+  const exactMatch = searchCache.find(e => e.query === query)
+  if (exactMatch) {
+    if (currentSearchId === searchId) {
+      postResults(exactMatch.results, rawQuery, loc, searchId, true)
+    }
+    return
+  }
+
+  // Check if we can filter from a cached superset
+  const cacheEntry = findCacheSubset(query)
+  if (cacheEntry) {
+    // Fast path: filter from cached results
+    for (const doc of cacheEntry.results) {
+      if (matches(doc.haystack, query, words)) {
+        results.push(doc)
+      }
+    }
+    // Complete if cache was complete, or we found fewer than limit
+    const complete = cacheEntry.complete || results.length < RESULT_LIMIT
+    addToCache(query, results, complete)
+
+    if (currentSearchId === searchId) {
+      postResults(results, rawQuery, loc, searchId, true)
+    }
+    return
+  }
+
+  // Slow path: scan all documents
+  const batchSize = 500
+  for (let i = 0; i < recentDocuments.length && results.length < RESULT_LIMIT; i += batchSize) {
+    if (currentSearchId !== searchId) return  // Superseded
 
     // Process batch
     const end = Math.min(i + batchSize, recentDocuments.length)
-    for (let j = i; j < end && results.length < limit; j++) {
+    for (let j = i; j < end && results.length < RESULT_LIMIT; j++) {
       const doc = recentDocuments[j]!
-      if (localeIncludes(doc.haystack, needle)) {
+      if (matches(doc.haystack, query, words)) {
         results.push(doc)
       }
     }
@@ -95,31 +155,31 @@ async function performSearch(query: string, loc: string, searchId: number) {
     // Post incremental results if we found new matches
     if (results.length > lastResultCount && currentSearchId === searchId) {
       lastResultCount = results.length
-      const sortedResults = sortResults(results, query, loc)
-      postMessage({
-        type: 'results',
-        docs: sortedResults.map(stripHaystack),
-        id: searchId,
-        done: false
-      } as ResultMessage)
+      postResults(results, rawQuery, loc, searchId, false)
     }
 
-    // Yield control between batches to allow new search requests to interrupt
-    if (i + batchSize < recentDocuments.length && results.length < limit) {
+    // Yield control between batches
+    if (i + batchSize < recentDocuments.length && results.length < RESULT_LIMIT) {
       await yieldControl()
     }
   }
 
-  // Post final results
+  // Cache and post final results
+  addToCache(query, results, results.length < RESULT_LIMIT)
   if (currentSearchId === searchId) {
-    const sortedResults = sortResults(results, query, loc)
-    postMessage({
-      type: 'results',
-      docs: sortedResults.map(stripHaystack),
-      id: searchId,
-      done: true
-    } as ResultMessage)
+    postResults(results, rawQuery, loc, searchId, true)
   }
+}
+
+// Post results to main thread
+function postResults(docs: WorkerDoc[], query: string, loc: string, id: number, done: boolean) {
+  const sorted = sortResults(docs, query, loc)
+  postMessage({
+    type: 'results',
+    docs: sorted.map(({ haystack, ...rest }) => rest),
+    id,
+    done
+  } as ResultMessage)
 }
 
 // Sort results by relevance
@@ -127,28 +187,18 @@ function sortResults(docs: WorkerDoc[], query: string, loc: string): WorkerDoc[]
   const locsub = loc + '/'
   return [...docs].sort((a, b) => (
     // Current folder first
-    // @ts-ignore
-    (b.loc === loc) - (a.loc === loc) ||
+    Number(b.loc === loc) - Number(a.loc === loc) ||
     // Then subfolders
-    // @ts-ignore
-    (b.loc.slice(0, locsub.length) === locsub) - (a.loc.slice(0, locsub.length) === locsub) ||
+    Number(b.loc.startsWith(locsub)) - Number(a.loc.startsWith(locsub)) ||
     // Then by location
     collator.compare(a.loc, b.loc) ||
-    // Files after folders
-    // @ts-ignore
-    (a.dir === false) - (b.dir === false) ||
+    // Folders before files
+    Number(b.dir) - Number(a.dir) ||
     // Exact name match first
-    // @ts-ignore
-    b.name.includes(query) - a.name.includes(query) ||
+    Number(b.name.includes(query)) - Number(a.name.includes(query)) ||
     // Finally by name
     collator.compare(a.name, b.name)
   ))
-}
-
-// Strip haystack before sending back to main thread
-function stripHaystack(doc: WorkerDoc): DocData {
-  const { haystack, ...rest } = doc
-  return rest
 }
 
 // Handle incoming messages
@@ -156,24 +206,18 @@ self.onmessage = async (e: MessageEvent<IncomingMessage>) => {
   const msg = e.data
 
   if (msg.type === 'update') {
-    // Update document list with haystacks
-    documents = msg.documents.map(doc => ({
-      ...doc,
-      haystack: haystackFormat(doc.name)
-    }))
-    recentDocuments = sortByRecent(documents)
+    // Update document list with haystacks, sorted by mtime descending
+    recentDocuments = msg.documents
+      .map(doc => ({ ...doc, haystack: normalizeHaystack(doc.name) }))
+      .sort((a, b) => b.mtime - a.mtime)
+    clearCache()
   } else if (msg.type === 'search') {
     currentSearchId = msg.id
     if (msg.query) {
       await performSearch(msg.query, msg.loc, msg.id)
     } else {
-      // Empty query - no results needed (main thread handles folder listing)
-      postMessage({
-        type: 'results',
-        docs: [],
-        id: msg.id,
-        done: true
-      } as ResultMessage)
+      // Empty query - no results needed
+      postMessage({ type: 'results', docs: [], id: msg.id, done: true } as ResultMessage)
     }
   }
 }
