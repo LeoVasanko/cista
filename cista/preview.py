@@ -89,9 +89,9 @@ def dispatch(path, quality, maxsize, maxzoom):
             return process_video(path, quality=quality, maxsize=maxsize)
         return process_image(path, quality=quality, maxsize=maxsize)
     except ValueError as e:
-        logger.warning(f"Cannot generate preview for {path.name}: {e}")
+        logger.warning(f"Cannot generate preview for {path}: {e}")
     except Exception as e:
-        logger.exception(f"Error generating preview for {path.name}: {e}")
+        logger.exception(f"Error generating preview for {path}: {e}")
 
 
 def process_image(path, *, maxsize, quality):
