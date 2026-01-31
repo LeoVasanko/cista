@@ -43,9 +43,14 @@ setproctitle("cista-main")
 async def main_start(app):
     config.load_config()
     setproctitle(f"cista {config.config.path.name}")
-    workers = max(2, min(8, cpu_count()))
+    # Small pool for memory-intensive preview generation
+    preview_workers = max(2, min(8, cpu_count()))
     app.ctx.threadexec = ThreadPoolExecutor(
-        max_workers=workers, thread_name_prefix="cista-ioworker"
+        max_workers=preview_workers, thread_name_prefix="cista-preview"
+    )
+    # Larger pool for long-running but low-memory zip operations
+    app.ctx.zipexec = ThreadPoolExecutor(
+        max_workers=32, thread_name_prefix="cista-zip"
     )
     watching.start(app)
 
@@ -56,6 +61,7 @@ async def main_stop(app):
     quit.set()
     watching.stop(app)
     app.ctx.threadexec.shutdown()
+    app.ctx.zipexec.shutdown(cancel_futures=True)
     await sso.close_client()
     logger.debug("Cista worker threads all finished")
 
@@ -288,27 +294,40 @@ async def zip_download(req, keys, zipfile, ext):
                 yield chunk
         assert size == 0
 
+    pending_put = None  # Current queue.put future, can be cancelled
+
     def worker():
+        nonlocal pending_put
         try:
             for chunk in stream_zip(local_files(files)):
-                asyncio.run_coroutine_threadsafe(queue.put(chunk), loop).result()
+                future = asyncio.run_coroutine_threadsafe(queue.put(chunk), loop)
+                pending_put = future
+                future.result()  # Blocks until queue has space
+        except asyncio.CancelledError:
+            logger.info("ZIP download cancelled by client disconnect")
         except Exception:
             logger.exception("Error streaming ZIP")
             raise
         finally:
+            pending_put = None
             asyncio.run_coroutine_threadsafe(queue.put(None), loop)
 
-    # Don't block the event loop: run in a thread
+    # Don't block the event loop: run in a thread (use larger zip pool)
     queue = asyncio.Queue(maxsize=1)
     loop = asyncio.get_event_loop()
-    thread = loop.run_in_executor(app.ctx.threadexec, worker)
+    thread = loop.run_in_executor(app.ctx.zipexec, worker)
 
     # Stream the response
     res = await req.respond(
         content_type="application/zip",
         headers={"cache-control": "no-store"},
     )
-    while chunk := await queue.get():
-        await res.send(chunk)
+    try:
+        while chunk := await queue.get():
+            await res.send(chunk)
+    finally:
+        # Cancel any pending put to unblock and stop the worker
+        if pending_put:
+            pending_put.cancel()
 
     await thread  # If it raises, the response will fail download
