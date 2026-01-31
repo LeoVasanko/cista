@@ -6,6 +6,7 @@
 import { useMainStore } from '@/stores/main'
 import { apiFetch } from '@/repositories/Client'
 import type { SelectedItems } from '@/repositories/Document'
+import { zipName } from '@/utils/fileutil'
 import { reactive } from 'vue';
 
 const store = useMainStore()
@@ -106,7 +107,6 @@ const filesystemdl = async (sel: SelectedItems, handle: FileSystemDirectoryHandl
         ++store.dprogress.fileidx
         const reader = res.body.getReader()
         await writable.truncate(0)
-        store.error = "Direct download."
         store.dprogress.tlast = Date.now()
         while (true) {
           const { value, done } = await reader.read()
@@ -136,7 +136,7 @@ const download = async () => {
   console.log('Download', sel)
   if (sel.keys.length === 0) {
     console.warn('Attempted download but no files found. Missing selected keys:', sel.missing)
-    store.error = 'No existing files selected'
+    store.showToast('No existing files selected')
     store.selected.clear()
     return
   }
@@ -144,7 +144,7 @@ const download = async () => {
   const files = sel.recursive.filter(([rel, full, doc]) => !doc.dir)
   if (files.length === 1) {
     store.selected.clear()
-    store.error = "Single file via browser downloads"
+    store.showToast(`Downloading ${files[0]![0].split('/').pop()}`)
     return linkdl(`/files/${files[0]![1]}`)
   }
   // Use FileSystem API if multiple files and the browser supports it
@@ -164,9 +164,10 @@ const download = async () => {
   }
   // Otherwise, zip and download
   console.log("Falling back to zip download")
-  const name = sel.keys.length === 1 ? sel.docs[sel.keys[0]!]!.name : 'download'
+  const items = sel.keys.map(k => sel.docs[k]!)
+  const name = zipName(items)
   linkdl(`/zip/${Array.from(sel.keys).join('+')}/${name}.zip`)
-  store.error = "Downloading as ZIP via browser downloads"
+  store.showToast(`Downloading ${name}.zip`)
   store.selected.clear()
 }
 
