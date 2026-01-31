@@ -25,6 +25,28 @@ def create_banner():
 """
 
 
+def create_startup_box(*, folder, url, unix=None, dev=False, paskia_url=None):
+    """Create a framed startup box with server information."""
+    title = f"Cista {cista.__version__}"
+    listen = f"{url} ({unix})" if unix else url
+    location = f"{folder} @ {listen}"
+    lines = [title, location]
+    if paskia_url:
+        lines.append(f"Paskia: {paskia_url}")
+    if dev:
+        lines.append("dev mode")
+
+    # Calculate width based on content
+    inner_width = max(len(line) for line in lines) + 2
+
+    # Build the box
+    box = [f"╭{'─' * inner_width}╮"]
+    for line in lines:
+        box.append(f"│ {line:<{inner_width - 1}}│")
+    box.append(f"╰{'─' * inner_width}╯")
+    return "\n".join(box) + "\n"
+
+
 banner = create_banner()
 
 doc = """\
@@ -83,8 +105,7 @@ def _main():
     elif "--version" in sys.argv:
         sys.stdout.write(f"cista {cista.__version__}\n")
         return 0
-    else:
-        sys.stderr.write(banner)
+    # Don't print banner yet for normal startup - we'll print the startup box later
     args = docopt(doc)
     if args["--user"]:
         return _user(args)
@@ -121,17 +142,23 @@ def _main():
     elif not exists:
         settings["listen"] = ":8000"
     operation = config.update_config(settings)
-    sys.stderr.write(f"Config {operation}: {config.conffile}\n")
     # Prepare to serve
-    unix = None
-    url, _ = serve.parse_listen(config.config.listen)
+    url, opts = serve.parse_listen(config.config.listen)
     if not config.config.path.is_dir():
         raise ValueError(f"No such directory: {config.config.path}")
-    extra = f" ({unix})" if unix else ""
     dev = args["--dev"]
-    if dev:
-        extra += " (dev mode)"
-    sys.stderr.write(f"Serving {config.config.path} at {url}{extra}\n")
+    # Check for Paskia SSO
+    from cista.sso import PASKIA_BACKEND_URL
+
+    # Print startup box
+    startup_box = create_startup_box(
+        folder=config.config.path,
+        url=url,
+        unix=opts.get("unix"),
+        dev=dev,
+        paskia_url=PASKIA_BACKEND_URL or None,
+    )
+    sys.stderr.write(startup_box)
     # Run the server
     serve.run(dev=dev)
     return 0
