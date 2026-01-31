@@ -257,10 +257,7 @@ def get_files(wanted: set) -> list[tuple[PurePosixPath, Path]]:
 @app.get("/zip/<keys>/<zipfile:ext=zip>")
 async def zip_download(req, keys, zipfile, ext):
     """Download a zip archive of the given keys"""
-    if config.config.authentication == "paskia":
-        await auth.verify_sso(req)
-    else:
-        auth.verify(req)
+    await auth.verify(req)
 
     wanted = set(keys.split("+"))
     files = get_files(wanted)

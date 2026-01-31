@@ -236,39 +236,36 @@ async def verify(request, *, privileged=False):
 
     For paskia mode (PASKIA_BACKEND_URL set), validates against the SSO backend.
     For built-in mode, checks session-based authentication.
-    For public mode (config.public=True), allows all requests.
-
-    All 401/403 responses include auth.iframe URL for consistent frontend handling
-    via the paskia library's showAuthIframe().
+    For public mode (config.public=True), skips auth unless privileged is required.
 
     Args:
         request: The Sanic request object
-        privileged: If True, requires admin privileges
+        privileged: If True, requires admin privileges (always enforced even in public mode)
 
     Raises:
         Unauthorized: If authentication is required
         Forbidden: If access is denied
     """
+    # Public mode: skip auth unless privileged access is required
+    if config.config.public and not privileged:
+        return
+
     sso = _get_sso()
     if sso.paskia_enabled():
-        # SSO validation against auth backend
-        # Always check cista:login; privileged flag comes from response perm list
         perm = "cista:admin" if privileged else "cista:login"
         await sso.validate_sso_request(request, perm=perm)
         return
 
     user = getattr(request.ctx, "user", None)
     if privileged:
-        if user:
-            if user.privileged:
-                return
-            raise Forbidden(
-                "Access Forbidden: Only for privileged users",
-                quiet=True,
-            )
-    elif config.config.public or user:
+        if user and user.privileged:
+            return
+        raise Forbidden(
+            "Access Forbidden: Only for privileged users",
+            quiet=True,
+        )
+    if user:
         return
-    # Return iframe URL for paskia library to show login dialog
     raise Unauthorized(
         f"Login required for {request.path}",
         "cookie",

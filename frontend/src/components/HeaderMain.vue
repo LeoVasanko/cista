@@ -94,11 +94,11 @@ const settingsMenu = (e: Event) => {
 
   if (store.user.isLoggedIn) {
     items.push({ label: '🚪 Logout', onClick: () => store.logout() })
-  } else if (!ssoStore.isExternalAuth) {
-    // Show login in paskia iframe overlay
+  } else if (store.server.public) {
+    // Show login option only in public mode (non-public modes trigger auth automatically)
     items.push({ label: '🔐 Login', onClick: async () => {
       try {
-        await showAuthIframe('/auth/restricted')
+        await showAuthIframe('/auth/restricted#theme=light')
         resumeWatching()
       } catch (e) {
         console.log('Login cancelled')

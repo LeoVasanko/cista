@@ -95,14 +95,19 @@ async def control(req, ws):
 async def watch(req, ws):
     # Build user info from either built-in auth or SSO
     user_info = None
-    if sso_user := getattr(req.ctx, "sso_user", None):
-        # SSO auth (paskia mode): extract from validation response
-        ctx = sso_user.get("ctx", {})
-        perms = ctx.get("permissions", [])
-        user_info = {
-            "username": ctx.get("user", {}).get("display_name", ""),
-            "privileged": "cista:admin" in perms,
-        }
+    if sso.paskia_enabled():
+        # SSO auth: call validation to get user info (don't enforce auth in public mode)
+        try:
+            await sso.validate_sso_request(req)
+        except Exception:
+            pass  # Ignore auth errors, user_info stays None
+        if sso_user := getattr(req.ctx, "sso_user", None):
+            ctx = sso_user.get("ctx", {})
+            perms = ctx.get("permissions", [])
+            user_info = {
+                "username": ctx.get("user", {}).get("display_name", ""),
+                "privileged": "cista:admin" in perms,
+            }
     elif req.ctx.user:
         # Built-in auth: use local user database
         user_info = {
