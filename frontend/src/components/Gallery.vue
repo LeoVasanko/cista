@@ -213,18 +213,6 @@ const showFolderBreadcrumb = (i: number) => {
   return i === 0 ? docloc !== loc.value : docloc !== docs[i - 1]!.loc
 }
 
-
-const selectionIndeterminate = computed({
-  get: () => {
-    return (
-      props.documents.length > 0 &&
-      props.documents.some((doc: Doc) => store.selected.has(doc.key)) &&
-      !allSelected.value
-    )
-  },
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  set: (value: boolean) => {}
-})
 const allSelected = computed({
   get: () => {
     return (
