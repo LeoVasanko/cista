@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import mimetypes
-import threading
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import cpu_count
 from pathlib import Path, PurePath, PurePosixPath
@@ -56,7 +55,6 @@ async def main_start(app):
 # Sanic sometimes fails to execute after_server_stop, so we do it before instead (potentially interrupting handlers)
 @app.before_server_stop
 async def main_stop(app):
-    quit.set()
     watching.stop(app)
     app.ctx.threadexec.shutdown()
     app.ctx.zipexec.shutdown(cancel_futures=True)
@@ -174,9 +172,8 @@ def _load_wwwroot(www):
 
 @app.before_server_start
 async def start(app):
-    await load_wwwroot(app)
-    if app.debug:
-        app.add_task(refresh_wwwroot(), name="refresh_wwwroot")
+    if not app.debug:
+        await load_wwwroot(app)
 
 
 async def load_wwwroot(app):
@@ -186,36 +183,14 @@ async def load_wwwroot(app):
     )
 
 
-quit = threading.Event()
-
-
-async def refresh_wwwroot():
-    try:
-        while not quit.is_set():
-            try:
-                wwwold = www
-                await load_wwwroot(app)
-                changes = ""
-                for name in sorted(www):
-                    attr = www[name]
-                    if wwwold.get(name) == attr:
-                        continue
-                    headers = attr[2]
-                    changes += f"{headers['last-modified']} {headers['etag']} /{name}\n"
-                for name in sorted(set(wwwold) - set(www)):
-                    changes += f"Deleted /{name}\n"
-                if changes:
-                    logger.info(f"Updated wwwroot:\n{changes}", end="", flush=True)
-            except Exception as e:
-                logger.error(f"Error loading wwwroot: {e!r}")
-            await asyncio.sleep(0.5)
-    except asyncio.CancelledError:
-        pass
-
-
 @app.route("/<path:path>", methods=["GET", "HEAD"])
 async def wwwroot(req, path=""):
     """Frontend files only"""
+    if app.debug:
+        raise NotFound(
+            "Dev mode: frontend-build is not served on backend (you should connect vite)",
+            extra={"name": path},
+        )
     name = unquote(path)
     if name not in www:
         raise NotFound(f"File not found: /{path}", extra={"name": name})
