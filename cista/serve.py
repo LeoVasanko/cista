@@ -2,6 +2,7 @@ import os
 import re
 from pathlib import Path
 
+from fastapi_vue.hostutil import parse_endpoint
 from sanic import Sanic
 
 from cista import config, server80
@@ -44,18 +45,24 @@ def check_cert(certdir, domain):
 
 
 def parse_listen(listen):
-    if listen.startswith("/"):
-        unix = Path(listen).resolve()
+    # Domain name (e.g. example.com) -> HTTPS with LetsEncrypt
+    if re.fullmatch(r"(\w+(-\w+)*\.)+\w{2,}", listen, re.UNICODE):
+        return f"https://{listen}", {"host": listen, "port": 443, "ssl": True}
+
+    # Use fastapi_vue's parse_endpoint for everything else
+    endpoints = parse_endpoint(listen, default_port=8000)
+    ep = endpoints[0]
+
+    if "uds" in ep:
+        unix = Path(ep["uds"]).resolve()
         if not unix.parent.exists():
             raise ValueError(
                 f"Directory for unix socket does not exist: {unix.parent}/",
             )
         return "http://localhost", {"unix": unix.as_posix()}
-    if re.fullmatch(r"(\w+(-\w+)*\.)+\w{2,}", listen, re.UNICODE):
-        return f"https://{listen}", {"host": listen, "port": 443, "ssl": True}
-    try:
-        addr, _port = listen.split(":", 1)
-        port = int(_port)
-    except Exception:
-        raise ValueError(f"Invalid listen address: {listen}") from None
-    return f"http://localhost:{port}", {"host": addr, "port": port}
+
+    host, port = ep["host"], ep["port"]
+    # When binding all interfaces, use single_listener=False for Sanic
+    if len(endpoints) > 1:
+        return f"http://localhost:{port}", {"host": host, "port": port, "single_listener": False}
+    return f"http://{host}:{port}", {"host": host, "port": port}
