@@ -7,7 +7,6 @@ import { useMainStore } from '@/stores/main'
 import { apiFetch } from '@/repositories/Client'
 import type { SelectedItems } from '@/repositories/Document'
 import { zipName } from '@/utils/fileutil'
-import { reactive } from 'vue';
 
 const store = useMainStore()
 
@@ -131,44 +130,43 @@ const filesystemdl = async (sel: SelectedItems, handle: FileSystemDirectoryHandl
   statReset()
 }
 
-const download = async () => {
+const zipdl = (sel: SelectedItems) => {
+  const items = sel.keys.map(k => sel.docs[k]!)
+  const name = zipName(items)
+  linkdl(`/zip/${Array.from(sel.keys).join('+')}/${name}.zip`)
+  store.showToast(`Downloading ${name}.zip`)
+  store.selected.clear()
+}
+
+const download = async (e: MouseEvent) => {
   const sel = store.selectedFiles
-  console.log('Download', sel)
   if (sel.keys.length === 0) {
-    console.warn('Attempted download but no files found. Missing selected keys:', sel.missing)
     store.showToast('No existing files selected')
     store.selected.clear()
     return
   }
-  // Plain old a href download if only one file (ignoring any folders)
+  // Single file: direct download
   const files = sel.recursive.filter(([rel, full, doc]) => !doc.dir)
   if (files.length === 1) {
     store.selected.clear()
     store.showToast(`Downloading ${files[0]![0].split('/').pop()}`)
     return linkdl(`/files/${files[0]![1]}`)
   }
-  // Use FileSystem API if multiple files and the browser supports it
-  if ('showDirectoryPicker' in window) {
+  // Alt+click: download to folder (hidden feature)
+  if (e.altKey && 'showDirectoryPicker' in window) {
     try {
       // @ts-ignore
-      const handle = await window.showDirectoryPicker({
-        startIn: 'downloads',
-        mode: 'readwrite'
-      })
+      const handle = await window.showDirectoryPicker({ startIn: 'downloads', mode: 'readwrite' })
       await filesystemdl(sel, handle)
       store.selected.clear()
-      return
     } catch (e) {
-      console.error('Download to folder aborted', e)
+      console.error('Download to folder failed', e)
+      store.showToast('Download to folder failed')
     }
+    return
   }
-  // Otherwise, zip and download
-  console.log("Falling back to zip download")
-  const items = sel.keys.map(k => sel.docs[k]!)
-  const name = zipName(items)
-  linkdl(`/zip/${Array.from(sel.keys).join('+')}/${name}.zip`)
-  store.showToast(`Downloading ${name}.zip`)
-  store.selected.clear()
+  // Default: ZIP download
+  zipdl(sel)
 }
 
 </script>
