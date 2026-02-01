@@ -141,7 +141,7 @@ def _main():
         settings["listen"] = listen
     elif not exists:
         settings["listen"] = ":8000"
-    operation = config.update_config(settings)
+    config.update_config(settings)
     # Prepare to serve
     url, opts = serve.parse_listen(config.config.listen)
     if not config.config.path.is_dir():

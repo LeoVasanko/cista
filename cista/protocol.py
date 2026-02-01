@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from pathlib import PurePosixPath
 from typing import Any
 
 import msgspec
@@ -16,6 +17,10 @@ class ControlBase(msgspec.Struct, tag_field="op", tag=str.lower):
     def __call__(self):
         raise NotImplementedError
 
+    def affected_paths(self) -> list[str]:
+        """Return list of paths affected by this operation for change notification."""
+        return []
+
 
 class MkDir(ControlBase):
     path: str
@@ -23,6 +28,9 @@ class MkDir(ControlBase):
     def __call__(self):
         path = config.config.path / filename.sanitize(self.path)
         path.mkdir(parents=True, exist_ok=False)
+
+    def affected_paths(self) -> list[str]:
+        return [filename.sanitize(self.path)]
 
 
 class Rename(ControlBase):
@@ -35,6 +43,11 @@ class Rename(ControlBase):
             raise BadRequest("Rename 'to' name should only contain filename, not path")
         path = config.config.path / filename.sanitize(self.path)
         path.rename(path.with_name(to))
+
+    def affected_paths(self) -> list[str]:
+        sanitized = filename.sanitize(self.path)
+        new_path = str(PurePosixPath(sanitized).with_name(filename.sanitize(self.to)))
+        return [sanitized, new_path]
 
 
 class Rm(ControlBase):
@@ -49,6 +62,9 @@ class Rm(ControlBase):
             else:
                 p.unlink()
 
+    def affected_paths(self) -> list[str]:
+        return [filename.sanitize(p) for p in self.sel]
+
 
 class Mv(ControlBase):
     sel: list[str]
@@ -62,6 +78,13 @@ class Mv(ControlBase):
             raise BadRequest("The destination must be a directory")
         for p in sel:
             shutil.move(p, dst)
+
+    def affected_paths(self) -> list[str]:
+        dst = filename.sanitize(self.dst)
+        paths = [filename.sanitize(p) for p in self.sel]
+        # Include new locations in dst
+        paths.extend(f"{dst}/{PurePosixPath(p).name}" for p in self.sel)
+        return paths
 
 
 class Cp(ControlBase):
@@ -85,6 +108,11 @@ class Cp(ControlBase):
                 )
             else:
                 shutil.copy2(p, dst)
+
+    def affected_paths(self) -> list[str]:
+        dst = filename.sanitize(self.dst)
+        # Only destinations are new (sources unchanged)
+        return [f"{dst}/{PurePosixPath(filename.sanitize(p)).name}" for p in self.sel]
 
 
 ControlTypes = MkDir | Rename | Rm | Mv | Cp

@@ -1,5 +1,6 @@
 import asyncio
 import typing
+from pathlib import PurePosixPath
 from secrets import token_bytes
 
 import msgspec
@@ -53,6 +54,9 @@ async def upload(req, ws):
         if pos != req.end:
             d = f"{len(data)} bytes" if isinstance(data, bytes) else data
             raise ValueError(f"Expected {req.end - pos} more bytes, got {d}")
+        # Signal the watcher about the uploaded file and its parent directories
+        path = PurePosixPath(req.name)
+        watching.notify_change(path, *path.parents)
         # Report success
         res = StatusMsg(status="ack", req=req)
         await asend(ws, res)
@@ -87,6 +91,8 @@ async def control(req, ws):
     while True:
         cmd = msgspec.json.decode(await ws.recv(), type=ControlTypes)
         await asyncio.to_thread(cmd)
+        # Signal the watcher about affected paths
+        watching.notify_change(*cmd.affected_paths())
         await asend(ws, StatusMsg(status="ack", req=cmd))
 
 
