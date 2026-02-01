@@ -3,23 +3,23 @@
     <UploadButton :path="props.path" />
     <SvgButton
       name="create-folder"
-      data-tooltip="New folder"
-      @click="() => {  console.log('New', store.fileExplorer); store.fileExplorer!.newFolder(); console.log('Done')}"
+      tooltip="New folder"
+      @click="() => { store.fileExplorer!.newFolder() }"
     />
-    <slot></slot>
-    <div class="spacer smallgap"></div>
-    <template v-if="showSearchInput">
+    <div class="smallgap"></div>
+    <SvgButton name="eye" @click="store.prefs.gallery = !store.prefs.gallery" tooltip="Details/Gallery" />
+    <div class="search-group">
+      <SvgButton name="find" @click="focusSearch" tooltip="Search" />
       <input
         ref="search"
         type="search"
         :value="query"
         @input="updateSearch"
-        placeholder="Find files"
-        class="margin-input"
+        @keydown.escape="clearSearch"
       />
-    </template>
-    <SvgButton ref="searchButton" name="find" @click.prevent="toggleSearchInput" />
-    <SvgButton name="eye" @click="store.prefs.gallery = !store.prefs.gallery" />
+      <span v-if="!query" class="search-hint" @click="focusSearch">/</span>
+    </div>
+    <div class="spacer smallgap"></div>
     <SvgButton name="cog" @click="settingsMenu" />
   </nav>
 </template>
@@ -35,21 +35,25 @@ import router from '@/router';
 
 const store = useMainStore()
 const ssoStore = useSsoAuthStore()
-const showSearchInput = ref<boolean>(false)
 const search = ref<HTMLInputElement | null>()
-const searchButton = ref<HTMLButtonElement | null>()
 
   const props = defineProps<{
   path: Array<string>
   query: string
 }>()
 
-const closeSearch = (ev: Event) => {
-  if (!showSearchInput.value) return  // Already closing
-  showSearchInput.value = false
+const clearSearch = (ev: Event) => {
+  const input = search.value
+  if (input) {
+    input.value = ''
+    updateSearch(ev)
+  }
   const breadcrumb = document.querySelector('.breadcrumb') as HTMLElement
   breadcrumb.focus()
-  updateSearch(ev)
+}
+
+const focusSearch = () => {
+  search.value?.focus()
 }
 
 // Track pending route update
@@ -78,17 +82,10 @@ const updateSearch = (ev: Event) => {
     router.replace(u)
   })
 }
-const toggleSearchInput = (ev: Event) => {
-  showSearchInput.value = !showSearchInput.value
-  if (!showSearchInput.value) return closeSearch(ev)
-  nextTick(() => {
-    const input = search.value
-    if (input) input.focus()
-  })
+
+const toggleSearchInput = () => {
+  search.value?.focus()
 }
-watchEffect(() => {
-  if (props.query) showSearchInput.value = true
-})
 const settingsMenu = (e: Event) => {
   // show the context menu
   const items = []
@@ -131,7 +128,7 @@ const settingsMenu = (e: Event) => {
 }
 defineExpose({
   toggleSearchInput,
-  closeSearch,
+  clearSearch,
 })
 </script>
 
@@ -143,12 +140,53 @@ defineExpose({
   align-items: center;
   z-index: 10;
 }
-input[type='search'] {
-  background: var(--input-background);
-  color: var(--input-color);
-  border: 0;
-  border-radius: 0.1em;
+.search-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 1.5em;
+  padding: 0 0.3em;
+  transition: background 0.2s ease;
+  flex: 1 1 auto;
+  min-width: 5.5em;
+  max-width: 20em;
+}
+.search-group:focus-within {
+  background: rgba(255, 255, 255, 0.2);
+}
+.search-group:focus-within .search-hint {
+  opacity: 0;
+  pointer-events: none;
+}
+.search-group :deep(.action-button) {
+  width: 2.2em;
+  height: 2.2em;
+  flex-shrink: 0;
+}
+.search-group input[type='search'] {
+  background: transparent;
+  color: var(--header-color);
+  border: none;
   outline: none;
-  max-width: 15ch;
+  padding: 0.2em 0.5em 0.2em 0;
+  font-size: var(--header-font-size);
+  flex: 1 1 3em;
+  min-width: 3em;
+}
+.search-hint {
+  position: absolute;
+  right: 0.5em;
+  font-family: system-ui, sans-serif;
+  font-size: 1em;
+  font-weight: 700;
+  color: #333;
+  background: #ccc;
+  border: 1px solid #999;
+  border-radius: 0.3em;
+  padding: 0 0.45em;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
 }
 </style>

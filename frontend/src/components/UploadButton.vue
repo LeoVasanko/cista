@@ -3,8 +3,8 @@
     <input ref="fileInput" @change="uploadHandler" type="file" multiple>
     <input ref="folderInput" @change="uploadHandler" type="file" webkitdirectory>
   </template>
-  <SvgButton name="add-file" data-tooltip="Upload files" @click="fileInput.click()" />
-  <SvgButton name="add-folder" data-tooltip="Upload folder" @click="folderInput.click()" />
+  <SvgButton name="add-file" tooltip="Upload files" @click="fileInput.click()" />
+  <SvgButton name="add-folder" tooltip="Upload folder" @click="folderInput.click()" />
 </template>
 
 <script setup lang="ts">

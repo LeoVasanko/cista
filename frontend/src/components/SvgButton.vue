@@ -1,16 +1,28 @@
 <template>
-  <button class="action-button">
+  <button
+    class="action-button"
+    @mouseenter="tooltip?.startHover"
+    @mousemove="tooltip?.updatePosition"
+    @mouseleave="tooltip?.endHover"
+  >
     <component :is="icons[name]" />
     <slot></slot>
+    <CursorTooltip v-if="tooltipText" ref="tooltip" :text="tooltipText">{{ tooltipText }}</CursorTooltip>
   </button>
 </template>
 
 <script setup lang="ts">
 import { icons, type IconName } from '@/assets/svg'
+import { ref } from 'vue'
+import CursorTooltip from './CursorTooltip.vue'
 
-defineProps<{
+const props = defineProps<{
   name: IconName
+  tooltip?: string
 }>()
+
+const tooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)
+const tooltipText = props.tooltip ?? ''
 </script>
 
 <style>

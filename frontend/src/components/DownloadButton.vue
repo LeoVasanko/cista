@@ -1,5 +1,5 @@
 <template>
-  <SvgButton name="download" data-tooltip="Download" @click="download" />
+  <SvgButton name="download" tooltip="Download" @click="download" />
 </template>
 
 <script setup lang="ts">

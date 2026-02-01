@@ -10,12 +10,12 @@
 // Global activation state - shared across all instances
 let globalActive = false
 let globalDeactivateTimer: ReturnType<typeof setTimeout> | null = null
-// Track if we've seen real mouse movement (not touch-simulated)
-let hasRealMouse = false
+// Track recent touch to suppress touch-triggered mouse events
+let lastTouchTime = 0
 </script>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps<{
   text: string
@@ -37,8 +37,13 @@ const tooltipStyle = computed(() => ({
   top: `${mouseY.value}px`,
 }))
 
-// Check if the device likely has a real mouse (fine pointer)
-const hasFinePointer = () => window.matchMedia('(pointer: fine)').matches
+// Track touch events globally to suppress touch-simulated mouse events
+const onTouchStart = () => { lastTouchTime = Date.now() }
+onMounted(() => document.addEventListener('touchstart', onTouchStart, { passive: true }))
+onUnmounted(() => document.removeEventListener('touchstart', onTouchStart))
+
+// Check if event is likely from touch (touch happened within last 500ms)
+const isTouchEvent = () => Date.now() - lastTouchTime < 500
 
 const showTooltip = () => {
   visible.value = true
@@ -56,8 +61,8 @@ const scheduleTooltip = () => {
 }
 
 const startHover = (e: MouseEvent) => {
-  // Ignore touch events (no fine pointer and no confirmed real mouse)
-  if (!hasFinePointer() && !hasRealMouse) return
+  // Ignore touch-simulated mouse events
+  if (isTouchEvent()) return
 
   mouseX.value = e.clientX
   mouseY.value = e.clientY
@@ -66,9 +71,8 @@ const startHover = (e: MouseEvent) => {
 }
 
 const updatePosition = (e: MouseEvent) => {
-  // Detect real mouse via movement (touch events don't generate continuous mousemove)
-  if (e.movementX !== 0 || e.movementY !== 0) hasRealMouse = true
-  if (!hasFinePointer() && !hasRealMouse) return
+  // Ignore touch-simulated mouse events
+  if (isTouchEvent()) return
 
   mouseX.value = e.clientX
   mouseY.value = e.clientY
@@ -122,9 +126,11 @@ defineExpose({
   z-index: 10000;
   padding: .5rem 1rem;
   border-radius: 3rem 0 3rem 0;
-  box-shadow: 0 0 1rem var(--accent-color);
-  background-color: var(--accent-color);
-  color: var(--primary-color);
+  box-shadow: 0 0 1rem rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: #fff;
   white-space: nowrap;
   pointer-events: none;
   font-size: 1rem;

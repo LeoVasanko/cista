@@ -9,15 +9,14 @@
   <UserManagementModal />
   <AccessDeniedModal />
   <header>
-    <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query">
-      <HeaderSelected :path="path.pathList" />
-    </HeaderMain>
+    <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query" />
     <BreadCrumb :path="path.pathList" primary />
   </header>
   <main>
     <RouterView :path="path.pathList" :query="path.query" />
   </main>
-  <footer>
+  <footer v-if="store.selected.size || store.uprogress.total || store.dprogress.total">
+    <HeaderSelected :path="path.pathList" />
     <TransferBar :status=store.uprogress @cancel=store.cancelUploads class=upload />
     <TransferBar :status=store.dprogress @cancel=store.cancelDownloads class=download />
   </footer>
@@ -104,7 +103,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   else if (keyup && event.key === 'Escape') {
     store.error = ''
     store.clearToast()
-    headerMain.value!.closeSearch(event)
+    headerMain.value!.clearSearch(event)
     store.focusBreadcrumb()
   }
   else if (!input && keyup && event.key === 'Backspace') {
@@ -188,5 +187,20 @@ export type { Path }
 .toast-message.status {
   background: #555;
   color: #fff;
+}
+footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  z-index: 50;
+}
+footer > * {
+  justify-content: center;
 }
 </style>

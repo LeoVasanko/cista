@@ -14,9 +14,12 @@
       :class="{ current: !!isCurrent(0) }"
       :aria-current="isCurrent(0)"
       @click.prevent="navigate(0)"
-      title="/"
+      @mouseenter="homeTooltip?.startHover"
+      @mousemove="homeTooltip?.updatePosition"
+      @mouseleave="homeTooltip?.endHover"
     >
       <component :is="home" />
+      <CursorTooltip ref="homeTooltip" text="/">/</CursorTooltip>
     </a>
     <template v-for="(location, index) in longest" :key="index">
       <a :href="`/#/${longest.slice(0, index + 1).join('/')}/`"
@@ -24,8 +27,10 @@
         :aria-current="isCurrent(index + 1)"
         @click.prevent="navigate(index + 1)"
         :ref="el => setLinkRef(index + 1, el)"
-        :title="`/${longest.slice(0, index + 1).join('/')}`"
-      >{{ location }}</a>
+        @mouseenter="pathTooltips.get(index)?.startHover"
+        @mousemove="pathTooltips.get(index)?.updatePosition"
+        @mouseleave="pathTooltips.get(index)?.endHover"
+      >{{ location }}<CursorTooltip :ref="el => setPathTooltipRef(index, el)" :text="`/${longest.slice(0, index + 1).join('/')}`">{{ `/${longest.slice(0, index + 1).join('/')}` }}</CursorTooltip></a>
     </template>
   </nav>
 </template>
@@ -35,6 +40,7 @@ import { Home } from '@/assets/svg'
 import { nextTick, onBeforeUpdate, ref, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { exists } from '@/utils/fileutil'
+import CursorTooltip from './CursorTooltip.vue'
 
 const home = Home
 const router = useRouter()
@@ -42,6 +48,13 @@ const router = useRouter()
 const links = [] as Array<HTMLElement>
 const setLinkRef = (index: number, el: any) => { if (el) links[index] = el }
 onBeforeUpdate(() => { links.length = 1 })  // 1 to keep home
+
+const homeTooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)
+const pathTooltips = ref<Map<number, InstanceType<typeof CursorTooltip>>>(new Map())
+const setPathTooltipRef = (index: number, el: any) => {
+  if (el) pathTooltips.value.set(index, el)
+  else pathTooltips.value.delete(index)
+}
 
 const props = defineProps<{
   path: Array<string>

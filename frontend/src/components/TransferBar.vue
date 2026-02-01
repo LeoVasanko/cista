@@ -53,15 +53,17 @@ const speeddisp = computed(() => speed.value ? speed.value.toFixed(speed.value <
 <style scoped>
 .transferprogress {
   --bar: var(--accent-color);
-  --nobar: var(--header-background);
+  --nobar: transparent;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   color: var(--primary-color);
   width: 100%;
 }
 .statustext {
   display: flex;
   align-items: center;
+  justify-content: center;
   margin: 0 .5em;
   padding: 0.5rem 0;
 }

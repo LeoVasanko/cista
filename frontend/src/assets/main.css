@@ -43,44 +43,14 @@
     --root-font-size: 1.5rem;
   }
 }
-/* Low (landscape) screens: smaller header */
-@media screen and (max-height: 600px) {
-  :root {
-    --header-font-size: calc(10px + 10 * 100vh / 600);  /* 20px at 600px height */
-    --root-font-size: 0.8rem;
-    --header-height: 2rem;
-  }
-  header .breadcrumb > * {
-    padding-top: calc(8 + 8 * 100vh / 600) !important;
-    padding-bottom: calc(8 + 8 * 100vh / 600) !important;
-  }
-}
-@media screen and (max-height: 300px) {
-  :root {
-    --header-font-size: 15px;  /* Don't go smaller than this, no benefit */
-    --header-height: calc(1.75 * 16px);
-    --root-font-size: 0.6rem;
-  }
-  header .breadcrumb > * {
-    padding-top: 14px !important;
-    padding-bottom: 14px !important;
-  }
-}
 @media screen and (orientation: landscape) and (min-width: 700px) {
   /* Breadcrumbs and buttons side by side */
-  :root {
-    --header-font-size: calc(8px + 8 * 100vh / 600);  /* 16px (1rem nominal) at 600px height */
-  }
   header {
     display: flex;
     justify-content: space-between;
   }
   header .headermain { order: 1; }
   header .breadcrumb { align-self: stretch; }
-  header .action-button {
-    width: 2em;
-    height: 2em;
-  }
 }
 @media print {
   :root {
@@ -241,39 +211,7 @@ header nav.headermain {
 .spacer { flex-grow: 1 }
 .smallgap { flex-shrink: 1; width: 2em }
 
-[data-tooltip]:hover:after {
-  z-index: 101;
-  content: attr(data-tooltip);
-  position: absolute;
-  pointer-events: none;
-  font-size: 1rem;
-  text-align: center;
-  padding: .5rem 1rem;
-  border-radius: 3rem 0 3rem 0;
-  box-shadow: 0 0 1rem var(--accent-color);
-  transform: translate(calc(1rem + -50%), 150%);
-  background-color: var(--accent-color);
-  color: var(--primary-color);
-  white-space: pre;
-  animation: appearbriefly calc(10 * var(--transition-time)) linear forwards;
-}
-@keyframes appearbriefly {
-  from {
-    opacity: 0;
-  }
-  30% {
-    opacity: 0;
-  }
-  40% {
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
+
 .error-message {
   padding: .5em;
   font-weight: bold;
