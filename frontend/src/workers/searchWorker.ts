@@ -72,13 +72,16 @@ const yieldControl = (): Promise<void> => new Promise(resolve => setTimeout(reso
 
 // Find best cache entry to filter from
 // Returns entry if new query's results are guaranteed to be a subset of cached results
+// Only valid if the cached search was complete (scanned all documents)
 function findCacheSubset(query: string): CacheEntry | null {
   // Look for a cached query that the new query starts with
   // e.g., cached "foo" can be used for "foobar" or "foo bar"
   // The longer the prefix, the better (fewer items to filter)
+  // IMPORTANT: Only use complete cache entries - incomplete ones may have
+  // missed results that would match the more specific query
   let best: CacheEntry | null = null
   for (const entry of searchCache) {
-    if (query.startsWith(entry.query)) {
+    if (entry.complete && query.startsWith(entry.query)) {
       if (!best || entry.query.length > best.query.length) {
         best = entry
       }
@@ -122,15 +125,14 @@ async function performSearch(rawQuery: string, loc: string, searchId: number) {
   // Check if we can filter from a cached superset
   const cacheEntry = findCacheSubset(query)
   if (cacheEntry) {
-    // Fast path: filter from cached results
+    // Fast path: filter from cached results (only used for complete cache entries)
     for (const doc of cacheEntry.results) {
       if (matches(doc.haystack, query, words)) {
         results.push(doc)
       }
     }
-    // Complete if cache was complete, or we found fewer than limit
-    const complete = cacheEntry.complete || results.length < RESULT_LIMIT
-    addToCache(query, results, complete)
+    // Cache entry was complete, so filtered results are also complete
+    addToCache(query, results, true)
 
     if (currentSearchId === searchId) {
       postResults(results, rawQuery, loc, searchId, true)
