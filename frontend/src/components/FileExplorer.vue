@@ -292,13 +292,96 @@ const allSelected = computed({
 
 const loc = computed(() => props.path.join('/'))
 
+const downloadFile = (doc: Doc) => {
+  const path = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
+  if (doc.dir) {
+    // Download folder as ZIP
+    const a = document.createElement('a')
+    a.href = `/zip/${doc.key}/${doc.name}.zip`
+    a.download = ''
+    a.click()
+    store.showToast(`Downloading ${doc.name}.zip`)
+  } else {
+    // Download single file
+    const a = document.createElement('a')
+    a.href = `/files/${path}`
+    a.download = ''
+    a.click()
+    store.showToast(`Downloading ${doc.name}`)
+  }
+}
+
+const copyLink = async (doc: Doc) => {
+  const url = new URL(doc.url, window.location.origin).href
+  try {
+    await navigator.clipboard.writeText(url)
+    store.showToast('📋 Link copied!')
+  } catch {
+    store.showToast('Failed to copy link')
+  }
+}
+
+const copyImage = async (doc: Doc) => {
+  const path = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
+  try {
+    store.showToast('Copying image...')
+    const res = await fetch(`/files/${path}`)
+    const blob = await res.blob()
+    // Convert to PNG if needed (clipboard only supports PNG)
+    if (blob.type !== 'image/png') {
+      const img = new Image()
+      img.src = URL.createObjectURL(blob)
+      await new Promise(r => img.onload = r)
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      canvas.getContext('2d')!.drawImage(img, 0, 0)
+      const pngBlob = await new Promise<Blob>(r => canvas.toBlob(b => r(b!), 'image/png'))
+      URL.revokeObjectURL(img.src)
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })])
+    } else {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+    }
+    store.showToast('📋 Image copied!')
+  } catch (e) {
+    console.error('Copy image failed', e)
+    store.showToast('Failed to copy image')
+  }
+}
+
+const deleteFile = (doc: Doc) => {
+  const path = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
+  doc.ghost = true
+  const control = connect(controlUrl, {
+    message(ev: MessageEvent) {
+      const res = JSON.parse(ev.data)
+      if ('error' in res) {
+        console.error('Delete failed', res.error)
+        doc.ghost = false
+        store.showToast(res.error.message || 'Delete failed')
+      } else if (res.status === 'ack') {
+        store.showToast(`🗑️ Deleted ${doc.name}`)
+        control.close()
+      }
+    }
+  })
+  control.onopen = () => {
+    control.send(JSON.stringify({ op: 'rm', sel: [path] }))
+  }
+}
+
 const contextMenu = (ev: MouseEvent, doc: Doc) => {
   store.cursor = doc.key
-  ContextMenu.showContextMenu({
-    x: ev.x, y: ev.y, items: [
-      { label: 'Rename', onClick: () => { editing.value = doc } },
-    ],
-  })
+  const items = [
+    { label: '📥 Download', onClick: () => downloadFile(doc) },
+    { label: '🔗 Copy Link', onClick: () => copyLink(doc) },
+  ]
+  if (doc.img) items.push({ label: '📋 Copy Image', onClick: () => copyImage(doc) })
+  items.push(
+    { label: '✏️ Rename', onClick: () => { editing.value = doc } },
+    { label: '🗑️ Delete', onClick: () => deleteFile(doc) },
+  )
+  ContextMenu.showContextMenu({ x: ev.x, y: ev.y, items })
 }
 </script>
 
