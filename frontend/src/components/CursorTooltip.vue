@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="cursor-tooltip" :style="tooltipStyle">
+    <div v-if="visible" ref="tooltipEl" class="cursor-tooltip" :style="tooltipStyle">
       <slot></slot>
     </div>
   </Teleport>
@@ -25,6 +25,9 @@ const props = defineProps<{
 const visible = ref(false)
 const mouseX = ref(0)
 const mouseY = ref(0)
+const tooltipWidth = ref(0)
+const tooltipHeight = ref(0)
+const tooltipEl = ref<HTMLElement | null>(null)
 let settleTimer: ReturnType<typeof setTimeout> | null = null
 let lastMoveX = 0
 let lastMoveY = 0
@@ -32,10 +35,32 @@ let lastMoveY = 0
 // Movement threshold (pixels) - cursor must settle within this radius
 const SETTLE_THRESHOLD = 8
 
-const tooltipStyle = computed(() => ({
-  left: `${mouseX.value}px`,
-  top: `${mouseY.value}px`,
-}))
+const tooltipStyle = computed(() => {
+  // Constrain to viewport
+  const pad = 8
+  let x = mouseX.value
+  let y = mouseY.value
+
+  // Only constrain if we've measured the tooltip
+  if (tooltipWidth.value > 0 && tooltipHeight.value > 0) {
+    // Adjust horizontal position if tooltip would overflow right edge
+    if (x + tooltipWidth.value + pad > window.innerWidth) {
+      x = window.innerWidth - tooltipWidth.value - pad
+    }
+    // Adjust vertical position if tooltip would overflow bottom edge
+    if (y + tooltipHeight.value + pad > window.innerHeight) {
+      y = window.innerHeight - tooltipHeight.value - pad
+    }
+    // Don't go past left/top edges
+    x = Math.max(pad, x)
+    y = Math.max(pad, y)
+  }
+
+  return {
+    left: `${x}px`,
+    top: `${y}px`,
+  }
+})
 
 // Track touch events globally to suppress touch-simulated mouse events
 const onTouchStart = () => { lastTouchTime = Date.now() }
@@ -48,6 +73,13 @@ const isTouchEvent = () => Date.now() - lastTouchTime < 500
 const showTooltip = () => {
   visible.value = true
   globalActive = true
+  // Measure tooltip after it renders
+  requestAnimationFrame(() => {
+    if (tooltipEl.value) {
+      tooltipWidth.value = tooltipEl.value.offsetWidth
+      tooltipHeight.value = tooltipEl.value.offsetHeight
+    }
+  })
 }
 
 const scheduleTooltip = () => {
@@ -131,7 +163,6 @@ defineExpose({
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   color: #fff;
-  white-space: nowrap;
   pointer-events: none;
   font-size: 1rem;
 }

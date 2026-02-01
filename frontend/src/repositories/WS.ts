@@ -164,7 +164,8 @@ const handleWatchMessage = (event: MessageEvent) => {
       handleUpdateMessage(msg)
       break
     case !!msg.space:
-      console.log('Watch space', msg.space)
+      const store = useMainStore()
+      store.space = msg.space
       break
     case !!msg.error:
       handleError(msg)

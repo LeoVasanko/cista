@@ -80,6 +80,12 @@ export const useMainStore = defineStore('main', {
       username: '' as string,
       privileged: false as boolean,
       isLoggedIn: false as boolean,
+    },
+    space: {
+      disk: 0,
+      free: 0,
+      usage: 0,
+      storage: 0,
     }
   }),
   persist: {
