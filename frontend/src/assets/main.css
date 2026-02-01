@@ -280,3 +280,6 @@ header nav.headermain {
   background: var(--accent-color);
   color: #000;
 }
+.ghost {
+  opacity: 0.5;
+}

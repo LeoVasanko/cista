@@ -21,10 +21,10 @@ const props = defineProps({
 })
 
 const dst = computed(() => props.path!.join('/'))
-const op = (op: string, dst?: string) => {
+const op = (opName: string, dst?: string) => {
   const sel = store.selectedFiles
   const msg = {
-    op,
+    op: opName,
     sel: sel.keys.map(key => {
       const doc = sel.docs[key]!
       return doc.loc ? `${doc.loc}/${doc.name}` : doc.name
@@ -32,6 +32,8 @@ const op = (op: string, dst?: string) => {
   }
   // @ts-ignore
   if (dst !== undefined) msg.dst = dst
+  if (opName === 'rm' || opName === 'mv')
+    for (const key of sel.keys) sel.docs[key]!.ghost = true
   const control = connect(controlUrl, {
     message(ev: MessageEvent) {
       const res = JSON.parse(ev.data)

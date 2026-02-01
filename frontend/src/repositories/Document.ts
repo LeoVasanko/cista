@@ -9,6 +9,7 @@ export type DocProps = {
   size: number
   mtime: number
   dir: boolean
+  ghost?: boolean
 }
 
 export class Doc {
@@ -17,6 +18,7 @@ export class Doc {
   public size: number = 0
   public mtime: number = 0
   public dir: boolean = false
+  public ghost: boolean = false
   /** @internal Use the name getter/setter instead */
   public _name: string = ""
 

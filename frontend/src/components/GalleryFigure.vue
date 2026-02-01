@@ -1,6 +1,6 @@
 <template>
   <a :id="`file-${doc.key}`" :href=doc.url tabindex=-1
-    :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc.key }"
+    :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc.key, ghost: doc.ghost }"
     @contextmenu.stop
     @focus.stop="store.cursor = doc.key"
     @click=onclick

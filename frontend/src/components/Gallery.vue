@@ -203,9 +203,11 @@ const mkdir = (doc: Doc, name: string) => {
       }
     }
   })
-  // We should get an update from watch but this is quicker
   doc.name = name
   doc.key = crypto.randomUUID()
+  doc.ghost = true
+  store.document.push(doc)
+  editing.value = null
 }
 const showFolderBreadcrumb = (i: number) => {
   const docs = props.documents

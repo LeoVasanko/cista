@@ -28,7 +28,7 @@
 
         <tr
           :id="`file-${doc.key}`"
-          :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc.key }"
+          :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc.key, ghost: doc.ghost }"
           @click="store.cursor = store.cursor === doc.key ? '' : doc.key"
           @contextmenu.prevent="contextMenu($event, doc)"
         >
@@ -249,9 +249,11 @@ const mkdir = (doc: Doc, name: string) => {
       }
     }
   })
-  // We should get an update from watch but this is quicker
   doc.name = name
   doc.key = crypto.randomUUID()
+  doc.ghost = true
+  store.document.push(doc)
+  editing.value = null
 }
 const showFolderBreadcrumb = (i: number) => {
   const docs = props.documents

@@ -10,6 +10,7 @@
 <script setup lang="ts">
 import { connect, uploadUrl } from '@/repositories/WS';
 import { useMainStore } from '@/stores/main'
+import { Doc } from '@/repositories/Document'
 import { collator } from '@/utils';
 import { onMounted, onUnmounted, reactive, ref } from 'vue'
 
@@ -85,11 +86,32 @@ const uploadCloudFiles = (files: CloudFile[]) => {
   const dotfiles = files.filter(f => f.cloudName.includes('/.'))
   if (dotfiles.length) {
     store.showToast("Won't upload dotfiles")
-    console.log("Dotfiles omitted", dotfiles)
     files = files.filter(f => !f.cloudName.includes('/.'))
   }
   if (!files.length) return
   files.sort((a, b) => collator.compare(a.cloudName, b.cloudName))
+  // Optimistic update: ghost folders and files
+  const now = Math.floor(Date.now() / 1000)
+  const byPath = new Map(store.document.map(d => [d.loc ? `${d.loc}/${d.name}` : d.name, d]))
+  const added = new Set<string>()
+  for (const f of files) {
+    const lastSlash = f.cloudName.lastIndexOf('/')
+    const loc = lastSlash > 0 ? f.cloudName.slice(0, lastSlash) : ''
+    const name = f.cloudName.slice(lastSlash + 1)
+    // Ghost folders for intermediate directories
+    const parts = loc.split('/')
+    for (let i = 0; i < parts.length; i++) {
+      const folderPath = parts.slice(0, i + 1).join('/')
+      if (folderPath && !byPath.has(folderPath) && !added.has(folderPath)) {
+        store.document.push(new Doc({ loc: parts.slice(0, i).join('/'), name: parts[i], key: crypto.randomUUID(), size: 0, mtime: now, dir: true, ghost: true }))
+        added.add(folderPath)
+      }
+    }
+    // Ghost file or update existing
+    const existing = byPath.get(f.cloudName)
+    if (existing) { existing.size = f.file.size; existing.mtime = now; existing.ghost = true }
+    else store.document.push(new Doc({ loc, name, key: crypto.randomUUID(), size: f.file.size, mtime: now, dir: false, ghost: true }))
+  }
   // @ts-ignore
   upqueue = [...upqueue, ...files]
   statsAdd(files)
