@@ -13,7 +13,9 @@ import { useMainStore } from '@/stores/main'
 import { Doc } from '@/repositories/Document'
 import { collator } from '@/utils';
 import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const fileInput = ref()
 const folderInput = ref()
 const store = useMainStore()
@@ -73,14 +75,18 @@ function uploadHandler(event: Event) {
 const uploadFiles = (infiles: File[]) => {
   const loc = props.path!.join('/')
   let files = []
+  let folderName = ''
   for (const file of infiles) {
+    const relPath = file.webkitRelativePath || file.name
+    if (!folderName && file.webkitRelativePath) folderName = relPath.split('/')[0] ?? ''
     files.push({
       file,
-      cloudName: loc + '/' + (file.webkitRelativePath || file.name),
+      cloudName: loc + '/' + relPath,
       cloudPos: 0,
     })
   }
   uploadCloudFiles(files)
+  if (folderName) router.push('/' + (loc ? loc + '/' : '') + folderName + '/')
 }
 const uploadCloudFiles = (files: CloudFile[]) => {
   const dotfiles = files.filter(f => f.cloudName.includes('/.'))
