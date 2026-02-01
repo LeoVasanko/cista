@@ -57,7 +57,7 @@ Usage:
 Options:
   -c CONFDIR        Custom config directory
   -l LISTEN-ADDR    Listen on
-                       :8000 (localhost port, plain http)
+                       :8989 (localhost port, plain http)
                        <addr>:3000 (bind another address, port)
                        /path/to/unix.sock (unix socket)
                        example.com (run on 80 and 443 with LetsEncrypt)
@@ -80,7 +80,7 @@ Environment:
 first_time_help = """\
 No config file found! Get started with:
   cista --user yourname --privileged     # If you want user accounts
-  cista -l :8000 /path/to/files          # Run the server on localhost:8000
+  cista -l :8989 /path/to/files          # Run the server on localhost:8989
 
 See cista --help for other options!
 """
@@ -140,7 +140,7 @@ def _main():
     if listen:
         settings["listen"] = listen
     elif not exists:
-        settings["listen"] = ":8000"
+        settings["listen"] = ":8989"
     config.update_config(settings)
     # Prepare to serve
     url, opts = serve.parse_listen(config.config.listen)
@@ -186,7 +186,7 @@ def _user(args):
         # Defaults for new config when user is created
         operation = config.update_config(
             {
-                "listen": ":8000",
+                "listen": ":8989",
                 "path": Path.home() / "Downloads",
                 "public": False,
             }
@@ -215,7 +215,7 @@ def _user(args):
 
     if operation == "created":
         sys.stderr.write(
-            "Now you can run the server:\n  cista    # defaults set: -l :8000 ~/Downloads\n"
+            "Now you can run the server:\n  cista    # defaults set: -l :8989 ~/Downloads\n"
         )
 
 

@@ -50,7 +50,7 @@ def parse_listen(listen):
         return f"https://{listen}", {"host": listen, "port": 443, "ssl": True}
 
     # Use fastapi_vue's parse_endpoint for everything else
-    endpoints = parse_endpoint(listen, default_port=8000)
+    endpoints = parse_endpoint(listen, default_port=8989)
     ep = endpoints[0]
 
     if "uds" in ep:
@@ -64,5 +64,9 @@ def parse_listen(listen):
     host, port = ep["host"], ep["port"]
     # When binding all interfaces, use single_listener=False for Sanic
     if len(endpoints) > 1:
-        return f"http://localhost:{port}", {"host": host, "port": port, "single_listener": False}
+        return f"http://localhost:{port}", {
+            "host": host,
+            "port": port,
+            "single_listener": False,
+        }
     return f"http://{host}:{port}", {"host": host, "port": port}

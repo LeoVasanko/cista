@@ -7,8 +7,8 @@ import httpx
 from buildutil import find_dev_tool, find_install_tool, logger
 from fastapi_vue.hostutil import parse_endpoint
 
-DEFAULT_VITE_PORT = 5173
-DEFAULT_BACKEND_PORT = 5180
+DEFAULT_VITE_PORT = 8989
+DEFAULT_BACKEND_PORT = 8999
 
 
 class ProcessGroup:

@@ -6,10 +6,10 @@
  * - Builds to the Python module's frontend-build directory
  *
  * Environment variables (with defaults):
- *   FASTAPI_VUE_BACKEND_URL=http://localhost:5180 - Backend API URL for proxying
+ *   FASTAPI_VUE_BACKEND_URL=http://localhost:8999 - Backend API URL for proxying
  */
 
-const backendUrl = process.env.FASTAPI_VUE_BACKEND_URL || "http://localhost:5180"
+const backendUrl = process.env.FASTAPI_VUE_BACKEND_URL || "http://localhost:8999"
 
 export default function fastapiVue({ paths = ["/api"] } = {}) {
   // Build proxy configuration for each path

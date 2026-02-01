@@ -5,8 +5,8 @@ Usage:
     uv run scripts/devserver.py [frontend] [--backend backend]
 
 Options:
-    frontend    Vite frontend endpoint (default: localhost:5173)
-    --backend   Cista backend endpoint (default: from config, or :8000)
+    frontend    Vite frontend endpoint (default: localhost:8989)
+    --backend   Cista backend endpoint (default: from config, or :8999)
 
 Environment:
     JS_RUNTIME  Path or name of JS runtime to use (deno, npm/node or bun).
@@ -26,7 +26,7 @@ from devutil import ProcessGroup, logger, ready, setup_vite  # type: ignore
 from cista import config
 from cista.serve import parse_listen
 
-DEFAULT_BACKEND_PORT = 8000
+DEFAULT_BACKEND_PORT = 8999
 
 
 def setup_sanic_backend(listen: str | None) -> tuple[str, list[str]]:
@@ -81,13 +81,13 @@ def main():
         "frontend",
         nargs="?",
         metavar="host:port",
-        help="Vite frontend endpoint (default: localhost:5173)",
+        help="Vite frontend endpoint (default: localhost:8989)",
     )
     parser.add_argument(
         "--backend",
         "-l",
         metavar="host:port",
-        help="Cista backend endpoint (default: from config, or :8000)",
+        help="Cista backend endpoint (default: from config, or :8999)",
     )
     args = parser.parse_args()
     with contextlib.suppress(KeyboardInterrupt):
