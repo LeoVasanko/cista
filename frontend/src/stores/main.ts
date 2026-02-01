@@ -229,12 +229,25 @@ export const useMainStore = defineStore('main', {
       resumeWatching()
     },
     toggleSort(name: SortOrder) {
-      if (this.query) this.prefs.sortFiltered = this.prefs.sortFiltered === name ? '' : name
-      else this.prefs.sortListing = this.prefs.sortListing === name ? '' : name
+      const current = this.query ? this.prefs.sortFiltered : this.prefs.sortListing
+      const newOrder = current === name ? '' : name
+      if (this.query) this.prefs.sortFiltered = newOrder
+      else this.prefs.sortListing = newOrder
+      this.showSortToast(newOrder)
     },
     sort(name: SortOrder | '') {
       if (this.query) this.prefs.sortFiltered = name
       else this.prefs.sortListing = name
+      this.showSortToast(name)
+    },
+    showSortToast(order: SortOrder | '') {
+      const labels: Record<string, string> = {
+        '': 'Folders first',
+        'name': 'Alphabetical order',
+        'modified': 'Newest first',
+        'size': 'Largest first',
+      }
+      this.showToast(labels[order] || order, 1200)
     },
     focusBreadcrumb() {
       (document.querySelector('.breadcrumb') as HTMLAnchorElement).focus()

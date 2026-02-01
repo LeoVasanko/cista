@@ -394,9 +394,6 @@ tbody tr.cursor {
 .sortcolumn:hover {
   cursor: pointer;
 }
-.sortcolumn:hover::after {
-  color: var(--accent-color);
-}
 .sortcolumn {
   padding-right: 1.5rem;
 }
