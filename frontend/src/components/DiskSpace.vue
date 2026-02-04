@@ -1,9 +1,9 @@
 <template>
   <div class="disk-space-container" ref="containerRef">
     <div
+      ref="widgetRef"
       class="disk-space-widget"
       :class="{ expanded: isExpanded }"
-      :style="widgetStyle"
     >
       <svg viewBox="0 0 150 150" class="pie-svg" preserveAspectRatio="xMidYMid meet">
       <defs>
@@ -30,12 +30,12 @@
         <circle :r="pieRadius/2" :cx="pieCx" :cy="pieCy" fill="transparent" :stroke="freeColor" :stroke-width="pieRadius" :stroke-dasharray="pieFreeDash" :stroke-dashoffset="pieFreeOffsetVal" :transform="`rotate(-90 ${pieCx} ${pieCy})`" />
         <circle :r="pieRadius/2" :cx="pieCx" :cy="pieCy" fill="transparent" stroke="url(#storageGradient)" :stroke-width="pieRadius" :stroke-dasharray="pieStorageDash" :transform="`rotate(-90 ${pieCx} ${pieCy})`" />
         <circle :r="pieRadius" :cx="pieCx" :cy="pieCy" fill="url(#highlightOverlay)" />
-        <circle :r="pieRadius * 0.22" :cx="pieCx" :cy="pieCy" fill="#000" />
-        <text :x="pieCx" :y="pieCy" dy="0.35em" class="pie-center-label" text-anchor="middle" :style="{ opacity: labelsOpacity }">GB</text>
+        <circle :r="pieRadius * 0.38" :cx="pieCx" :cy="pieCy" fill="#000" />
+        <text ref="centerLabelRef" :x="pieCx" :y="pieCy" dy="0.35em" class="pie-center-label" text-anchor="middle">GB</text>
         <circle :r="pieRadius" :cx="pieCx" :cy="pieCy" fill="transparent" class="pie-hitarea" @click="handleClick" />
       </g>
 
-      <g class="pie-labels" :style="{ opacity: labelsOpacity }">
+      <g ref="labelsRef" class="pie-labels">
         <text :x="storageInnerPos.x" :y="storageInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.storage.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.storage.angle)} ${storageInnerPos.x} ${storageInnerPos.y})`">{{ fmtSize(store.space.storage, sectorInfo.storage.angle) }}</text>
         <text :x="freeInnerPos.x" :y="freeInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.free.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.free.angle)} ${freeInnerPos.x} ${freeInnerPos.y})`">{{ fmtSize(store.space.free, sectorInfo.free.angle) }}</text>
         <text :x="otherInnerPos.x" :y="otherInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.other.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.other.angle)} ${otherInnerPos.x} ${otherInnerPos.y})`">{{ fmtSize(store.space.usage - store.space.storage, sectorInfo.other.angle) }}</text>
@@ -46,13 +46,13 @@
           <path :id="otherLabelPath.id" :d="otherLabelPath.d" fill="none" />
         </defs>
 
-        <text class="pie-label-sub">
+        <text class="pie-label-sub" fill="#93e">
           <textPath :href="'#' + storageLabelPath.id" startOffset="50%" text-anchor="middle" dominant-baseline="middle">{{ storageName }}</textPath>
         </text>
-        <text class="pie-label-sub">
+        <text class="pie-label-sub" :fill="freeColor">
           <textPath :href="'#' + freeLabelPath.id" startOffset="50%" text-anchor="middle" dominant-baseline="middle">free</textPath>
         </text>
-        <text class="pie-label-sub">
+        <text class="pie-label-sub" fill="#d9f">
           <textPath :href="'#' + otherLabelPath.id" startOffset="50%" text-anchor="middle" dominant-baseline="middle">other</textPath>
         </text>
       </g>
@@ -67,15 +67,17 @@ import { useMainStore } from '@/stores/main'
 
 const store = useMainStore()
 const containerRef = ref<HTMLDivElement | null>(null)
+const widgetRef = ref<HTMLDivElement | null>(null)
+const labelsRef = ref<SVGGElement | null>(null)
+const centerLabelRef = ref<SVGTextElement | null>(null)
 
 const isExpanded = ref(false)
-const animProgress = ref(0)
-const labelsOpacity = ref(0)
 let animationFrame: number | null = null
 
 const BASE_SIZE = 48
 const EXPANDED_SCALE = 320 / 48
-const containerPos = ref({ top: 0, left: 0 })
+const ANIM_DURATION = 200
+const containerPos = ref({ top: 0, left: 0, width: 0 })
 
 const formatGB = (bytes: number) => {
   const gb = bytes / (1024 * 1024 * 1024)
@@ -241,29 +243,32 @@ const storageLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.
 const freeLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.free!, 'free'))
 const otherLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.other!, 'other'))
 
-const widgetStyle = computed(() => {
-  const t = animProgress.value
-  const eased = 1 - Math.pow(1 - t, 3)
-  const scale = 1 + (EXPANDED_SCALE - 1) * eased
-  const expandedTranslateX = window.innerWidth - containerPos.value.left - BASE_SIZE
-  const expandedTranslateY = -containerPos.value.top
-  const translateX = expandedTranslateX * eased
-  const translateY = expandedTranslateY * eased
-  return {
-    transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
-    transformOrigin: 'top right',
-    zIndex: isExpanded.value ? 1001 : 'auto',
-  }
-})
-
 const handleClick = () => isExpanded.value ? collapse() : expand()
 
-const animate = (startTime: number, duration: number, from: number, to: number, onComplete?: () => void) => {
+const applyAnimState = (t: number, opacity: number) => {
+  const widget = widgetRef.value
+  const labels = labelsRef.value
+  const centerLabel = centerLabelRef.value
+  if (!widget) return
+
+  const scale = 1 + (EXPANDED_SCALE - 1) * t
+  // Move top-right corner of widget to top-right corner of viewport
+  const targetX = window.innerWidth - containerPos.value.left - containerPos.value.width
+  const targetY = -containerPos.value.top
+
+  widget.style.transform = `translate(${targetX * t}px, ${targetY * t}px) scale(${scale})`
+  if (labels) labels.style.opacity = String(opacity)
+  if (centerLabel) centerLabel.style.opacity = String(opacity)
+}
+
+const animate = (duration: number, expanding: boolean, onComplete?: () => void) => {
+  const startTime = performance.now()
   const tick = (now: number) => {
     const elapsed = now - startTime
     const progress = Math.min(elapsed / duration, 1)
-    animProgress.value = from + (to - from) * progress
-    labelsOpacity.value = to > from ? progress : 1 - progress
+    const eased = 1 - Math.pow(1 - progress, 3)  // easeOutCubic
+    const t = expanding ? eased : 1 - eased
+    applyAnimState(t, t)  // opacity follows position
     if (progress < 1) {
       animationFrame = requestAnimationFrame(tick)
     } else {
@@ -278,19 +283,19 @@ const expand = () => {
   if (animationFrame) cancelAnimationFrame(animationFrame)
   if (containerRef.value) {
     const rect = containerRef.value.getBoundingClientRect()
-    containerPos.value = { top: rect.top, left: rect.left }
+    containerPos.value = { top: rect.top, left: rect.left, width: rect.width }
   }
   isExpanded.value = true
-  animate(performance.now(), 300, 0, 1)
+  animate(ANIM_DURATION, true)
 }
 
 const collapse = () => {
   if (animationFrame) cancelAnimationFrame(animationFrame)
   if (containerRef.value) {
     const rect = containerRef.value.getBoundingClientRect()
-    containerPos.value = { top: rect.top, left: rect.left }
+    containerPos.value = { top: rect.top, left: rect.left, width: rect.width }
   }
-  animate(performance.now(), 300, 1, 0, () => {
+  animate(ANIM_DURATION, false, () => {
     isExpanded.value = false
   })
 }
@@ -301,6 +306,9 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
+  // Initialize labels as hidden
+  if (labelsRef.value) labelsRef.value.style.opacity = '0'
+  if (centerLabelRef.value) centerLabelRef.value.style.opacity = '0'
 })
 
 onUnmounted(() => {
@@ -324,10 +332,24 @@ onUnmounted(() => {
   height: 100%;
   cursor: pointer;
   will-change: transform;
+  filter: brightness(0.85);
+  transition: filter 0.2s ease;
+  transform-origin: top right;
+}
+
+.disk-space-widget:hover,
+.disk-space-widget:focus {
+  filter: brightness(1);
 }
 
 .disk-space-widget.expanded {
   pointer-events: none;
+  filter: none;
+}
+
+.disk-space-widget.expanded:hover,
+.disk-space-widget.expanded:focus {
+  filter: none;
 }
 
 .pie-svg {
@@ -343,7 +365,7 @@ onUnmounted(() => {
 }
 
 .pie-label-inner {
-  fill: #fff;
+  fill: #eee;
   font-size: 12px;
   font-weight: 700;
   stroke: #000;
@@ -352,13 +374,12 @@ onUnmounted(() => {
 }
 
 .pie-center-label {
-  fill: #fff;
-  font-size: 10px;
+  fill: #eee;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .pie-label-sub {
-  fill: #fff;
   font-size: 14px;
   font-weight: 600;
   font-variant: small-caps;

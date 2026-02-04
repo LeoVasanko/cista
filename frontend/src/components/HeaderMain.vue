@@ -20,7 +20,7 @@
       <span v-if="!query" class="search-hint" @click="focusSearch">/</span>
     </div>
     <div class="spacer smallgap"></div>
-    <DiskSpacePopup v-if="store.space.disk" />
+    <DiskSpace v-if="store.space.disk" />
     <SvgButton name="cog" @click="settingsMenu" />
   </nav>
 </template>
@@ -33,7 +33,7 @@ import ContextMenu from '@imengyu/vue3-context-menu'
 import { showAuthIframe } from 'paskia'
 import { resumeWatching } from '@/repositories/WS'
 import router from '@/router';
-import DiskSpacePopup from './DiskSpacePopup.vue'
+import DiskSpace from './DiskSpace.vue'
 
 const store = useMainStore()
 const ssoStore = useSsoAuthStore()
