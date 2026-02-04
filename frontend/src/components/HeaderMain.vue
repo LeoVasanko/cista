@@ -151,11 +151,20 @@ defineExpose({
   padding: 0 0.3em;
   transition: background 0.2s ease;
   flex: 1 1 auto;
-  min-width: 5.5em;
+  min-width: 2.5em;
   max-width: 20em;
 }
+.search-group:hover,
 .search-group:focus-within {
   background: rgba(255, 255, 255, 0.2);
+}
+.search-group:hover :deep(button.action-button),
+.search-group:focus-within :deep(button.action-button) {
+  transform: scale(1.1);
+}
+.search-group:hover :deep(button.action-button svg),
+.search-group:focus-within :deep(button.action-button svg) {
+  fill: #fff;
 }
 .search-group:focus-within .search-hint {
   opacity: 0;
@@ -164,6 +173,8 @@ defineExpose({
 .search-group :deep(.action-button) {
   width: 2.2em;
   height: 2.2em;
+  min-width: 1.5em;
+  min-height: 1.5em;
   flex-shrink: 0;
 }
 .search-group input[type='search'] {
@@ -172,9 +183,10 @@ defineExpose({
   border: none;
   outline: none;
   padding: 0.2em 0.5em 0.2em 0;
-  font-size: var(--header-font-size);
+  font-size: inherit;
   flex: 1 1 3em;
-  min-width: 3em;
+  min-width: 0;
+  width: 100%;
 }
 .search-hint {
   position: absolute;
@@ -190,5 +202,11 @@ defineExpose({
   line-height: 1.4;
   cursor: pointer;
   transition: opacity 0.15s ease;
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .search-hint {
+    display: block;
+  }
 }
 </style>

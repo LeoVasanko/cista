@@ -13,8 +13,8 @@
   --transition-time: 0.2s;
   /* The following are overridden by responsive layouts */
   --root-font-size: 1rem;
-  --header-font-size: 1rem;
-  --header-height: 4rem;
+  --header-font-size: clamp(0.7rem, 2.5vw, 1rem);
+  --header-height: clamp(2.8rem, 10vw, 4rem);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -36,6 +36,7 @@
 @media screen and (min-width: 1000px) {
   :root {
     --root-font-size: calc(8px + 8 * 100vw / 1000);
+    --header-font-size: 1rem;
   }
 }
 @media screen and (min-width: 2000px) {

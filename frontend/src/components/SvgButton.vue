@@ -32,18 +32,29 @@ const tooltipText = props.tooltip ?? ''
   color: #ccc;
   cursor: pointer;
   transition: all 0.2s ease;
-  padding: 0.2em;
-  width: 3em;
-  height: 3em;
+  margin: 0 0.2em;
+  padding: 0;
+  width: 2.7em;
+  height: 2.7em;
+  min-width: 1.9em;
+  min-height: 1.9em;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .action-button:hover,
 .action-button:focus {
   color: #fff;
   transform: scale(1.1);
 }
-svg {
+.action-button svg {
   fill: #ccc;
-  transform: fill 0.2s ease;
+  transition: fill 0.2s ease;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
 }
 .action-button:hover svg,
 .action-button:focus svg {

@@ -320,8 +320,8 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   left: 0;
-  width: 3em;
-  height: 3em;
+  width: 100%;
+  height: 100%;
   cursor: pointer;
   will-change: transform;
 }
