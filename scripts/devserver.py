@@ -2,11 +2,13 @@
 """Run Vite development server for frontend and Cista backend with auto-reload.
 
 Usage:
-    uv run scripts/devserver.py [frontend] [--backend backend]
+    uv run scripts/devserver.py [frontend] [--backend backend] [cista_args...]
 
 Options:
     frontend    Vite frontend endpoint (default: localhost:8989)
     --backend   Cista backend endpoint (default: from config, or :8999)
+
+Any additional arguments are passed to the cista command.
 
 Environment:
     JS_RUNTIME  Path or name of JS runtime to use (deno, npm/node or bun).
@@ -29,7 +31,7 @@ from cista.serve import parse_listen
 DEFAULT_BACKEND_PORT = 8999
 
 
-def setup_sanic_backend(listen: str | None) -> tuple[str, list[str]]:
+def setup_sanic_backend(listen: str | None, extra_args: list[str]) -> tuple[str, list[str]]:
     """Parse backend listen address and build cista dev command.
 
     Returns (url, cmd).
@@ -40,11 +42,11 @@ def setup_sanic_backend(listen: str | None) -> tuple[str, list[str]]:
     port = opts.get("port", DEFAULT_BACKEND_PORT)
     host = opts.get("host", "localhost") or "localhost"
 
-    cmd = ["cista", "--dev", "-l", listen]
+    cmd = ["cista", "--dev", "-l", listen] + extra_args
     return f"http://{host}:{port}", cmd
 
 
-async def run_devserver(frontend: str | None, backend: str | None) -> None:
+async def run_devserver(frontend: str | None, backend: str | None, extra_args: list[str]) -> None:
     reporoot = Path(__file__).parent.parent
     front = reporoot / "frontend"
     if not (front / "package.json").exists():
@@ -52,7 +54,7 @@ async def run_devserver(frontend: str | None, backend: str | None) -> None:
         raise SystemExit(1)
 
     frontend_url, npm_install, vite = setup_vite(frontend or "")
-    backend_url, sanic_cmd = setup_sanic_backend(backend)
+    backend_url, sanic_cmd = setup_sanic_backend(backend, extra_args)
 
     # Tell vite where to proxy API requests
     os.environ["FASTAPI_VUE_BACKEND_URL"] = backend_url
@@ -89,15 +91,17 @@ def main():
         metavar="host:port",
         help="Cista backend endpoint (default: from config, or :8999)",
     )
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(run_devserver(args.frontend, args.backend))
+        asyncio.run(run_devserver(args.frontend, args.backend, unknown))
 
 
 HELP_EPILOG = """
   scripts/devserver.py                       # Default ports
   scripts/devserver.py 3000                  # Vite on localhost:3000
   scripts/devserver.py :3000 --backend 8080  # Vite on *:3000, backend on :8080
+
+  Additional arguments are passed to the cista backend command.
 
   JS_RUNTIME environment variable can be used to select the JS runtime
 """
