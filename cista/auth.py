@@ -269,7 +269,7 @@ async def verify(request, *, privileged=False):
     raise Unauthorized(
         f"Login required for {request.path}",
         "cookie",
-        context={"auth": {"iframe": "/auth/restricted"}},
+        context={"auth": {"iframe": "/auth/restricted/"}},
         quiet=True,
     )
 
@@ -278,7 +278,7 @@ async def verify(request, *, privileged=False):
 bp = Blueprint("auth", url_prefix="/auth")
 
 
-@bp.get("/restricted")
+@bp.get("/restricted/")
 async def login_page(request):
     """Login page that works both standalone and in paskia iframe."""
     s = session.get(request)

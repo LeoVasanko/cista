@@ -115,7 +115,7 @@ const settingsMenu = (e: Event) => {
     // Show login option only in public mode (non-public modes trigger auth automatically)
     items.push({ label: '🔐 Login', onClick: async () => {
       try {
-        await showAuthIframe('/auth/restricted#theme=light')
+        await showAuthIframe('/auth/restricted/#theme=light')
         resumeWatching()
       } catch (e) {
         console.log('Login cancelled')
