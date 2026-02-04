@@ -163,6 +163,15 @@ def subscribe(uuid, ws):
         )
 
 
+@bp.get("config")
+async def get_config(request):
+    await auth.verify(request, privileged=True)
+    return json({
+        "name": config.config.name,
+        "public": config.config.public,
+    })
+
+
 @bp.put("config/public")
 async def update_public(request):
     await auth.verify(request, privileged=True)

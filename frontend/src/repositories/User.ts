@@ -60,3 +60,8 @@ export async function updateServerName(name: string) {
   const data = await Client.put('/api/config/name', { name })
   return data
 }
+
+export async function getServerConfig() {
+  const data = await Client.get('/api/config')
+  return data as { name: string, public: boolean }
+}

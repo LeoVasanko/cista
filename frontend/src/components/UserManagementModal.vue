@@ -75,7 +75,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { listUsers, createUser, updateUser, deleteUser, updatePublic, updateServerName } from '@/repositories/User'
+import { listUsers, createUser, updateUser, deleteUser, updatePublic, updateServerName, getServerConfig } from '@/repositories/User'
 import type { ISimpleError } from '@/repositories/Client'
 import { useMainStore } from '@/stores/main'
 
@@ -238,22 +238,32 @@ const debouncedUpdateServerName = () => {
   nameDebounceTimer = setTimeout(updateServerNameSetting, 400)
 }
 
-// Initialize server settings
-const initServerSettings = () => {
-  serverSettings.public = store.server.public || false
-  // Start with empty name field - placeholder shows current effective name
-  serverSettings.name = ''
+// Load server config from admin API
+const loadServerConfig = async () => {
+  try {
+    const config = await getServerConfig()
+    serverSettings.name = config.name
+    serverSettings.public = config.public
+  } catch (e) {
+    // Fallback to store values if API fails
+    serverSettings.public = store.server.public || false
+    serverSettings.name = ''
+  }
 }
 
 onMounted(() => {
-  initServerSettings()
+  serverSettings.public = store.server.public || false
+  serverSettings.name = ''
   loading.value = false
 })
 
-// Load users when dialog opens (only in built-in auth mode)
+// Load users and config when dialog opens
 watch(() => store.dialog, (newVal) => {
-  if (newVal === 'usermgmt' && !store.server.paskia) {
-    loadUsers()
+  if (newVal === 'usermgmt') {
+    loadServerConfig()
+    if (!store.server.paskia) {
+      loadUsers()
+    }
   }
 })
 
