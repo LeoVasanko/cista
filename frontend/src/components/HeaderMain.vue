@@ -141,6 +141,7 @@ defineExpose({
   display: flex;
   align-items: center;
   z-index: 10;
+  min-height: 3em;
 }
 .search-group {
   position: relative;

@@ -79,6 +79,7 @@ const op = (opName: string, dst?: string) => {
   padding: 0.3em 0.5em;
   background: transparent;
   color: var(--header-color);
+  font-size: var(--header-font-size);
 }
 .select-text {
   color: var(--accent-color);
