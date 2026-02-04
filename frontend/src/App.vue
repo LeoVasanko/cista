@@ -16,7 +16,7 @@
     <RouterView :path="path.pathList" :query="path.query" />
   </main>
   <footer v-if="store.selected.size || store.uprogress.total || store.dprogress.total">
-    <HeaderSelected :path="path.pathList" />
+    <SelectionToolbar :path="path.pathList" />
     <TransferBar :status=store.uprogress @cancel=store.cancelUploads class=upload />
     <TransferBar :status=store.dprogress @cancel=store.cancelDownloads class=download />
   </footer>
@@ -36,6 +36,7 @@ import type { SortOrder } from './utils/docsort'
 import type SettingsModalVue from './components/SettingsModal.vue'
 import UserManagementModal from './components/UserManagementModal.vue'
 import AccessDeniedModal from './components/AccessDeniedModal.vue'
+import SelectionToolbar from './components/SelectionToolbar.vue'
 
 interface Path {
   path: string
