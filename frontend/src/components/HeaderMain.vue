@@ -28,7 +28,7 @@
 <script setup lang="ts">
 import { useMainStore } from '@/stores/main'
 import { useSsoAuthStore } from '@/stores/ssoAuth'
-import { ref, nextTick, watchEffect } from 'vue'
+import { ref } from 'vue'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import { showAuthIframe } from 'paskia'
 import { resumeWatching } from '@/repositories/WS'
