@@ -31,23 +31,30 @@ const props = defineProps({
 const dst = computed(() => props.path!.join('/'))
 const op = (opName: string, dst?: string) => {
   const sel = store.selectedFiles
+  const paths = sel.keys.map(key => {
+    const doc = sel.docs[key]!
+    return doc.loc ? `${doc.loc}/${doc.name}` : doc.name
+  })
   const msg = {
     op: opName,
-    sel: sel.keys.map(key => {
-      const doc = sel.docs[key]!
-      return doc.loc ? `${doc.loc}/${doc.name}` : doc.name
-    })
+    sel: paths
   }
   // @ts-ignore
   if (dst !== undefined) msg.dst = dst
-  if (opName === 'rm' || opName === 'mv')
-    for (const key of sel.keys) sel.docs[key]!.ghost = true
+  // Hide items being deleted or moved (optimistic update)
+  if (opName === 'rm' || opName === 'mv') {
+    for (const path of paths) store.hideDoc(path)
+  }
   const control = connect(controlUrl, {
     message(ev: MessageEvent) {
       const res = JSON.parse(ev.data)
       if ('error' in res) {
         console.error('Control socket error', msg, res.error)
         store.error = res.error.message
+        // Restore hidden items on error
+        if (opName === 'rm' || opName === 'mv') {
+          for (const path of paths) store.unhideDoc(path)
+        }
         return
       } else if (res.status === 'ack') {
         console.log('Control ack OK', res)

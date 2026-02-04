@@ -3,7 +3,7 @@
     <component :is="cog" :class="['cog', { stopped: store.dialog === 'accessdenied' || store.authInProgress }]"/>
     <p v-if="store.dialog === 'accessdenied'">Access Denied</p>
     <p v-else-if="!store.connected">No Connection</p>
-    <p v-else-if="store.document.length === 0">Waiting for File List</p>
+    <p v-else-if="store.documentCount === 0">Waiting for File List</p>
     <p v-else-if="store.query">No matches!</p>
     <p v-else-if="!exists(props.path)">Folder not found</p>
     <p v-else>Empty folder</p>

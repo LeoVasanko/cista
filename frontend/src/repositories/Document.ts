@@ -10,6 +10,7 @@ export type DocProps = {
   mtime: number
   dir: boolean
   ghost?: boolean
+  expires?: number  // Unix timestamp for ghost expiry
 }
 
 export class Doc {
@@ -19,6 +20,7 @@ export class Doc {
   public mtime: number = 0
   public dir: boolean = false
   public ghost: boolean = false
+  public expires: number = 0  // Unix timestamp for ghost expiry (0 = no expiry)
   /** @internal Use the name getter/setter instead */
   public _name: string = ""
 

@@ -20,6 +20,7 @@
 <script setup lang="ts">
 import { watchEffect, ref, computed, watch } from 'vue'
 import { useMainStore } from '@/stores/main'
+import { getDocuments } from '@/stores/documentStore'
 import { collator } from '@/utils'
 import { sorted, sortedGrouped } from '@/utils/docsort'
 import FileExplorer from '@/components/FileExplorer.vue'
@@ -50,13 +51,22 @@ const documents = computed(() => {
   const query = props.query
 
   // List the current location (no search)
-  if (!query) return sorted(
-    store.docsByLoc.get(loc) ?? [],
-    store.prefs.sortListing,
-  )
+  if (!query) {
+    // Access docVersion to make this reactive to document changes
+    void store.docVersion
+    const hidden = store.hiddenPaths
+    const docs = getDocuments().filter(doc => doc.loc === loc && !hidden.has(doc.loc ? `${doc.loc}/${doc.name}` : doc.name))
+    // Overlay ghosts for this location (excluding hidden ones)
+    const ghosts = store.ghosts.filter(g => g.loc === loc && !hidden.has(g.loc ? `${g.loc}/${g.name}` : g.name))
+    // Merge: ghosts that don't conflict with real docs
+    const realNames = new Set(docs.map(d => d.name))
+    const merged = [...docs, ...ghosts.filter(g => !realNames.has(g.name))]
+    return sorted(merged, store.prefs.sortListing)
+  }
 
-  // Search results from worker
-  const docs = store.searchResults
+  // Search results from worker (also filter hidden)
+  const hidden = store.hiddenPaths
+  const docs = store.searchResults.filter(doc => !hidden.has(doc.loc ? `${doc.loc}/${doc.name}` : doc.name))
 
   // Custom sort override in effect? Use grouped sorting to keep folders together
   const order = store.prefs.sortFiltered
@@ -71,7 +81,7 @@ watchEffect(() => {
 })
 
 // Only auto-switch gallery mode when entering a new folder or on initial file list load
-watch([() => props.path.join('/'), () => store.document.length], ([path, len], [oldPath, oldLen]) => {
+watch([() => props.path.join('/'), () => store.documentCount], ([path, len], [oldPath, oldLen]) => {
   // React to path change or initial document load (0 → non-zero)
   if (path === oldPath && oldLen !== undefined && oldLen > 0) return
   store.prefs.gallery = documents.value.some(d => d.previewable)

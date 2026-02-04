@@ -1,9 +1,13 @@
 import { useMainStore } from '@/stores/main'
+import { getDocuments } from '@/stores/documentStore'
 
 
 export const exists = (path: string[]) => {
   const store = useMainStore()
-  return store.pathSet.has(path.join('/'))
+  // Access docVersion to make this reactive
+  void store.docVersion
+  const p = path.join('/')
+  return getDocuments().some(doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === p)
 }
 
 /** Strip file extension intelligently (handles .tar.gz, name.with.dots.pdf, etc.) */

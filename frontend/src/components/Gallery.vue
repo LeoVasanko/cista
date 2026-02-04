@@ -205,8 +205,7 @@ const mkdir = (doc: Doc, name: string) => {
   })
   doc.name = name
   doc.key = crypto.randomUUID()
-  doc.ghost = true
-  store.document.push(doc)
+  store.addGhost(doc)
   editing.value = null
 }
 const showFolderBreadcrumb = (i: number) => {
@@ -295,13 +294,13 @@ const copyImage = async (doc: Doc) => {
 
 const deleteFile = (doc: Doc) => {
   const path = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
-  doc.ghost = true
+  store.hideDoc(path)
   const control = connect(controlUrl, {
     message(ev: MessageEvent) {
       const res = JSON.parse(ev.data)
       if ('error' in res) {
         console.error('Delete failed', res.error)
-        doc.ghost = false
+        store.unhideDoc(path)
         store.showToast(res.error.message || 'Delete failed')
       } else if (res.status === 'ack') {
         store.showToast(`🗑️ Deleted ${doc.name}`)

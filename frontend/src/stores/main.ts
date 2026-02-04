@@ -5,6 +5,7 @@ import { collator } from '@/utils'
 import { watchConnect, resumeWatching } from '@/repositories/WS'
 import { sorted, type SortOrder } from '@/utils/docsort'
 import SearchWorker from '@/workers/searchWorker?worker'
+import { getDocuments, setDocuments, documentRef } from './documentStore'
 
 // Singleton search worker instance
 let searchWorker: Worker | null = null
@@ -52,9 +53,20 @@ function getSearchWorker(): Worker {
   return searchWorker
 }
 
+// Ghost expiry time in seconds
+const GHOST_TTL = 30
+
+// Periodic cleanup interval
+let cleanupInterval: ReturnType<typeof setInterval> | null = null
+
 export const useMainStore = defineStore('main', {
   state: () => ({
-    document: [] as Doc[],
+    // Ghosts are temporary optimistic-update files/folders shown until server confirms
+    ghosts: [] as Doc[],
+    // Hidden paths for optimistic delete (path -> expiry timestamp)
+    hiddenPaths: new Map<string, number>(),
+    // Version counter to trigger reactivity when external document list changes
+    docVersion: 0,
     selected: new Set<FUID>([]),
     query: '' as string,
     searchResults: [] as Doc[],
@@ -118,9 +130,65 @@ export const useMainStore = defineStore('main', {
         }))
         loc.push(name)
       }
-      this.document = docs
+      // Store in non-reactive external storage
+      setDocuments(docs)
+      // Clear ghosts that now exist in the real list
+      const realPaths = new Set(docs.map(d => d.loc ? `${d.loc}/${d.name}` : d.name))
+      this.ghosts = this.ghosts.filter(g => !realPaths.has(g.loc ? `${g.loc}/${g.name}` : g.name))
+      // Clear hidden paths that no longer exist (deletion confirmed)
+      for (const path of this.hiddenPaths.keys()) {
+        if (!realPaths.has(path)) this.hiddenPaths.delete(path)
+      }
+      // Start cleanup timer if not running
+      this.startCleanupTimer()
+      // Bump version to trigger reactive updates
+      this.docVersion++
       // Sync documents to search worker
       this.syncSearchWorker()
+    },
+    /** Add a ghost file/folder for optimistic UI updates */
+    addGhost(doc: Doc) {
+      doc.ghost = true
+      doc.expires = Math.floor(Date.now() / 1000) + GHOST_TTL
+      this.ghosts.push(doc)
+    },
+    /** Clear all ghosts (e.g., on navigation or refresh) */
+    clearGhosts() {
+      this.ghosts = []
+    },
+    /** Hide a document path (optimistic delete) */
+    hideDoc(path: string) {
+      this.hiddenPaths.set(path, Math.floor(Date.now() / 1000) + GHOST_TTL)
+    },
+    /** Unhide a document path (delete failed, restore visibility) */
+    unhideDoc(path: string) {
+      this.hiddenPaths.delete(path)
+    },
+    /** Start the periodic cleanup timer */
+    startCleanupTimer() {
+      if (cleanupInterval) return
+      cleanupInterval = setInterval(() => this.cleanupExpired(), 5000)
+    },
+    /** Stop the cleanup timer */
+    stopCleanupTimer() {
+      if (cleanupInterval) {
+        clearInterval(cleanupInterval)
+        cleanupInterval = null
+      }
+    },
+    /** Remove expired ghosts and hidden paths */
+    cleanupExpired() {
+      const now = Math.floor(Date.now() / 1000)
+      const ghostsBefore = this.ghosts.length
+      const hiddenBefore = this.hiddenPaths.size
+      this.ghosts = this.ghosts.filter(g => g.expires > now)
+      for (const [path, expires] of this.hiddenPaths) {
+        if (expires <= now) this.hiddenPaths.delete(path)
+      }
+      // Stop timer if nothing to clean up
+      if (this.ghosts.length === 0 && this.hiddenPaths.size === 0) {
+        this.stopCleanupTimer()
+      }
     },
     /** Show a temporary toast message that auto-dismisses */
     showToast(message: string, duration = 3000) {
@@ -145,7 +213,8 @@ export const useMainStore = defineStore('main', {
     syncSearchWorker() {
       const worker = getSearchWorker()
       // Send plain data to worker (no class instances)
-      const docData = this.document.map(doc => ({
+      const docs = getDocuments()
+      const docData = docs.map(doc => ({
         loc: doc.loc,
         name: doc.name,
         key: doc.key,
@@ -209,7 +278,11 @@ export const useMainStore = defineStore('main', {
     clearSensitiveData() {
       // Clear all sensitive state on logout or auth failure
       localStorage.removeItem('cista-files')
-      this.document = []
+      setDocuments([])
+      this.ghosts = []
+      this.hiddenPaths.clear()
+      this.stopCleanupTimer()
+      this.docVersion++
       this.selected.clear()
       this.user.username = ''
       this.user.privileged = false
@@ -268,26 +341,21 @@ export const useMainStore = defineStore('main', {
   getters: {
     sortOrder(): SortOrder { return this.query ? this.prefs.sortFiltered : this.prefs.sortListing },
     isUserLogged(): boolean { return this.user.isLoggedIn },
-    recentDocuments(): Doc[] { return sorted(this.document, 'modified') },
-    /** Set of all full paths - for O(1) existence checks */
-    pathSet(): Set<string> {
-      return new Set(this.document.map(d => d.loc ? `${d.loc}/${d.name}` : d.name))
+    /** Get documents count (triggers on docVersion change) */
+    documentCount(): number {
+      // Access docVersion to make this reactive
+      void this.docVersion
+      return getDocuments().length
     },
-    /** Map from location to documents in that folder - for O(1) folder listing */
-    docsByLoc(): Map<string, Doc[]> {
-      const map = new Map<string, Doc[]>()
-      for (const doc of this.document) {
-        const arr = map.get(doc.loc)
-        if (arr) arr.push(doc)
-        else map.set(doc.loc, [doc])
-      }
-      return map
-    },
-    /** Map from full path to Doc - for O(1) path lookup */
-    docsByPath(): Map<string, Doc> {
-      return new Map(this.document.map(d => [d.loc ? `${d.loc}/${d.name}` : d.name, d]))
+    recentDocuments(): Doc[] {
+      // Access docVersion to make this reactive
+      void this.docVersion
+      return sorted(getDocuments(), 'modified')
     },
     selectedFiles(): SelectedItems {
+      // Access docVersion to make this reactive
+      void this.docVersion
+      const docs = getDocuments()
       const selected = this.selected
       const found = new Set<FUID>()
       const ret: SelectedItems = {
@@ -296,7 +364,7 @@ export const useMainStore = defineStore('main', {
         keys: [],
         recursive: [],
       }
-      for (const doc of this.document) {
+      for (const doc of docs) {
         if (selected.has(doc.key)) {
           found.add(doc.key)
           ret.keys.push(doc.key)
@@ -317,7 +385,7 @@ export const useMainStore = defineStore('main', {
         const basepath = base.loc ? `${base.loc}/${base.name}` : base.name
         const nremove = base.loc.length
         add(base.name, basepath, base)
-        for (const doc of this.document) {
+        for (const doc of docs) {
           if (doc.loc === basepath || doc.loc.startsWith(basepath) && doc.loc[basepath.length] === '/') {
             const full = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
             const rel = full.slice(nremove)
