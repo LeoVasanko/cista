@@ -31,6 +31,7 @@ bp = Blueprint("preview", url_prefix="/preview")
 @dataclass(slots=True)
 class CachedPreview:
     """Cached preview with headers and body."""
+
     headers: dict[str, str]
     body: bytes
 

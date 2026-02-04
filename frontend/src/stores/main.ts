@@ -221,6 +221,7 @@ export const useMainStore = defineStore('main', {
         name: doc.name,
         key: doc.key,
         size: doc.size,
+        allocated: doc.allocated,
         mtime: doc.mtime,
         dir: doc.dir,
       }))

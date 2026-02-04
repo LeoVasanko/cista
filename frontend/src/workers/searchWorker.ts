@@ -6,6 +6,7 @@ interface DocData {
   name: string
   key: string
   size: number
+  allocated: number
   mtime: number
   dir: boolean
 }
