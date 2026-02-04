@@ -55,3 +55,8 @@ export async function updatePublic(isPublic: boolean) {
   const data = await Client.put('/api/config/public', { public: isPublic })
   return data
 }
+
+export async function updateServerName(name: string) {
+  const data = await Client.put('/api/config/name', { name })
+  return data
+}

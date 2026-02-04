@@ -176,3 +176,20 @@ async def update_public(request):
         raise BadRequest(str(e)) from None
     config.update_config({"public": public})
     return json({"message": "Public access setting updated", "public": public})
+
+
+@bp.put("config/name")
+async def update_name(request):
+    await auth.verify(request, privileged=True)
+    try:
+        name = request.json["name"]
+        if not isinstance(name, str):
+            raise ValueError("name must be a string")
+    except KeyError:
+        raise BadRequest("Missing name field") from None
+    except ValueError as e:
+        raise BadRequest(str(e)) from None
+    config.update_config({"name": name})
+    # Return the effective name (fallback to path.name if empty)
+    effective_name = name or config.config.path.name
+    return json({"message": "Server name updated", "name": effective_name})

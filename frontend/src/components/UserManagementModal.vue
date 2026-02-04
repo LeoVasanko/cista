@@ -4,6 +4,19 @@
     <div v-else>
       <h3>Server Settings</h3>
       <div class="form-row">
+        <label for="serverName">Server name</label>
+        <div class="input-with-hint">
+          <input
+            type="text"
+            id="serverName"
+            v-model="serverSettings.name"
+            @input="debouncedUpdateServerName"
+            :placeholder="store.server.name"
+          />
+          <small>Leave empty to use the share folder name</small>
+        </div>
+      </div>
+      <div class="form-row">
         <label for="publicAccess">
           <input
             type="checkbox"
@@ -62,7 +75,7 @@
 
 <script lang="ts" setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { listUsers, createUser, updateUser, deleteUser, updatePublic } from '@/repositories/User'
+import { listUsers, createUser, updateUser, deleteUser, updatePublic, updateServerName } from '@/repositories/User'
 import type { ISimpleError } from '@/repositories/Client'
 import { useMainStore } from '@/stores/main'
 
@@ -78,8 +91,11 @@ const users = ref<User[]>([])
 const success = ref('')
 const copyButtonText = ref('📋')
 const serverSettings = reactive({
-  public: false
+  public: false,
+  name: '',
 })
+
+let nameDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const close = () => {
   store.dialog = ''
@@ -206,8 +222,31 @@ const updateServerSettings = async () => {
   }
 }
 
-onMounted(() => {
+const updateServerNameSetting = async () => {
+  try {
+    const result = await updateServerName(serverSettings.name)
+    // Update store with the effective name returned by the server
+    store.server.name = result.name
+  } catch (e) {
+    const httpError = e as ISimpleError
+    store.showToast(httpError.message || 'Failed to update server name')
+  }
+}
+
+const debouncedUpdateServerName = () => {
+  if (nameDebounceTimer) clearTimeout(nameDebounceTimer)
+  nameDebounceTimer = setTimeout(updateServerNameSetting, 400)
+}
+
+// Initialize server settings
+const initServerSettings = () => {
   serverSettings.public = store.server.public || false
+  // Start with empty name field - placeholder shows current effective name
+  serverSettings.name = ''
+}
+
+onMounted(() => {
+  initServerSettings()
   loading.value = false
 })
 
@@ -225,4 +264,13 @@ watch(() => store.server.public, (newVal) => {
 
 <style scoped>
 /* Component-specific styles - most styling comes from ModalDialog.vue global styles */
+.input-with-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.input-with-hint small {
+  color: #666;
+  font-size: 0.75rem;
+}
 </style>
