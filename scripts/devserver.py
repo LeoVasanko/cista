@@ -2,11 +2,11 @@
 """Run Vite development server for frontend and Cista backend with auto-reload.
 
 Usage:
-    uv run scripts/devserver.py [frontend] [--backend backend] [cista_args...]
+    uv run scripts/devserver.py [-l listen] [--backend backend] [cista_args...]
 
 Options:
-    frontend    Vite frontend endpoint (default: localhost:8989)
-    --backend   Cista backend endpoint (default: from config, or :8999)
+    -l, --listen  Vite frontend endpoint (default: localhost:8989)
+    --backend     Cista backend endpoint (default: from config, or :8999)
 
 Any additional arguments are passed to the cista command.
 
@@ -31,7 +31,9 @@ from cista.serve import parse_listen
 DEFAULT_BACKEND_PORT = 8999
 
 
-def setup_sanic_backend(listen: str | None, extra_args: list[str]) -> tuple[str, list[str]]:
+def setup_sanic_backend(
+    listen: str | None, extra_args: list[str]
+) -> tuple[str, list[str]]:
     """Parse backend listen address and build cista dev command.
 
     Returns (url, cmd).
@@ -46,7 +48,9 @@ def setup_sanic_backend(listen: str | None, extra_args: list[str]) -> tuple[str,
     return f"http://{host}:{port}", cmd
 
 
-async def run_devserver(frontend: str | None, backend: str | None, extra_args: list[str]) -> None:
+async def run_devserver(
+    frontend: str | None, backend: str | None, extra_args: list[str]
+) -> None:
     reporoot = Path(__file__).parent.parent
     front = reporoot / "frontend"
     if not (front / "package.json").exists():
@@ -80,26 +84,25 @@ def main():
         epilog=HELP_EPILOG,
     )
     parser.add_argument(
-        "frontend",
-        nargs="?",
+        "-l",
+        "--listen",
         metavar="host:port",
         help="Vite frontend endpoint (default: localhost:8989)",
     )
     parser.add_argument(
         "--backend",
-        "-l",
         metavar="host:port",
         help="Cista backend endpoint (default: from config, or :8999)",
     )
     args, unknown = parser.parse_known_args()
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(run_devserver(args.frontend, args.backend, unknown))
+        asyncio.run(run_devserver(args.listen, args.backend, unknown))
 
 
 HELP_EPILOG = """
-  scripts/devserver.py                       # Default ports
-  scripts/devserver.py 3000                  # Vite on localhost:3000
-  scripts/devserver.py :3000 --backend 8080  # Vite on *:3000, backend on :8080
+  scripts/devserver.py                        # Default ports
+  scripts/devserver.py -l 3000                # Vite on localhost:3000
+  scripts/devserver.py -l :3000 --backend 8080  # Vite on *:3000, backend on :8080
 
   Additional arguments are passed to the cista backend command.
 
