@@ -8,7 +8,7 @@ This is a cutting-edge **file and document server** designed for speed, efficien
 
 **Built-in document and media previews** let you quickly view files without downloading them. Cista shows PDF and other documents, video and image thumbnails, with **HDR10 support** video previews and image formats, including HEIC and AVIF. It also has a player for music and video files.
 
-The Cista project started as an inevitable remake of [Droppy](https://github.com/droppyjs/droppy) which we used and loved despite its numerous bugs. Cista Storage stands out in handling even the most exotic filenames, ensuring a smooth experience where others falter.
+The Cista project started as an inevitable remake of [Droppy](https://github.com/droppyjs/droppy) which was not being developed at the time. Now they have picked up pace too, feel free to try both and compare.
 
 All of this is wrapped in an intuitive interface with automatic light and dark themes, making Cista Storage the ideal choice for anyone seeking a reliable, versatile, and quick file storage solution. Quickly setup your own Cista where your files are just a click away, safe, and always accessible.
 
@@ -40,9 +40,13 @@ The server remembers its settings in the config folder (default `~/.local/share/
 
 ## Authentication
 
-Cista supports three authentication modes:
+Cista supports two authenticatioon mode, each of which supporting ordinary and privileged users. Either one can be combined with the public mode.
 
-### Built-in Authentication (default)
+### Public Mode
+
+In public mode, anyone can read, send and even delete files without without logging in. Users entering the service won't be asked to authenticate. Privileged users can still log in via the menu to access admin settings, from where the public mode can be toggled on or off.
+
+### Built-in Password Authentication (default)
 
 User accounts are managed directly by Cista. Create users with the `--user` flag:
 
@@ -53,23 +57,26 @@ uvx cista --user guest               # Create regular user
 
 Privileged users can manage other users and change settings via the Admin Settings menu.
 
-### Public Mode
+### Passkey Authentication and SSO
 
-In public mode, anyone can read, send and even delete files without without logging in. Privileged users can still log in via the menu to access admin settings, from where the public mode can be toggled on or off.
+For centralized authentication, Cista can integrate with [Paskia](https://git.zi.fi/LeoVasanko/paskia) SSO server. This allows user account and permission management at the corporate level, without bothering Cista with it.
 
-### Paskia SSO Authentication
-
-For centralized authentication, Cista can integrate with [Paskia](https://git.zi.fi/LeoVasanko/paskia) SSO server. Set the `PASKIA_BACKEND_URL` environment variable:
+Set the `PASKIA_BACKEND_URL` environment variable:
 
 ```fish
 PASKIA_BACKEND_URL=http://localhost:4401 uvx cista
 ```
 
+Run the Paskia backend on the same machine (to use that default URL):
+```fish
+uvx paskia
+```
+
 In Paskia mode:
 - All `/auth/*` requests are proxied to the Paskia backend
+- Cista backend verifies access by `/auth/api/validate` endpoint and shows a login dialog if needed
 - Users with `cista:login` permission can access files
 - Users with `cista:admin` permission get privileged access (Admin Settings)
-- Public mode works with Paskia: unauthenticated users can browse, while the menu has option to login
 
 ### Internet Access
 
@@ -89,9 +96,15 @@ Nxing or other proxy may be similarly used, or alternatively you can place cert 
 
 This setup allows easy addition of storages, each with its own domain, configuration, and files.
 
-Assuming a restricted user account `storage` for serving files and that UV is installed system-wide or on this account. Only UV is required: this does not use git or bun/npm.
+Assuming a restricted user account `storage` for serving files and that UV is installed system-wide or on this account. Only UV is required: this does not use git or javascript runtimes.
 
-Create `/etc/systemd/system/cista@.service`:
+Create (edit) a systemd unit:
+
+```fish
+sudo systemctl edit --force --full cista@.service
+```
+
+Paste the following:
 
 ```ini
 [Unit]
@@ -101,6 +114,7 @@ Description=Cista storage %i
 User=storage
 ExecStart=uvx cista -c /srv/cista/%i -l /srv/cista/%i/socket /media/storage/%i
 Restart=always
+#Environment=PASKIA_BACKEND_URL=http://localhost:4401
 
 [Install]
 WantedBy=multi-user.target
@@ -153,4 +167,4 @@ Building the package for release (frontend + Python wheel/sdist):
 uv build
 ```
 
-Vue is used to build files in `cista/wwwroot`, included prebuilt in the Python package. `uv build` runs the project build hooks to bundle the frontend and produce a NodeJS-independent Python package.
+Vue is used to build files in `cista/frontend-build`, included prebuilt in the Python package. `uv build` runs the project build hooks to bundle the frontend and produce a NodeJS-independent Python package.
