@@ -157,8 +157,8 @@ const freeColor = computed(() => {
   if (!s.disk) return '#6c6'
   const freePct = s.free / s.disk
   if (freePct > 0.25) return '#5b5'
-  if (freePct > 0.10) return '#db3'
-  return '#d44'
+  if (freePct > 0.10) return '#ff0'
+  return '#f00'
 })
 
 const PIE_RADIUS = 55
