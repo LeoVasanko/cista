@@ -25,14 +25,20 @@ def create_banner():
 """
 
 
-def create_startup_box(*, folder, url, unix=None, dev=False, paskia_url=None):
+def create_startup_box(*, folder, url, unix=None, dev=False, paskia_url=None, public=False):
     """Create a framed startup box with server information."""
     title = f"Cista {cista.__version__}"
     listen = unix if unix else url
     location = f"{folder} @ {listen}"
     lines = [title, location]
+    # Auth line: Paskia <url> or Password, with optional Public suffix
     if paskia_url:
-        lines.append(f"Paskia: {paskia_url}")
+        auth_line = f"Auth: Paskia {paskia_url}"
+    else:
+        auth_line = "Auth: Password"
+    if public:
+        auth_line += ", Public"
+    lines.append(auth_line)
     if dev:
         lines.append("dev mode")
 
@@ -157,6 +163,7 @@ def _main():
         unix=opts.get("unix"),
         dev=dev,
         paskia_url=PASKIA_BACKEND_URL or None,
+        public=config.config.public,
     )
     sys.stderr.write(startup_box)
     # Run the server
