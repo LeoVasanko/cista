@@ -98,7 +98,7 @@ const uploadCloudFiles = (files: CloudFile[]) => {
   files.sort((a, b) => collator.compare(a.cloudName, b.cloudName))
   // Optimistic update: ghost folders and files
   const now = Math.floor(Date.now() / 1000)
-  const byPath = new Map(store.document.map(d => [d.loc ? `${d.loc}/${d.name}` : d.name, d]))
+  const byPath = store.docsByPath
   const added = new Set<string>()
   for (const f of files) {
     const lastSlash = f.cloudName.lastIndexOf('/')

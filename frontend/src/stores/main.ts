@@ -269,6 +269,24 @@ export const useMainStore = defineStore('main', {
     sortOrder(): SortOrder { return this.query ? this.prefs.sortFiltered : this.prefs.sortListing },
     isUserLogged(): boolean { return this.user.isLoggedIn },
     recentDocuments(): Doc[] { return sorted(this.document, 'modified') },
+    /** Set of all full paths - for O(1) existence checks */
+    pathSet(): Set<string> {
+      return new Set(this.document.map(d => d.loc ? `${d.loc}/${d.name}` : d.name))
+    },
+    /** Map from location to documents in that folder - for O(1) folder listing */
+    docsByLoc(): Map<string, Doc[]> {
+      const map = new Map<string, Doc[]>()
+      for (const doc of this.document) {
+        const arr = map.get(doc.loc)
+        if (arr) arr.push(doc)
+        else map.set(doc.loc, [doc])
+      }
+      return map
+    },
+    /** Map from full path to Doc - for O(1) path lookup */
+    docsByPath(): Map<string, Doc> {
+      return new Map(this.document.map(d => [d.loc ? `${d.loc}/${d.name}` : d.name, d]))
+    },
     selectedFiles(): SelectedItems {
       const selected = this.selected
       const found = new Set<FUID>()

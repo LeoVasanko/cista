@@ -51,7 +51,7 @@ const documents = computed(() => {
 
   // List the current location (no search)
   if (!query) return sorted(
-    store.document.filter(doc => doc.loc === loc),
+    store.docsByLoc.get(loc) ?? [],
     store.prefs.sortListing,
   )
 
