@@ -98,7 +98,31 @@ const truncateLabel = (name: string, maxLen = 10): string => {
   return name.slice(0, maxLen - 1) + '…'
 }
 
-const storageName = computed(() => truncateLabel(store.server.name || 'stored'))
+// Calculate max label length based on angular gap to neighbor labels
+const storageMaxLen = computed(() => {
+  const s = store.space
+  if (!s.disk) return 10
+  // Sector spans in degrees
+  const storageSpan = (s.allocated / s.disk) * 360
+  const freeSpan = (s.free / s.disk) * 360
+  const otherSpan = ((s.used - s.allocated) / s.disk) * 360
+  // Angular gap from storage label midpoint to neighbor label midpoints
+  const gapToFree = (storageSpan + freeSpan) / 2
+  const gapToOther = (storageSpan + otherSpan) / 2
+  const minGap = Math.min(gapToFree, gapToOther)
+  // Allow longer names when there's sufficient gap to both neighbors
+  if (minGap > 70) return 18
+  if (minGap > 55) return 14
+  return 10
+})
+
+const storageName = computed(() => {
+  const name = store.server.name || 'stored'
+  const maxLen = storageMaxLen.value
+  // Use full name if it fits within the available space
+  if (name.length <= maxLen) return name
+  return truncateLabel(name, 10)
+})
 
 const TAU = 2 * Math.PI
 
@@ -229,9 +253,10 @@ const adjustedLabelAngles = computed(() => {
 })
 
 // Arc path for curved text labels (CW for top half, CCW for bottom half)
-const createArcPath = (centerAngle: number, id: string) => {
+const createArcPath = (centerAngle: number, id: string, labelLen: number) => {
   const radius = LABEL_RADIUS
-  const arcSpan = 60
+  // Scale arc span based on label length: ~6° per character, minimum 45°
+  const arcSpan = Math.max(45, labelLen * 6)
   const isBottom = centerAngle > 90 && centerAngle <= 270
   const startAngle = isBottom ? centerAngle + arcSpan / 2 : centerAngle - arcSpan / 2
   const endAngle = isBottom ? centerAngle - arcSpan / 2 : centerAngle + arcSpan / 2
@@ -244,9 +269,9 @@ const createArcPath = (centerAngle: number, id: string) => {
   }
 }
 
-const storageLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.storage!, 'storage'))
-const freeLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.free!, 'free'))
-const otherLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.other!, 'other'))
+const storageLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.storage!, 'storage', storageName.value.length))
+const freeLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.free!, 'free', 4))
+const otherLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.other!, 'other', 5))
 
 const handleClick = () => isExpanded.value ? collapse() : expand()
 
