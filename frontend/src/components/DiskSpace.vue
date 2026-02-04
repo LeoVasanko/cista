@@ -26,11 +26,11 @@
       </defs>
 
       <g :filter="isExpanded ? 'url(#pieShadow)' : 'none'">
-        <circle :r="pieRadius" :cx="pieCx" :cy="pieCy" fill="url(#otherGradient)" />
-        <circle :r="pieRadius/2" :cx="pieCx" :cy="pieCy" fill="transparent" :stroke="freeColor" :stroke-width="pieRadius" :stroke-dasharray="pieFreeDash" :stroke-dashoffset="pieFreeOffsetVal" :transform="`rotate(-90 ${pieCx} ${pieCy})`" />
-        <circle :r="pieRadius/2" :cx="pieCx" :cy="pieCy" fill="transparent" stroke="url(#storageGradient)" :stroke-width="pieRadius" :stroke-dasharray="pieStorageDash" :transform="`rotate(-90 ${pieCx} ${pieCy})`" />
-        <circle :r="pieRadius" :cx="pieCx" :cy="pieCy" fill="url(#highlightOverlay)" />
-        <circle :r="pieRadius * 0.38" :cx="pieCx" :cy="pieCy" fill="#000" />
+        <circle :r="midRadius" :cx="pieCx" :cy="pieCy" fill="transparent" stroke="url(#otherGradient)" :stroke-width="ringWidth" />
+        <circle :r="midRadius" :cx="pieCx" :cy="pieCy" fill="transparent" :stroke="freeColor" :stroke-width="ringWidth" :stroke-dasharray="pieFreeDash" :stroke-dashoffset="pieFreeOffsetVal" :transform="`rotate(-90 ${pieCx} ${pieCy})`" />
+        <circle :r="midRadius" :cx="pieCx" :cy="pieCy" fill="transparent" stroke="url(#storageGradient)" :stroke-width="ringWidth" :stroke-dasharray="pieStorageDash" :transform="`rotate(-90 ${pieCx} ${pieCy})`" />
+        <circle :r="midRadius" :cx="pieCx" :cy="pieCy" fill="transparent" stroke="url(#highlightOverlay)" :stroke-width="ringWidth" />
+        <circle :r="holeRadius" :cx="pieCx" :cy="pieCy" fill="rgba(0,0,0,0.5)" />
         <text ref="centerLabelRef" :x="pieCx" :y="pieCy" dy="0.35em" class="pie-center-label" text-anchor="middle">GB</text>
         <circle :r="pieRadius" :cx="pieCx" :cy="pieCy" fill="transparent" class="pie-hitarea" @click="handleClick" />
       </g>
@@ -100,10 +100,15 @@ const truncateLabel = (name: string, maxLen = 10): string => {
 
 const storageName = computed(() => truncateLabel(store.server.name || 'stored'))
 
+const TAU = 2 * Math.PI
+
 const pieCx = 75
 const pieCy = 75
 const pieRadius = 55
-const CIRC = Math.PI * pieRadius
+const holeRadius = pieRadius * 0.38
+const ringWidth = pieRadius - holeRadius
+const midRadius = (pieRadius + holeRadius) / 2
+const CIRC = TAU * midRadius
 
 const pieStorageDash = computed(() => {
   const s = store.space
@@ -136,7 +141,7 @@ const PIE_RADIUS = 55
 const LABEL_RADIUS = 62
 
 const getPoint = (angle: number, radius: number) => {
-  const rad = (angle - 90) * Math.PI / 180
+  const rad = TAU * (angle - 90) / 360
   return { x: pieCx + radius * Math.cos(rad), y: pieCy + radius * Math.sin(rad) }
 }
 
