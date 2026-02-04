@@ -2,7 +2,10 @@ import asyncio
 import gc
 import io
 import mimetypes
+import threading
 import urllib.parse
+from collections import OrderedDict
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from time import perf_counter
 from urllib.parse import unquote
@@ -23,6 +26,48 @@ from cista.util.filename import sanitize
 pillow_heif.register_heif_opener()
 
 bp = Blueprint("preview", url_prefix="/preview")
+
+
+@dataclass(slots=True)
+class CachedPreview:
+    """Cached preview with headers and body."""
+    headers: dict[str, str]
+    body: bytes
+
+
+class PreviewCache:
+    """Thread-safe LRU cache for preview responses."""
+
+    def __init__(self, capacity: int = 500):
+        self.capacity = capacity
+        self._cache: OrderedDict[str, CachedPreview] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key: str) -> CachedPreview | None:
+        """Get cached preview, moving it to end (most recently used)."""
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+        return None
+
+    def set(self, key: str, value: CachedPreview) -> None:
+        """Cache preview, evicting oldest if at capacity."""
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+            else:
+                if len(self._cache) >= self.capacity:
+                    self._cache.popitem(last=False)
+                self._cache[key] = value
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._cache)
+
+
+# Global preview cache instance
+_preview_cache = PreviewCache(capacity=500)
 
 
 @bp.on_request
@@ -55,6 +100,29 @@ async def preview(req, path):
     etag = config.derived_secret(
         "preview", rel, stat.st_mtime_ns, quality, maxsize, maxzoom
     ).hex()
+
+    if req.headers.if_none_match == etag:
+        # The client has it cached, respond 304 Not Modified
+        return empty(304, headers={"etag": etag})
+
+    # Check in-memory cache first (includes headers)
+    cached = _preview_cache.get(etag)
+    if cached is not None:
+        logger.debug(f"Preview cache hit: {rel}")
+        return raw(cached.body, headers=cached.headers)
+
+    if not filepath.is_file():
+        raise NotFound("File not found")
+
+    # Generate preview
+    img = await asyncio.get_event_loop().run_in_executor(
+        req.app.ctx.threadexec, dispatch, filepath, quality, maxsize, maxzoom
+    )
+    if not img:
+        # Preview generation failed, redirect to the file itself
+        return redirect(f"/files/{path}", status=303)
+
+    # Build headers and cache the full response
     savename = PurePosixPath(filepath.name).with_suffix(".avif")
     headers = {
         "etag": etag,
@@ -64,19 +132,8 @@ async def preview(req, path):
         "content-type": "image/avif",
         "content-disposition": f"inline; filename*=UTF-8''{urllib.parse.quote(savename.as_posix())}",
     }
-    if req.headers.if_none_match == etag:
-        # The client has it cached, respond 304 Not Modified
-        return empty(304, headers=headers)
+    _preview_cache.set(etag, CachedPreview(headers=headers, body=img))
 
-    if not filepath.is_file():
-        raise NotFound("File not found")
-
-    img = await asyncio.get_event_loop().run_in_executor(
-        req.app.ctx.threadexec, dispatch, filepath, quality, maxsize, maxzoom
-    )
-    if not img:
-        # Preview generation failed, redirect to the file itself
-        return redirect(f"/files/{path}", status=303)
     return raw(img, headers=headers)
 
 
