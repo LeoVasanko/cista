@@ -96,8 +96,9 @@ export const useMainStore = defineStore('main', {
     space: {
       disk: 0,
       free: 0,
-      usage: 0,
+      used: 0,
       storage: 0,
+      allocated: 0,
     }
   }),
   persist: {
@@ -118,13 +119,14 @@ export const useMainStore = defineStore('main', {
     updateRoot(root: FileEntry[]) {
       const docs = []
       let loc = [] as string[]
-      for (const [level, name, key, mtime, size, isfile] of root) {
+      for (const [level, name, key, mtime, size, allocated, isfile] of root) {
         loc = loc.slice(0, level - 1)
         docs.push(new Doc({
           name,
           loc: level ? loc.join('/') : '/',
           key,
           size,
+          allocated,
           mtime,
           dir: !isfile,
         }))

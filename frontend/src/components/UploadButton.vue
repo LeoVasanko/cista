@@ -115,13 +115,13 @@ const uploadCloudFiles = (files: CloudFile[]) => {
     for (let i = 0; i < parts.length; i++) {
       const folderPath = parts.slice(0, i + 1).join('/')
       if (folderPath && !byPath.has(folderPath) && !added.has(folderPath)) {
-        store.addGhost(new Doc({ loc: parts.slice(0, i).join('/'), name: parts[i], key: crypto.randomUUID(), size: 0, mtime: now, dir: true }))
+        store.addGhost(new Doc({ loc: parts.slice(0, i).join('/'), name: parts[i], key: crypto.randomUUID(), size: 0, allocated: 0, mtime: now, dir: true }))
         added.add(folderPath)
       }
     }
     // Ghost file or update existing (overwrite case doesn't need ghost, file already visible)
     const existing = byPath.get(f.cloudName)
-    if (!existing) store.addGhost(new Doc({ loc, name, key: crypto.randomUUID(), size: f.file.size, mtime: now, dir: false }))
+    if (!existing) store.addGhost(new Doc({ loc, name, key: crypto.randomUUID(), size: f.file.size, allocated: 0, mtime: now, dir: false }))
   }
   // @ts-ignore
   upqueue = [...upqueue, ...files]

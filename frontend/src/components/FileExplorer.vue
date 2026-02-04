@@ -124,6 +124,7 @@ defineExpose({
       dir: true,
       mtime: now,
       size: 0,
+      allocated: 0,
     })
     store.cursor = editing.value.key
   },

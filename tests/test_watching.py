@@ -10,7 +10,9 @@ def decode(data: str):
 
 # Helper function to create a list of FileEntry objects
 def f(count, start=0):
-    return [FileEntry(i, str(i), str(i), 0, 0, 0) for i in range(start, start + count)]
+    return [
+        FileEntry(i, str(i), str(i), 0, 0, 0, 0) for i in range(start, start + count)
+    ]
 
 
 def test_identical_lists():
@@ -35,8 +37,8 @@ def test_insertions():
 
 
 def test_insertion_at_end():
-    old_list = [*f(3), FileEntry(1, "xxx", "xxx", 0, 0, 1)]
-    newfile = FileEntry(1, "yyy", "yyy", 0, 0, 1)
+    old_list = [*f(3), FileEntry(1, "xxx", "xxx", 0, 0, 0, 1)]
+    newfile = FileEntry(1, "yyy", "yyy", 0, 0, 0, 1)
     new_list = [*old_list, newfile]
     expected = [UpdKeep(4), UpdIns([newfile])]
     assert decode(format_update(old_list, new_list)) == expected

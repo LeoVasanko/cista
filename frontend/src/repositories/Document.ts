@@ -7,6 +7,7 @@ export type DocProps = {
   name: string
   key: FUID
   size: number
+  allocated: number
   mtime: number
   dir: boolean
   ghost?: boolean
@@ -17,6 +18,7 @@ export class Doc {
   public loc: string = ""
   public key: FUID = ""
   public size: number = 0
+  public allocated: number = 0
   public mtime: number = 0
   public dir: boolean = false
   public ghost: boolean = false
@@ -35,6 +37,15 @@ export class Doc {
     this._name = name
   }
   get sizedisp(): string { return formatSize(this.size) }
+  /** Returns a sparse allocation indicator symbol, or empty string if fully allocated */
+  get sparseIndicator(): string {
+    if (this.dir || this.size <= this.allocated) return ''
+    if (this.allocated === 0) return '⭕'  // exactly zero
+    const ratio = this.allocated / this.size
+    // Round to nearest 25%: ◔◑◕⬤
+    const rounded = Math.round(ratio * 4)  // 0,1,2,3,4
+    return ['◔', '◔', '◑', '◕', '⬤'][rounded]!  // 0 maps to ◔ since we handled exact 0 above
+  }
   get modified(): string { return formatUnixDate(this.mtime) }
   get url(): string {
     const p = this.loc ? `${this.loc}/${this.name}` : this.name
@@ -78,9 +89,10 @@ export type FileEntry = [
   number,  // level
   string,  // name
   FUID,
-  number, //mtime
-  number, // size
-  number, // isfile
+  number,  // mtime
+  number,  // size
+  number,  // allocated (actual disk usage)
+  number,  // isfile
 ]
 
 export type UpdateEntry = ['k', number] | ['d', number] | ['i', Array<FileEntry>]

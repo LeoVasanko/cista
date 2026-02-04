@@ -18,7 +18,7 @@
         </template>
         <template v-else>
           <SelectBox :doc=doc @click="store.cursor = doc.key"/>
-          <span>{{ doc.name }}</span>
+          <span>{{ doc.name }}<SparseIndicator :doc="doc" class="after-name" /></span>
           <div class=namespacer></div>
         </template>
       </figcaption>
@@ -26,6 +26,7 @@
     <CursorTooltip ref="tooltip" :text="tooltipText">
       <div class="tooltip-name">{{ doc.name }}</div>
       <div class="tooltip-details">{{ doc.modified }} — {{ doc.sizedisp }}</div>
+      <div v-if="doc.sparseIndicator" class="tooltip-sparse">{{ sparseText }}</div>
     </CursorTooltip>
   </a>
 </template>
@@ -34,8 +35,10 @@
 import { ref, computed } from 'vue'
 import { useMainStore } from '@/stores/main'
 import { Doc } from '@/repositories/Document'
+import { formatSize } from '@/utils'
 import MediaPreview from '@/components/MediaPreview.vue'
 import CursorTooltip from './CursorTooltip.vue'
+import SparseIndicator from './SparseIndicator.vue'
 
 const store = useMainStore()
 type EditingProp = {
@@ -52,6 +55,11 @@ const tooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)
 
 const tooltipText = computed(() => props.doc.key)
 
+const sparseText = computed(() => {
+  const { size, allocated } = props.doc
+  return `${formatSize(allocated)} allocated of ${formatSize(size)}`
+})
+
 const onclick = (ev: Event) => {
   if (m.value!.play()) ev.preventDefault()
   store.cursor = props.doc.key
@@ -65,6 +73,13 @@ const onclick = (ev: Event) => {
 }
 .tooltip-details {
   text-align: center;
+}
+.tooltip-sparse {
+  text-align: center;
+  opacity: 0.8;
+}
+.after-name {
+  margin-left: 0.3em;
 }
 figure {
   max-height: 15em;

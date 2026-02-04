@@ -146,6 +146,7 @@ class FileEntry(msgspec.Struct, array_like=True, frozen=True):
     key: str
     mtime: int
     size: int
+    allocated: int
     isfile: int
 
     def __str__(self):
@@ -177,5 +178,6 @@ class UpdateMessage(msgspec.Struct):
 class Space(msgspec.Struct):
     disk: int
     free: int
-    usage: int
+    used: int
     storage: int
+    allocated: int

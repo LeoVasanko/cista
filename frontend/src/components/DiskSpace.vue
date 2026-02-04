@@ -36,9 +36,9 @@
       </g>
 
       <g ref="labelsRef" class="pie-labels">
-        <text :x="storageInnerPos.x" :y="storageInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.storage.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.storage.angle)} ${storageInnerPos.x} ${storageInnerPos.y})`">{{ fmtSize(store.space.storage, sectorInfo.storage.angle) }}</text>
+        <text :x="storageInnerPos.x" :y="storageInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.storage.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.storage.angle)} ${storageInnerPos.x} ${storageInnerPos.y})`">{{ fmtSize(store.space.allocated, sectorInfo.storage.angle) }}</text>
         <text :x="freeInnerPos.x" :y="freeInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.free.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.free.angle)} ${freeInnerPos.x} ${freeInnerPos.y})`">{{ fmtSize(store.space.free, sectorInfo.free.angle) }}</text>
-        <text :x="otherInnerPos.x" :y="otherInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.other.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.other.angle)} ${otherInnerPos.x} ${otherInnerPos.y})`">{{ fmtSize(store.space.usage - store.space.storage, sectorInfo.other.angle) }}</text>
+        <text :x="otherInnerPos.x" :y="otherInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.other.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.other.angle)} ${otherInnerPos.x} ${otherInnerPos.y})`">{{ fmtSize(store.space.used - store.space.allocated, sectorInfo.other.angle) }}</text>
 
         <defs>
           <path :id="storageLabelPath.id" :d="storageLabelPath.d" fill="none" />
@@ -113,7 +113,7 @@ const CIRC = TAU * midRadius
 const pieStorageDash = computed(() => {
   const s = store.space
   if (!s.disk) return `0 ${CIRC}`
-  return `${(s.storage / s.disk) * CIRC} ${CIRC}`
+  return `${(s.allocated / s.disk) * CIRC} ${CIRC}`
 })
 
 const pieFreeDash = computed(() => {
@@ -125,7 +125,7 @@ const pieFreeDash = computed(() => {
 const pieFreeOffsetVal = computed(() => {
   const s = store.space
   if (!s.disk) return 0
-  return -(s.storage / s.disk) * CIRC
+  return -(s.allocated / s.disk) * CIRC
 })
 
 const freeColor = computed(() => {
@@ -153,9 +153,9 @@ const sectorInfo = computed(() => {
     other: { angle: 270, pct: 0.25 }
   }
 
-  const storagePct = s.storage / s.disk
+  const storagePct = s.allocated / s.disk
   const freePct = s.free / s.disk
-  const otherPct = (s.usage - s.storage) / s.disk
+  const otherPct = (s.used - s.allocated) / s.disk
 
   const storageAngle = storagePct * 180  // midpoint of storage sector
   const freeStart = storagePct * 360

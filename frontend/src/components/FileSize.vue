@@ -1,22 +1,44 @@
 <template>
-  <td class="size right" :class=sizeClass>{{ doc.sizedisp }}</td>
+  <td
+    class="size right"
+    :class="sizeClass"
+    @mouseenter="doc.sparseIndicator && tooltip?.startHover($event)"
+    @mousemove="doc.sparseIndicator && tooltip?.updatePosition($event)"
+    @mouseleave="doc.sparseIndicator && tooltip?.endHover()"
+  >
+    <SparseIndicator :doc="doc" class="before-size" />{{ doc.sizedisp }}
+    <CursorTooltip v-if="doc.sparseIndicator" ref="tooltip" :text="tooltipText">{{ tooltipText }}</CursorTooltip>
+  </td>
 </template>
 
 <script setup lang="ts">
 import { Doc } from '@/repositories/Document'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { formatSize } from '@/utils'
+import SparseIndicator from './SparseIndicator.vue'
+import CursorTooltip from './CursorTooltip.vue'
+
+const props = defineProps<{
+    doc: Doc
+}>()
+
+const tooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)
 
 const sizeClass = computed(() => {
   const unit = props.doc.sizedisp.split('\u202F').slice(-1)[0]!
   return +unit ? "bytes" : unit
 })
 
-const props = defineProps<{
-    doc: Doc
-}>()
+const tooltipText = computed(() => {
+  const { size, allocated } = props.doc
+  return `${formatSize(allocated)} allocated of ${formatSize(size)}`
+})
 </script>
 
 <style scoped>
+.before-size {
+  margin-right: 0.2em;
+}
 .size.empty { color: #555 }
 .size.bytes { color: #77a }
 .size.kB { color: #474 }

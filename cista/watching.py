@@ -24,7 +24,7 @@ sortkey = natsort_keygen(alg=ns.LOCALE)
 class State:
     def __init__(self):
         self.lock = threading.RLock()
-        self._space = Space(0, 0, 0, 0)
+        self._space = Space(0, 0, 0, 0, 0)
         self.root: list[FileEntry] = []
 
     @property
@@ -148,12 +148,15 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
     try:
         st = stat or path.stat()
         isfile = int(not S_ISDIR(st.st_mode))
+        # st_blocks is in 512-byte units
+        allocated = st.st_blocks * 512 if isfile else 0
         entry = FileEntry(
             level=len(rel.parts),
             name=rel.name,
             key=fuid(st),
             mtime=int(st.st_mtime),
             size=st.st_size if isfile else 0,
+            allocated=allocated,
             isfile=isfile,
         )
         if isfile:
@@ -181,8 +184,9 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
                 level=entry.level,
                 name=entry.name,
                 key=entry.key,
-                size=entry.size + child.size,
                 mtime=max(entry.mtime, child.mtime),
+                size=entry.size + child.size,
+                allocated=entry.allocated + child.allocated,
                 isfile=entry.isfile,
             )
             ret.extend(sub)
@@ -227,7 +231,14 @@ def update_path(rootmod: list[FileEntry], relpath: PurePosixPath, loop):
 def update_space(loop):
     """Called periodically to update the disk usage."""
     du = shutil.disk_usage(rootpath)
-    space = Space(*du, storage=state.root[0].size)
+    root = state.root[0]
+    space = Space(
+        disk=du.total,
+        free=du.free,
+        used=du.used,
+        storage=root.size,
+        allocated=root.allocated,
+    )
     # Update only on difference above 1 MB
     tol = 10**6
     old = msgspec.structs.astuple(state.space)
@@ -504,7 +515,65 @@ class PathIndex:
 
         self.root = new_root
         self._rebuild()
+
+        # Recalculate sizes for ancestor folders (including root)
+        self._recalculate_ancestors(path)
+
         return new_root
+
+    def _recalculate_ancestors(self, path: PurePosixPath):
+        """Recalculate size/allocated for all ancestors of path, including root."""
+        # Build list of ancestors from deepest to root
+        ancestors = []
+        current = path.parent if path.parts else PurePosixPath()
+        while True:
+            ancestors.append(current)
+            if not current.parts:
+                break
+            current = current.parent
+
+        # Process from deepest ancestor to root
+        for ancestor_path in ancestors:
+            if ancestor_path not in self._index:
+                continue
+            start, count = self._index[ancestor_path]
+            if count == 0:
+                continue
+
+            ancestor = self.root[start]
+            if ancestor.isfile:
+                continue  # Files don't aggregate
+
+            # Sum size/allocated of direct children
+            total_size = 0
+            total_allocated = 0
+            i = start + 1
+            while i < start + count:
+                child = self.root[i]
+                if child.level == ancestor.level + 1:
+                    total_size += child.size
+                    total_allocated += child.allocated
+                    # Skip child's subtree
+                    child_path = ancestor_path / child.name
+                    if child_path in self._index:
+                        _, child_count = self._index[child_path]
+                        i += child_count
+                    else:
+                        i += 1
+                else:
+                    i += 1
+
+            # Update ancestor entry if changed
+            if ancestor.size != total_size or ancestor.allocated != total_allocated:
+                self.root[start] = FileEntry(
+                    level=ancestor.level,
+                    name=ancestor.name,
+                    key=ancestor.key,
+                    mtime=ancestor.mtime,
+                    size=total_size,
+                    allocated=total_allocated,
+                    isfile=ancestor.isfile,
+                )
 
 
 def collapse_paths(paths: set[PurePosixPath]) -> set[PurePosixPath]:
