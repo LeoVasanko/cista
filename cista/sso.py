@@ -48,6 +48,8 @@ async def get_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(timeout=1.0)
+        if "user-agent" in _client.headers:
+            del _client.headers["user-agent"]  # No httpx UA
     return _client
 
 
@@ -171,10 +173,10 @@ async def proxy_auth_request(request):
         "upgrade",
         "proxy-authorization",
         "proxy-authenticate",
-        "forwarded",
         "x-forwarded-for",
         "x-forwarded-host",
         "x-forwarded-proto",
+        "forwarded",
     }
 
     headers = [
@@ -182,9 +184,17 @@ async def proxy_auth_request(request):
         for key, value in request.headers.items()
         if key.lower() not in skip_headers
     ]
-    headers.append(("x-forwarded-for", request.client_ip))
+
+    # Set Forwarded headers (strip IPv6 brackets for x-forwarded-for)
+    headers.append(("x-forwarded-for", request.client_ip.strip("[]")))
     headers.append(("x-forwarded-host", request.host))
     headers.append(("x-forwarded-proto", request.scheme))
+    headers.append(
+        (
+            "forwarded",
+            f"by=cista;for={request.client_ip};host={request.host};proto={request.scheme}",
+        )
+    )
 
     try:
         async with client.stream(
