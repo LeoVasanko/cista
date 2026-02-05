@@ -162,7 +162,7 @@ watchEffect(() => {
   }
 })
 watchEffect(() => {
-  if (!props.documents.length && store.cursor) {
+  if (!props.documents.length && store.cursor && !store.query) {
     store.cursor = ''
     focusBreadcrumb()
   }
