@@ -17,6 +17,33 @@ from cista import config
 from cista.fileio import fuid
 from cista.protocol import FileEntry, Space, UpdDel, UpdIns, UpdKeep
 
+# Platform-specific allocated size calculation
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32
+    GetCompressedFileSizeW = kernel32.GetCompressedFileSizeW
+    GetCompressedFileSizeW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(wintypes.DWORD)]
+    GetCompressedFileSizeW.restype = wintypes.DWORD
+    INVALID_FILE_SIZE = 0xFFFFFFFF
+
+    def get_allocated_size(path: Path, st: stat_result) -> int:
+        """Get actual disk allocation on Windows using GetCompressedFileSizeW."""
+        high = wintypes.DWORD()
+        low = GetCompressedFileSizeW(str(path), ctypes.byref(high))
+        if low == INVALID_FILE_SIZE and ctypes.get_last_error() != 0:
+            raise OSError(f"GetCompressedFileSizeW failed for {path}")
+        return (high.value << 32) + low
+
+else:
+
+    def get_allocated_size(path: Path, st: stat_result) -> int:
+        """Get actual disk allocation on Unix using st_blocks."""
+        # st_blocks is in 512-byte units
+        return st.st_blocks * 512
+
+
 pubsub = {}
 sortkey = natsort_keygen(alg=ns.LOCALE)
 
@@ -148,8 +175,11 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
     try:
         st = stat or path.stat()
         isfile = int(not S_ISDIR(st.st_mode))
-        # st_blocks is in 512-byte units
-        allocated = st.st_blocks * 512 if isfile else 0
+        try:
+            allocated = get_allocated_size(path, st) if isfile else 0
+        except Exception:
+            logger.exception(f"get_allocated_size failed for {path}")
+            allocated = st.st_size if isfile else 0
         entry = FileEntry(
             level=len(rel.parts),
             name=rel.name,
