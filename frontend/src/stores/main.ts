@@ -87,6 +87,7 @@ export const useMainStore = defineStore('main', {
       gallery: false,
       sortListing: '' as SortOrder,
       sortFiltered: '' as SortOrder,
+      searchHotkey: '/',  // Character shown for search hotkey (Slash key)
     },
     user: {
       username: '' as string,

@@ -17,7 +17,7 @@
         @input="updateSearch"
         @keydown.escape="clearSearch"
       />
-      <span v-if="!query" class="search-hint" @click="focusSearch">/</span>
+      <span v-if="!query" class="search-hint" @click="focusSearch">{{ store.prefs.searchHotkey }}</span>
     </div>
     <div class="spacer smallgap"></div>
     <DiskSpace v-if="store.space.disk" />

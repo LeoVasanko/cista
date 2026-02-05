@@ -119,8 +119,12 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
     headerMain.value!.toggleSearchInput()
   }
-  // Search also on / (UNIX style)
-  else if (!input && keyup && event.key === '/') {
+  // Search also on / (UNIX style) - use code to support any keyboard layout
+  else if (!input && keyup && event.code === 'Slash') {
+    // Record the actual character for display (varies by keyboard layout)
+    if (event.key.length === 1 && event.key !== store.prefs.searchHotkey) {
+      store.prefs.searchHotkey = event.key
+    }
     headerMain.value!.toggleSearchInput()
   }
   // Globally close search, clear errors on Escape
@@ -170,7 +174,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   if (arrow && !keyup) {
     const focusSearch = () => (document.querySelector('.headermain input[type="search"]') as HTMLElement)?.focus()
     const focusBreadcrumb = () => (document.querySelector('.breadcrumb') as HTMLElement)?.focus()
-    
+
     if (inBreadcrumb) {
       // Breadcrumb: up→header (no repeat), down→files (with repeat)
       if (arrow === 'up') { focusSearch(); f = null }
