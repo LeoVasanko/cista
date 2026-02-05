@@ -61,10 +61,12 @@ doc = """\
 Usage:
   cista [-c <confdir>] [-l <host>] [--import-droppy] [--dev] [<path>]
   cista [-c <confdir>] --user <name> [--privileged] [--password]
+  cista --version
 
 Options:
   -c CONFDIR        Custom config directory
-  -l LISTEN-ADDR    Listen on
+  -l, --listen LISTEN-ADDR
+                    Listen on
                        :8989 (localhost port, plain http)
                        <addr>:3000 (bind another address, port)
                        /path/to/unix.sock (unix socket)
@@ -117,7 +119,7 @@ def _main():
     args = docopt(doc)
     if args["--user"]:
         return _user(args)
-    listen = args["-l"]
+    listen = args["--listen"]
     # Validate arguments first
     if args["<path>"]:
         path = Path(args["<path>"]).resolve()
