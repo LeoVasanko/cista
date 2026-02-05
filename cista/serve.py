@@ -62,11 +62,6 @@ def parse_listen(listen):
         return "http://localhost", {"unix": unix.as_posix()}
 
     host, port = ep["host"], ep["port"]
-    # When binding all interfaces, use single_listener=False for Sanic
     if len(endpoints) > 1:
-        return f"http://localhost:{port}", {
-            "host": host,
-            "port": port,
-            "single_listener": False,
-        }
+        return f"http://localhost:{port}", {"host": host, "port": port}
     return f"http://{host}:{port}", {"host": host, "port": port}
