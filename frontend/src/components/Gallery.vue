@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted, nextTick } from 'vue'
 import { useMainStore } from '@/stores/main'
 import { Doc } from '@/repositories/Document'
 import { connect, controlUrl } from '@/repositories/WS'
@@ -82,6 +82,17 @@ defineExpose({
   isCursor() {
     return store.cursor && editing.value === null
   },
+  focusFirst() {
+    const docs = props.documents
+    if (docs.length > 0) {
+      store.cursor = docs[0]!.key
+      // Also focus the element directly (watchEffect won't trigger if cursor unchanged)
+      nextTick(() => {
+        const a = document.querySelector(`#file-${store.cursor}`) as HTMLAnchorElement | null
+        if (a) a.focus()
+      })
+    }
+  },
   cursorRename() {
     editing.value = props.documents.find(doc => doc.key === store.cursor) ?? null
   },
@@ -144,9 +155,17 @@ defineExpose({
         scrolltimer = null
       }, 300)
     }
-    if (moveto === N) focusBreadcrumb()
+    // When leaving the file list: up goes to breadcrumbs, down goes to header
+    if (moveto === N) {
+      if (d < 0) focusBreadcrumb()
+      else focusHeader()
+    }
   }
 })
+const focusHeader = () => {
+  const el = document.querySelector('.headermain input[type="search"]') as HTMLElement | null
+  if (el) el.focus()
+}
 const focusBreadcrumb = () => {
   const el = document.querySelector('.breadcrumb') as HTMLElement | null
   if (el) el.focus()

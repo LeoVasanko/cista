@@ -1,5 +1,5 @@
 <template>
-  <div class="disk-space-container" ref="containerRef">
+  <div class="disk-space-container" ref="containerRef" tabindex="0" @keydown.enter="handleClick" @keydown.space.prevent="handleClick">
     <div
       ref="widgetRef"
       class="disk-space-widget"
@@ -352,6 +352,11 @@ onUnmounted(() => {
   position: relative;
   width: 3em;
   height: 3em;
+  outline: none;
+}
+
+.disk-space-container:focus .disk-space-widget:not(.expanded) {
+  filter: brightness(1);
 }
 
 .disk-space-widget {

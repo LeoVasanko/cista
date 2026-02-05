@@ -9,7 +9,7 @@
     <div class="smallgap"></div>
     <SvgButton name="eye" @click="store.prefs.gallery = !store.prefs.gallery" tooltip="Details/Gallery" />
     <div class="search-group">
-      <SvgButton name="find" @click="focusSearch" tooltip="Search" />
+      <SvgButton name="find" tabindex="-1" @click="focusSearch" tooltip="Search" />
       <input
         ref="search"
         type="search"
@@ -158,6 +158,9 @@ defineExpose({
 .search-group:hover,
 .search-group:focus-within {
   background: rgba(255, 255, 255, 0.2);
+}
+.search-group:focus-within {
+  box-shadow: 0 0 0 2px var(--accent-color, #f80);
 }
 .search-group:hover :deep(button.action-button),
 .search-group:focus-within :deep(button.action-button) {

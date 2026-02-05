@@ -1,6 +1,7 @@
 <template>
   <button
     class="action-button"
+    :tabindex="tabindex"
     @mouseenter="tooltip?.startHover"
     @mousemove="tooltip?.updatePosition"
     @mouseleave="tooltip?.endHover"
@@ -19,6 +20,7 @@ import CursorTooltip from './CursorTooltip.vue'
 const props = defineProps<{
   name: IconName
   tooltip?: string
+  tabindex?: string | number
 }>()
 
 const tooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)

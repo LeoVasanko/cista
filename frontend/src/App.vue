@@ -63,6 +63,7 @@ onUnmounted(watchDisconnect)
 const headerMain = ref<typeof HeaderMain | null>(null)
 let vert = 0
 let timer: any = null
+
 const globalShortcutHandler = (event: KeyboardEvent) => {
   if (store.dialog) {
     if (timer) {
@@ -76,6 +77,13 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   const c = fileExplorer.isCursor()
   const input = (event.target as HTMLElement).tagName === 'INPUT'
   const keyup = event.type === 'keyup'
+
+  // Always clear repeat timer on arrow keyup, even if focus moved to input
+  if (keyup && event.key.startsWith('Arrow') && timer) {
+    clearTimeout(timer)
+    timer = null
+  }
+
   if (event.repeat) {
     if (
       event.key === 'ArrowUp' ||
@@ -91,7 +99,22 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   //console.log("key pressed", event)
   /// Long if-else machina for all keys we handle here
   let arrow = ''
-  if (!input && event.key.startsWith("Arrow")) arrow = event.key.slice(5).toLowerCase()
+  const inHeader = !!(event.target as HTMLElement).closest('.headermain')
+  const inBreadcrumb = !!(event.target as HTMLElement).closest('.breadcrumb')
+  // Handle arrows: in search input with text, only up/down; otherwise all arrows
+  const searchInput = inHeader && input
+  const searchHasText = searchInput && (event.target as HTMLInputElement).value
+  if (event.key.startsWith("Arrow")) {
+    const dir = event.key.slice(5).toLowerCase()
+    // In search with text: left/right move cursor, up/down navigate
+    if (searchHasText && (dir === 'left' || dir === 'right')) {
+      return  // Let browser handle cursor movement
+    }
+    arrow = dir
+  }
+  if (arrow) {
+    // Arrow key handling - fall through to bottom
+  }
   // Find: process on keydown so that we can bypass the built-in search hotkey
   else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
     headerMain.value!.toggleSearchInput()
@@ -143,13 +166,34 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
     timer = null
   }
   let f: any
-  switch (arrow) {
-    case 'up': f = () => fileExplorer.up(event); break
-    case 'down': f = () => fileExplorer.down(event); break
-    case 'left': f = () => fileExplorer.left(event); break
-    case 'right': f = () => fileExplorer.right(event); break
+  // Arrow navigation - always use fileExplorer for repeatable movement
+  if (arrow && !keyup) {
+    const focusSearch = () => (document.querySelector('.headermain input[type="search"]') as HTMLElement)?.focus()
+    const focusBreadcrumb = () => (document.querySelector('.breadcrumb') as HTMLElement)?.focus()
+    
+    if (inBreadcrumb) {
+      // Breadcrumb: up→header (no repeat), down→files (with repeat)
+      if (arrow === 'up') { focusSearch(); f = null }
+      else if (arrow === 'down') { fileExplorer.focusFirst?.(); f = null }
+    } else if (inHeader) {
+      // Header: left/right navigate focusable items (buttons without tabindex=-1, search input, disk space)
+      const items = Array.from(document.querySelectorAll('.headermain button:not([tabindex=\"-1\"]), .headermain input[type=\"search\"], .headermain [tabindex=\"0\"]')) as HTMLElement[]
+      const idx = items.indexOf(document.activeElement as HTMLElement)
+      if (arrow === 'left' && idx > 0) { items[idx - 1]?.focus(); f = null }
+      else if (arrow === 'right' && idx < items.length - 1) { items[idx + 1]?.focus(); f = null }
+      else if (arrow === 'up') f = () => fileExplorer.up({ shiftKey: false })
+      else if (arrow === 'down') { focusBreadcrumb(); f = null }
+    } else {
+      // File explorer: normal navigation with repeat
+      switch (arrow) {
+        case 'up': f = () => fileExplorer.up(event); break
+        case 'down': f = () => fileExplorer.down(event); break
+        case 'left': f = () => fileExplorer.left(event); break
+        case 'right': f = () => fileExplorer.right(event); break
+      }
+    }
   }
-  if (f && !keyup) {
+  if (f) {
     // Initial move, then t0 delay until repeats at tr intervals
     const t0 = 200, tr = event.altKey ? 20 : 100
     f()
@@ -157,12 +201,13 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   }
 }
 onMounted(() => {
-  window.addEventListener('keydown', globalShortcutHandler)
-  window.addEventListener('keyup', globalShortcutHandler)
+  // Use capture phase to handle events before they reach target elements
+  window.addEventListener('keydown', globalShortcutHandler, true)
+  window.addEventListener('keyup', globalShortcutHandler, true)
 })
 onUnmounted(() => {
-  window.removeEventListener('keydown', globalShortcutHandler)
-  window.removeEventListener('keyup', globalShortcutHandler)
+  window.removeEventListener('keydown', globalShortcutHandler, true)
+  window.removeEventListener('keyup', globalShortcutHandler, true)
 })
 export type { Path }
 </script>
