@@ -248,6 +248,8 @@ async def proxy_auth_websocket(request, ws):
         additional_headers["cookie"] = request.headers["cookie"]
     if "authorization" in request.headers:
         additional_headers["authorization"] = request.headers["authorization"]
+    if "host" in request.headers:
+        additional_headers["host"] = request.headers["host"]
     if "origin" in request.headers:
         additional_headers["origin"] = request.headers["origin"]
     if "user-agent" in request.headers:
