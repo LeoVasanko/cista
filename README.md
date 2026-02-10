@@ -20,6 +20,11 @@ Experience Cista by visiting [Cista Demo](https://drop.zi.fi) for a test run and
 
 We recommend using [UV](https://docs.astral.sh/uv/getting-started/installation/) to directly run Cista:
 
+Try it out locally at http://localhost:8000 (serves the current directory):
+```fish
+uvx cista
+```
+
 Create an account: (otherwise the server is public for all)
 ```fish
 uvx cista --user yourname --privileged

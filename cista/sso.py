@@ -241,14 +241,9 @@ async def proxy_auth_request(request):
 
 async def proxy_auth_websocket(request, ws):
     """Proxy a WebSocket connection to the auth backend."""
-    path = request.path
-    query_string = request.query_string
-    ws_backend = PASKIA_BACKEND_URL.replace("http://", "ws://").replace(
-        "https://", "wss://"
-    )
-    url = f"{ws_backend}{path}"
-    if query_string:
-        url = f"{url}?{query_string}"
+    url = f"ws{PASKIA_BACKEND_URL.removeprefix('http')}{request.path}"
+    if request.query_string:
+        url = f"{url}?{request.query_string}"
 
     additional_headers = {}
     if "cookie" in request.headers:
@@ -259,7 +254,7 @@ async def proxy_auth_websocket(request, ws):
         additional_headers["origin"] = request.headers["origin"]
     if "user-agent" in request.headers:
         additional_headers["user-agent"] = request.headers["user-agent"]
-    additional_headers["x-forwarded-for"] = request.ip
+    additional_headers["x-forwarded-for"] = request.client_ip.strip("[]")
     additional_headers["x-forwarded-host"] = request.host
     additional_headers["x-forwarded-proto"] = request.scheme
 
@@ -291,23 +286,20 @@ async def proxy_auth_websocket(request, ws):
         logger.error(f"WebSocket proxy to {url} failed: {e}")
 
 
-def _is_websocket_request(request) -> bool:
-    """Check if the request is a WebSocket upgrade request."""
-    connection = request.headers.get("connection", "").lower()
-    upgrade = request.headers.get("upgrade", "").lower()
-    connection_tokens = [t.strip() for t in connection.split(",")]
-    return "upgrade" in connection_tokens and upgrade == "websocket"
+# Blueprint for auth proxy routes (only registered when paskia_enabled())
+bp = Blueprint("sso", url_prefix="/auth")
 
 
-async def _handle_websocket_upgrade(request):
-    """Handle WebSocket upgrade and proxy the connection."""
-    protocol = request.transport.get_protocol()
-    ws = await protocol.websocket_handshake(request, subprotocols=None)
+@bp.websocket("/ws/<path:path>")
+async def auth_websocket_proxy(request, ws, path=""):
+    """Proxy WebSocket connections to the auth backend."""
     await proxy_auth_websocket(request, ws)
 
 
-# Blueprint for auth proxy routes (only registered when paskia_enabled())
-bp = Blueprint("sso", url_prefix="/auth")
+@bp.websocket("/ws/")
+async def auth_websocket_proxy_root(request, ws):
+    """Proxy root WebSocket connections to the auth backend."""
+    await proxy_auth_websocket(request, ws)
 
 
 @bp.route(
@@ -315,20 +307,10 @@ bp = Blueprint("sso", url_prefix="/auth")
 )
 async def auth_proxy(request, path=""):
     """Proxy all auth requests to the auth backend."""
-    if _is_websocket_request(request):
-        await _handle_websocket_upgrade(request)
-        from sanic import empty
-
-        return empty()
     return await proxy_auth_request(request)
 
 
 @bp.route("/", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
 async def auth_proxy_root(request):
     """Proxy root auth requests to the auth backend."""
-    if _is_websocket_request(request):
-        await _handle_websocket_upgrade(request)
-        from sanic import empty
-
-        return empty()
     return await proxy_auth_request(request)
