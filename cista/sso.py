@@ -15,7 +15,8 @@ import re
 
 import httpx
 import websockets
-from sanic import Blueprint
+from sanic import Blueprint, json
+from sanic import raw as raw_response
 from sanic.exceptions import Forbidden, SanicException, Unauthorized
 from sanic.log import logger
 
@@ -220,8 +221,6 @@ async def proxy_auth_request(request):
                 if key.lower() not in resp_hop_by_hop
             ]
 
-            from sanic import raw as raw_response
-
             return raw_response(
                 raw_content,
                 status=response.status_code,
@@ -231,10 +230,9 @@ async def proxy_auth_request(request):
 
     except httpx.RequestError as e:
         logger.error(f"Auth proxy request failed: {e}")
-        from sanic import json
 
         return json(
-            {"detail": "Authentication service unavailable", "error": str(e)},
+            {"detail": "Authentication service unavailable"},
             status=503,
         )
 

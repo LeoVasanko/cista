@@ -114,6 +114,7 @@ filterwarnings = [
 ]
 
 [tool.ruff.lint]
+extend-select = ["E402"]
 isort.known-first-party = ["cista"]
 per-file-ignores."tests/*" = ["S", "ANN", "D", "INP", "PLR2004"]
 per-file-ignores."scripts/*" = ["T20"]
