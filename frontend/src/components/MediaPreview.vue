@@ -2,11 +2,12 @@
   <div v-if=showProgress() class="preview-progress" aria-label="Preview pending">
     <SpinnerIcon />
   </div>
-  <img v-else-if=preview() :src="`${doc.previewurl}?${quality}&t=${doc.mtime}`" alt="">
+  <img v-else-if=previewSrc :src="previewSrc" alt="">
   <img v-else-if=doc.img :src=doc.url alt="">
   <span v-else-if=doc.dir class="folder icon"></span>
-  <div v-else-if=video() class="video-container">
-    <video ref=vid :src=doc.url :poster=poster preload=none @play=onplay @pause=onpaused @ended=next @seeking=media!.play()></video>
+  <div v-else-if=video() class="video-container" :class="{ pending: !doc.complete }">
+    <video v-if=doc.complete ref=vid :src=doc.url :poster=previewSrc preload=none @play=onplay @pause=onpaused @ended=next @seeking=media!.play()></video>
+    <video v-else ref=vid :src=doc.url preload=none @play=onplay @pause=onpaused @ended=next @seeking=media!.play()></video>
     <div class="play-overlay"><PlayIcon /></div>
   </div>
   <div v-else-if=audio() class="audio icon">
@@ -24,11 +25,11 @@ import { Play as PlayIcon, Spinner as SpinnerIcon } from '@/assets/svg'
 const aud = ref<HTMLAudioElement | null>(null)
 const vid = ref<HTMLVideoElement | null>(null)
 const media = computed(() => aud.value || vid.value)
-const poster = computed(() => `${props.doc.previewurl}?${props.quality}&t=${props.doc.mtime}`)
 const props = defineProps<{
   doc: Doc
   quality: string
 }>()
+const previewSrc = computed(() => props.doc.previewurl ? `${props.doc.previewurl}?${props.quality}&t=${props.doc.mtime}` : '')
 
 const onplay = () => {
   if (!media.value) return
@@ -39,6 +40,13 @@ const onpaused = () => {
   if (!media.value) return
   media.value.controls = false
   media.value.removeAttribute('data-playing')
+}
+const applyPoster = (el: HTMLVideoElement) => {
+  if (props.doc.complete) {
+    el.poster = previewSrc.value
+  } else {
+    el.removeAttribute('poster')
+  }
 }
 let fscurrent: HTMLVideoElement | null = null
 const next = () => {
@@ -73,7 +81,7 @@ const next = () => {
         if (!elem.paused) fscurrent.play()
         fscurrent = null
         elem.src = props.doc.url
-        elem.poster = poster.value
+        applyPoster(elem)
         onpaused()
       }, {once: true})
     }
@@ -107,7 +115,7 @@ defineExpose({
 const video = () => ['mkv', 'mp4', 'webm', 'mov', 'avi'].includes(props.doc.ext)
 const audio = () => ['mp3', 'flac', 'ogg', 'aac'].includes(props.doc.ext)
 const archive = () => ['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar'].includes(props.doc.ext)
-const showProgress = () => !props.doc.complete && (preview() || props.doc.img || video() || audio())
+const showProgress = () => !props.doc.complete && (preview() || props.doc.img)
 const preview = () => (
   ['bmp', 'ico', 'tif', 'tiff', 'heic', 'heif', 'pdf', 'epub', 'mobi'].includes(props.doc.ext) ||
   props.doc.size > 500000 &&
@@ -202,8 +210,13 @@ img::before {
   align-items: center;
   justify-content: center;
   min-width: 50%;
+  min-height: 6em;
+  aspect-ratio: 16 / 9;
   max-width: 100%;
   max-height: 100%;
+}
+.video-container.pending {
+  background: color-mix(in srgb, var(--header-bg) 55%, transparent);
 }
 .video-container video {
   width: 100%;
