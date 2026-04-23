@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import mimetypes
+import time
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import cpu_count
 from pathlib import Path, PurePath, PurePosixPath
@@ -19,10 +20,14 @@ from zstandard import ZstdCompressor
 
 from cista import auth, config, preview, session, sso, watching
 from cista.api import bp
+from cista.sanic_logging import configure_access_logging, format_access_log
+from cista.sanic_logging import logger as access_logger
 from cista.util.apphelpers import handle_sanic_exception
 
 # Workaround until Sanic PR #2824 is merged
 sanic.helpers._ENTITY_HEADERS = frozenset()
+
+configure_access_logging()
 
 app = Sanic("cista", strict_slashes=True)
 # Register either SSO proxy or built-in auth routes based on PASKIA_BACKEND_URL
@@ -64,6 +69,7 @@ async def main_stop(app):
 
 @app.on_request
 async def use_session(req):
+    req.ctx._log_start = time.perf_counter()
     req.ctx.session = session.get(req)
     try:
         req.ctx.username = req.ctx.session["username"]  # type: ignore
@@ -79,6 +85,26 @@ async def use_session(req):
     origin = req.headers.origin
     if origin and origin.split("//", 1)[1] != req.host:
         raise Forbidden("Invalid origin: Cross-Site requests not permitted")
+
+
+@app.on_response
+async def log_access(req, res):
+    """Log HTTP access in a clean single-line format."""
+    if req.headers.get("upgrade", "").lower() == "websocket":
+        return res
+    start = getattr(req.ctx, "_log_start", None)
+    duration_ms = (time.perf_counter() - start) * 1000 if start is not None else 0.0
+    client = req.ip or "-"
+    host = req.host or "-"
+    path = req.path
+    if req.query_string:
+        qs = req.query_string
+        if isinstance(qs, bytes):
+            qs = qs.decode(errors="replace")
+        path = f"{path}?{qs}"
+    line = format_access_log(client, res.status, req.method, host, path, duration_ms)
+    access_logger.info(line)
+    return res
 
 
 @app.on_response

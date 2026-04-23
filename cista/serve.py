@@ -27,7 +27,7 @@ def run(*, dev=False):
         motd=False,
         dev=dev,
         auto_reload=dev,
-        access_log=True,
+        access_log=False,
     )  # type: ignore
     if dev:
         Sanic.serve()

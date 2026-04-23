@@ -1,3 +1,4 @@
+import time
 from functools import wraps
 
 import msgspec
@@ -8,6 +9,7 @@ from sanic.response import raw, redirect
 
 from cista import auth
 from cista.protocol import ErrorMsg
+from cista.sanic_logging import log_ws_close, log_ws_open
 
 
 def asend(ws, msg):
@@ -54,6 +56,10 @@ def websocket_wrapper(handler):
 
     @wraps(handler)
     async def wrapper(request, ws, *args, **kwargs):
+        username = getattr(request.ctx, "username", None)
+        extra = username if username else None
+        start = time.perf_counter()
+        ws_id = log_ws_open(request, extra=extra)
         try:
             await auth.verify(request)
             await handler(request, ws, *args, **kwargs)
@@ -67,5 +73,19 @@ def websocket_wrapper(handler):
             if not getattr(e, "quiet", False) or code == 500:
                 logger.exception(f"{code} {e!r}")
             raise
+        finally:
+            duration = time.perf_counter() - start
+            close_code = None
+            try:
+                p = ws.ws_proto
+                if p.close_rcvd is not None:
+                    close_code = p.close_rcvd.code
+                elif p.close_sent is not None:
+                    close_code = p.close_sent.code
+                elif getattr(p, "close_code", None) is not None:
+                    close_code = p.close_code
+            except AttributeError:
+                pass
+            log_ws_close(ws_id, close_code, duration)
 
     return wrapper
