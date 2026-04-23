@@ -168,7 +168,14 @@ def process_image(path, *, maxsize, quality):
         # Save as AVIF
         imgdata = io.BytesIO()
         t_save = perf_counter()
-        img.save(imgdata, format="avif", quality=quality, speed=10, max_threads=1)
+        img.save(
+            imgdata,
+            format="avif",
+            quality=quality,
+            speed=10,
+            max_threads=1,
+            avif=1,
+        )
 
     t_end = perf_counter()
     ret = imgdata.getvalue()
@@ -198,7 +205,9 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     t_load_end = perf_counter()
 
     t_save_start = perf_counter()
-    ret = pix.pil_tobytes(format="avif", quality=quality, speed=10, max_threads=1)
+    ret = pix.pil_tobytes(
+        format="avif", quality=quality, speed=10, max_threads=1, avif=1
+    )
     t_save_end = perf_counter()
 
     logger.debug(
