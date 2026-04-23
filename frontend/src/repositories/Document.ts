@@ -59,6 +59,9 @@ export class Doc {
     if (this.dir) return false
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'heic', 'heif', 'svg'].includes(this.ext)
   }
+  get complete(): boolean {
+    return !this.ghost && (this.dir || this.size <= this.allocated)
+  }
   get previewable(): boolean {
     // Folders cannot be previewable
     if (this.dir) return false

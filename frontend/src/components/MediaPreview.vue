@@ -1,5 +1,8 @@
 <template>
-  <img v-if=preview() :src="`${doc.previewurl}?${quality}&t=${doc.mtime}`" alt="">
+  <div v-if=showProgress() class="preview-progress" aria-label="Preview pending">
+    <SpinnerIcon />
+  </div>
+  <img v-else-if=preview() :src="`${doc.previewurl}?${quality}&t=${doc.mtime}`" alt="">
   <img v-else-if=doc.img :src=doc.url alt="">
   <span v-else-if=doc.dir class="folder icon"></span>
   <div v-else-if=video() class="video-container">
@@ -16,7 +19,7 @@
 <script setup lang=ts>
 import { computed, ref } from 'vue'
 import type { Doc } from '@/repositories/Document'
-import { Play as PlayIcon } from '@/assets/svg'
+import { Play as PlayIcon, Spinner as SpinnerIcon } from '@/assets/svg'
 
 const aud = ref<HTMLAudioElement | null>(null)
 const vid = ref<HTMLVideoElement | null>(null)
@@ -104,6 +107,7 @@ defineExpose({
 const video = () => ['mkv', 'mp4', 'webm', 'mov', 'avi'].includes(props.doc.ext)
 const audio = () => ['mp3', 'flac', 'ogg', 'aac'].includes(props.doc.ext)
 const archive = () => ['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar'].includes(props.doc.ext)
+const showProgress = () => !props.doc.complete && (preview() || props.doc.img || video() || audio())
 const preview = () => (
   ['bmp', 'ico', 'tif', 'tiff', 'heic', 'heif', 'pdf', 'epub', 'mobi'].includes(props.doc.ext) ||
   props.doc.size > 500000 &&
@@ -119,6 +123,29 @@ img, embed, .icon, audio, video {
   max-width: 100%;
   max-height: 100%;
   border-radius: calc(.5em / 8);
+}
+.preview-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 50%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+}
+.preview-progress :deep(svg) {
+  width: 4.5em;
+  height: 4.5em;
+  opacity: 0.8;
+  animation: media-preview-spin 0.9s linear infinite;
+}
+@keyframes media-preview-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .folder::before {
   content: '📁';
