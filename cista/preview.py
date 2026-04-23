@@ -153,6 +153,44 @@ def dispatch(path, quality, maxsize, maxzoom):
 
 
 def process_image(path, *, maxsize, quality):
+    try:
+        return process_image_pyvips(path, maxsize=maxsize, quality=quality)
+    except Exception as e:
+        logger.debug("Falling back to Pillow preview for %s: %s", path.name, e)
+        return process_image_pillow(path, maxsize=maxsize, quality=quality)
+
+
+def process_image_pyvips(path, *, maxsize, quality):
+    import pyvips
+
+    t_load = perf_counter()
+    img = pyvips.Image.new_from_file(str(path), access="sequential")
+    t_proc = perf_counter()
+
+    img = img.autorot()
+    scale = min(maxsize / img.width, maxsize / img.height, 1.0)
+    if scale < 1.0:
+        img = img.resize(scale)
+
+    t_save = perf_counter()
+    ret = img.write_to_buffer(".avif", Q=quality)
+    t_end = perf_counter()
+
+    load_ms = (t_proc - t_load) * 1000
+    proc_ms = (t_save - t_proc) * 1000
+    save_ms = (t_end - t_save) * 1000
+    logger.debug(
+        "Preview image %s via pyvips: load=%.1fms process=%.1fms save=%.1fms",
+        path.name,
+        load_ms,
+        proc_ms,
+        save_ms,
+    )
+
+    return ret
+
+
+def process_image_pillow(path, *, maxsize, quality):
     t_load = perf_counter()
     with Image.open(path) as img:
         # Force decode to include I/O in load timing
@@ -184,7 +222,7 @@ def process_image(path, *, maxsize, quality):
     proc_ms = (t_save - t_proc) * 1000
     save_ms = (t_end - t_save) * 1000
     logger.debug(
-        "Preview image %s: load=%.1fms process=%.1fms save=%.1fms",
+        "Preview image %s via Pillow: load=%.1fms process=%.1fms save=%.1fms",
         path.name,
         load_ms,
         proc_ms,
