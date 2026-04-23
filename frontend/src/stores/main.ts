@@ -378,22 +378,16 @@ export const useMainStore = defineStore('main', {
       // What did we not select?
       for (const key of selected) if (!found.has(key)) ret.missing.add(key)
       // Build a flat list including contents recursively
-      const relnames = new Set<string>()
-      function add(rel: string, full: string, doc: Doc) {
-        if (!doc.dir && relnames.has(rel)) throw Error(`Multiple selections conflict for: ${rel}`)
-        relnames.add(rel)
-        ret.recursive.push([rel, full, doc])
-      }
       for (const key of ret.keys) {
         const base = ret.docs[key]!
         const basepath = base.loc ? `${base.loc}/${base.name}` : base.name
         const nremove = base.loc.length
-        add(base.name, basepath, base)
+        ret.recursive.push([base.name, basepath, base])
         for (const doc of docs) {
           if (doc.loc === basepath || doc.loc.startsWith(basepath) && doc.loc[basepath.length] === '/') {
             const full = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
             const rel = full.slice(nremove)
-            add(rel, full, doc)
+            ret.recursive.push([rel, full, doc])
           }
         }
       }
