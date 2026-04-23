@@ -97,7 +97,15 @@ async def preview(req, path):
     quality = int(req.args.get("q", 60))
     rel = PurePosixPath(sanitize(unquote(path)))
     filepath = config.config.path / rel
-    stat = filepath.lstat()
+    if not filepath.is_file():
+        raise NotFound()
+
+    try:
+        stat = filepath.lstat()
+    except FileNotFoundError:
+        # File disappeared between existence check and stat.
+        raise NotFound() from None
+
     etag = config.derived_secret(
         "preview", rel, stat.st_mtime_ns, quality, maxsize, maxzoom
     ).hex()
@@ -111,9 +119,6 @@ async def preview(req, path):
     if cached is not None:
         logger.debug(f"Preview cache hit: {rel}")
         return raw(cached.body, headers=cached.headers)
-
-    if not filepath.is_file():
-        raise NotFound("File not found")
 
     # Generate preview
     img = await asyncio.get_event_loop().run_in_executor(
