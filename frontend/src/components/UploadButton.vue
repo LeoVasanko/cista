@@ -131,6 +131,7 @@ const uploadCloudFiles = (files: CloudFile[]) => {
 
 const cancelUploads = () => {
   upqueue = []
+  blockQueue = []
   statReset()
 }
 
@@ -162,16 +163,42 @@ setInterval(() => {
     store.uprogress.statdur *= .9
   }
 }, 100)
+// Track uploaded bytes for each file to handle out-of-order uploads
+const uploadedBytes = new Map<string, Set<number>>()
+
 const statUpdate = ({name, size, start, end}: {name: string, size: number, start: number, end: number}) => {
   if (name !== store.uprogress.filename) return  // If stats have been reset
   const now = Date.now()
-  store.uprogress.xfer = store.uprogress.filestart + end
-  store.uprogress.filepos = end
+
+  // Track which bytes have been uploaded (using start to end range)
+  if (!uploadedBytes.has(name)) uploadedBytes.set(name, new Set())
+  const uploaded = uploadedBytes.get(name)!
+  const blockSize = 1 << 20
+
+  // Mark all bytes in this block as uploaded
+  for (let i = start; i < end; i += blockSize) {
+    uploaded.add(i)
+  }
+
+  // Calculate total uploaded bytes for progress
+  let totalUploaded = 0
+  for (let i = 0; i < size; i += blockSize) {
+    if (uploaded.has(i)) totalUploaded += blockSize
+  }
+
+  store.uprogress.xfer = store.uprogress.filestart + totalUploaded
+  store.uprogress.filepos = totalUploaded
   store.uprogress.statbytes += end - start
   store.uprogress.statdur += now - store.uprogress.tlast
   store.uprogress.tlast = now
-  // File finished?
-  if (end === size) {
+
+  // Check if file is fully uploaded by examining the block queue
+  const currentUpload = blockQueue[0]
+  if (!currentUpload) return
+
+  if (currentUpload.file.cloudName === name && currentUpload.blockIndex >= currentUpload.blocks.length) {
+    // All blocks for this file have been uploaded
+    uploadedBytes.delete(name)  // Clean up tracking
     store.uprogress.filestart += size
     statNextFile()
     if (++store.uprogress.fileidx >= store.uprogress.filecount) statReset()
@@ -197,6 +224,42 @@ const statsAdd = (f: CloudFile[]) => {
   statNextFile()
 }
 let upqueue = [] as CloudFile[]
+
+// Helper function to get upload blocks for a file, prioritizing final 4 blocks if file >= 32 MiB
+const getUploadBlocks = (file: CloudFile): {start: number, end: number}[] => {
+  const BLOCK_SIZE = 1 << 20  // 1 MiB
+  const MIN_SIZE_FOR_REORDER = 32 * BLOCK_SIZE  // 32 MiB = 33554432 bytes
+  const FINAL_BLOCKS_COUNT = 2
+
+  const fileSize = file.file.size
+  const blocks: {start: number, end: number}[] = []
+
+  if (fileSize >= MIN_SIZE_FOR_REORDER) {
+    // File is large enough, prioritize final blocks
+    const finalBlocksStart = fileSize - (FINAL_BLOCKS_COUNT * BLOCK_SIZE)
+
+    // Add final blocks first
+    for (let i = 0; i < FINAL_BLOCKS_COUNT; i++) {
+      const start = finalBlocksStart + (i * BLOCK_SIZE)
+      const end = Math.min(start + BLOCK_SIZE, fileSize)
+      blocks.push({start, end})
+    }
+
+    // Add remaining blocks from beginning
+    for (let start = 0; start < finalBlocksStart; start += BLOCK_SIZE) {
+      const end = Math.min(start + BLOCK_SIZE, finalBlocksStart)
+      blocks.push({start, end})
+    }
+  } else {
+    // File is smaller, use sequential upload
+    for (let start = 0; start < fileSize; start += BLOCK_SIZE) {
+      const end = Math.min(start + BLOCK_SIZE, fileSize)
+      blocks.push({start, end})
+    }
+  }
+
+  return blocks
+}
 
 // TODO: Rewrite as WebSocket class
 const WSCreate = async () => await new Promise<WebSocket>(resolve => {
@@ -235,31 +298,58 @@ const WSCreate = async () => await new Promise<WebSocket>(resolve => {
     ws.send(data)
   }
 })
+
+type BlockUpload = {
+  file: CloudFile
+  blocks: {start: number, end: number}[]
+  blockIndex: number
+}
+
+let blockQueue = [] as BlockUpload[]
+
 const worker = async () => {
   const ws = await WSCreate()
-  while (upqueue.length) {
-    const f = upqueue[0]!
-    const start = f.cloudPos
-    const end = Math.min(f.file.size, start + (1<<20))
-    const control = { name: f.cloudName, size: f.file.size, start, end }
-    const data = f.file.slice(start, end)
-    f.cloudPos = end
+  while (blockQueue.length) {
+    const upload = blockQueue[0]!
+    const f = upload.file
+    const block = upload.blocks[upload.blockIndex]!
+
+    const control = { name: f.cloudName, size: f.file.size, start: block.start, end: block.end }
+    const data = f.file.slice(block.start, block.end)
+
     // Note: files may get modified during I/O
     // @ts-ignore FIXME proper WebSocket class, avoid attaching functions to WebSocket object
     ws.sendMsg(control)
     // @ts-ignore
     await ws.sendData(data)
-    if (f.cloudPos === f.file.size) upqueue.shift()
+
+    // Move to next block
+    upload.blockIndex++
+    if (upload.blockIndex >= upload.blocks.length) {
+      // File upload complete
+      blockQueue.shift()
+    }
   }
-  if (upqueue.length) startWorker()
+  if (blockQueue.length) startWorker()
   store.uprogress.status = "idle"
   workerRunning = false
 }
 let workerRunning: any = false
 const startWorker = () => {
   if (workerRunning === false) workerRunning = setTimeout(() => {
-    workerRunning = true
-    worker()
+    // Convert new CloudFile entries to BlockUpload entries
+    while (upqueue.length) {
+      const file = upqueue.shift()!
+      const blocks = getUploadBlocks(file)
+      blockQueue.push({ file, blocks, blockIndex: 0 })
+    }
+
+    if (blockQueue.length) {
+      workerRunning = true
+      worker()
+    } else {
+      workerRunning = false
+    }
   }, 0)
 }
 
