@@ -113,7 +113,8 @@ def _format_method_label(label: str, *, color: str | None = None) -> str:
 
 
 def format_access_log(
-    client: str, status: int, method: str, host: str, path: str, duration_ms: float
+    client: str, status: int, method: str, host: str, path: str, duration_ms: float,
+    extra: str | None = None,
 ) -> str:
     ip = _format_left(format_client_ip(client))
     status_str = f"{status_color(status)}{str(status).rjust(3)}{_RESET}"
@@ -121,7 +122,8 @@ def format_access_log(
     host_str = f"{_HOST}{host}{_RESET}"
     path_str = f"{_PATH}{path}{_RESET}"
     timing_str = f"{_TIMING}{format_duration_ms(duration_ms)}{_RESET}"
-    return f"{ip} {status_str} {method_str} {host_str}{path_str} {timing_str}"
+    extra_str = f" {_TIMING}{extra}{_RESET}" if extra else ""
+    return f"{ip} {status_str} {method_str} {host_str}{path_str}{extra_str} {timing_str}"
 
 
 _ws_counter = 1
@@ -218,3 +220,37 @@ def configure_access_logging() -> None:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     logger.propagate = False
+
+
+_LEVEL_EMOJI = {
+    logging.DEBUG: "🔍",
+    logging.INFO: "ℹ️",
+    logging.WARNING: "⚠️",
+    logging.ERROR: "🛑",
+    logging.CRITICAL: "🛑",
+}
+
+
+class _EmojiFormatter(logging.Formatter):
+    """Compact formatter: emoji + message, no timestamp/level text/logger name."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        emoji = _LEVEL_EMOJI.get(record.levelno, "▪️")
+        return f"{emoji}  {record.getMessage()}"
+
+
+def configure_main_logging() -> None:
+    """Replace Sanic's verbose 'Main yyyy-mm-dd INFO:' prefix with emoji-only format.
+
+    Patches LOGGING_CONFIG_DEFAULTS so the formatter survives every dictConfig
+    call Sanic makes during serve_single() / serve().
+    """
+    from sanic.log import LOGGING_CONFIG_DEFAULTS
+
+    LOGGING_CONFIG_DEFAULTS["formatters"]["generic"] = {
+        "class": "cista.sanic_logging._EmojiFormatter",
+    }
+    # Also reformat any handlers already attached (covers the initial Sanic() call)
+    for name in ("sanic.root", "sanic.error", "sanic.server", "sanic.websockets"):
+        for handler in logging.getLogger(name).handlers:
+            handler.setFormatter(_EmojiFormatter())
