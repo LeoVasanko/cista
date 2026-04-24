@@ -2,7 +2,7 @@
   <div v-if=showProgress() class="preview-progress" aria-label="Preview pending">
     <SpinnerIcon />
   </div>
-  <img v-else-if=previewSrc :src="previewSrc" alt="">
+  <img v-else-if="previewSrc && !video() && !audio()" :src="previewSrc" alt="">
   <img v-else-if=doc.img :src=doc.url alt="">
   <span v-else-if=doc.dir class="folder icon"></span>
   <div v-else-if=video() class="video-container" :class="{ pending: !doc.complete }">

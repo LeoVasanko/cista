@@ -70,7 +70,7 @@ export class Doc {
     return ['mp4', 'mkv', 'webm', 'ogg', 'mp3', 'flac', 'aac', 'pdf'].includes(this.ext)
   }
   get previewurl(): string {
-    if (!this.complete || this.dir) return ''
+    if (!this.complete || !this.previewable) return ''
     return this.url.replace(/^\/files/, '/preview')
   }
   get ext(): string {
