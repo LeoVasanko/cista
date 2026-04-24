@@ -97,13 +97,9 @@ async def preview(req, path):
     quality = int(req.args.get("q", 60))
     rel = PurePosixPath(sanitize(unquote(path)))
     filepath = config.config.path / rel
-    if not filepath.is_file():
-        raise NotFound()
-
     try:
         stat = filepath.lstat()
     except FileNotFoundError:
-        # File disappeared between existence check and stat.
         raise NotFound() from None
 
     etag = config.derived_secret(
