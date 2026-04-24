@@ -19,8 +19,9 @@ from stream_zip import ZIP_AUTO, stream_zip
 from zstandard import ZstdCompressor
 
 from cista import auth, config, preview, session, sso, watching
+from cista.preview import shutdown_preview_workers, start_preview_workers
 from cista.api import bp
-from cista.sanic_logging import configure_access_logging, format_access_log
+from cista.sanic_logging import configure_access_logging, configure_main_logging, format_access_log
 from cista.sanic_logging import logger as access_logger
 from cista.util.apphelpers import handle_sanic_exception
 
@@ -30,6 +31,7 @@ sanic.helpers._ENTITY_HEADERS = frozenset()
 configure_access_logging()
 
 app = Sanic("cista", strict_slashes=True)
+configure_main_logging()
 # Register either SSO proxy or built-in auth routes based on PASKIA_BACKEND_URL
 if sso.paskia_enabled():
     app.blueprint(sso.bp)  # SSO proxy for /auth/* routes
@@ -47,13 +49,12 @@ setproctitle("cista-main")
 async def main_start(app):
     config.load_config()
     setproctitle(f"cista {config.config.path.name}")
-    # Small pool for memory-intensive preview generation
-    preview_workers = max(2, min(8, cpu_count()))
     app.ctx.threadexec = ThreadPoolExecutor(
-        max_workers=preview_workers, thread_name_prefix="cista-preview"
+        max_workers=4, thread_name_prefix="cista-worker"
     )
     # Larger pool for long-running but low-memory zip operations
     app.ctx.zipexec = ThreadPoolExecutor(max_workers=32, thread_name_prefix="cista-zip")
+    await start_preview_workers()
     watching.start(app)
 
 
@@ -61,6 +62,7 @@ async def main_start(app):
 @app.before_server_stop
 async def main_stop(app):
     watching.stop(app)
+    await shutdown_preview_workers()
     app.ctx.threadexec.shutdown()
     app.ctx.zipexec.shutdown(cancel_futures=True)
     await sso.close_client()
@@ -102,7 +104,8 @@ async def log_access(req, res):
         if isinstance(qs, bytes):
             qs = qs.decode(errors="replace")
         path = f"{path}?{qs}"
-    line = format_access_log(client, res.status, req.method, host, path, duration_ms)
+    extra = getattr(req.ctx, "_log_extra", None)
+    line = format_access_log(client, res.status, req.method, host, path, duration_ms, extra=extra)
     access_logger.info(line)
     return res
 
