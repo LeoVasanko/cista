@@ -55,8 +55,8 @@ def format_client_ip(ip: str) -> str:
         return "-"
     stripped = ip.strip("[]")
     if ":" in stripped:
-        return format_ipv6_network(ip)
-    return ip
+        return format_ipv6_network(stripped)
+    return stripped
 
 
 def status_color(status: int) -> str:
@@ -144,7 +144,7 @@ def log_ws_open(request, extra: str | None = None) -> int:
     """Log WebSocket connection open. Returns connection ID for use in log_ws_close."""
     ws_id = _next_ws_id()
 
-    client = request.ip or "-"
+    client = request.client_ip or "-"
     host = request.host or "-"
     path = request.path
     origin = request.headers.get("origin")

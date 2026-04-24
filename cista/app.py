@@ -94,7 +94,7 @@ async def log_access(req, res):
         return res
     start = getattr(req.ctx, "_log_start", None)
     duration_ms = (time.perf_counter() - start) * 1000 if start is not None else 0.0
-    client = req.ip or "-"
+    client = req.client_ip or "-"
     host = req.host or "-"
     path = req.path
     if req.query_string:
