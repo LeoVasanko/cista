@@ -2,7 +2,6 @@ import asyncio
 import gc
 import io
 import mimetypes
-import os
 import struct
 import sys
 import threading
@@ -20,10 +19,8 @@ import msgspec
 import av
 import fitz  # PyMuPDF
 import numpy as np
-import pillow_heif
 import pyvips
 from blake3 import blake3
-from PIL import Image
 from sanic import Blueprint, empty, raw, redirect
 from sanic.exceptions import NotFound
 from sanic.log import logger
@@ -31,8 +28,6 @@ from sanic.log import logger
 from cista import auth, config
 from cista.preview_worker import PreviewRequest, PreviewResponse
 from cista.util.filename import sanitize
-
-pillow_heif.register_heif_opener()
 
 bp = Blueprint("preview", url_prefix="/preview")
 
@@ -85,7 +80,6 @@ _active_procs: set[asyncio.subprocess.Process] = set()
 _preview_pool = None
 _preview_pool_lock = asyncio.Lock()
 AVIF_FAST_EFFORT = 0
-FORCE_PIL = os.environ.get("CISTA_PIL") == "1"
 WORKER_CHECKSUM_BYTES = 32
 WORKER_MAX_JSON_BYTES = 1_000_000
 
@@ -323,18 +317,6 @@ async def _run_preview_process(
     return await _preview_pool.run(filepath, quality, maxsize, maxzoom)
 
 
-# Map EXIF Orientation value to a corresponding PIL transpose
-EXIF_ORI = {
-    2: Image.Transpose.FLIP_LEFT_RIGHT,
-    3: Image.Transpose.ROTATE_180,
-    4: Image.Transpose.FLIP_TOP_BOTTOM,
-    5: Image.Transpose.TRANSPOSE,
-    6: Image.Transpose.ROTATE_270,
-    7: Image.Transpose.TRANSVERSE,
-    8: Image.Transpose.ROTATE_90,
-}
-
-
 DOC_PREVIEW_SUFFIXES = {".pdf", ".xps", ".epub", ".mobi"}
 
 
@@ -438,7 +420,7 @@ def dispatch(path, quality, maxsize, maxzoom):
             backend = "video"
             return process_video(path, quality=quality, maxsize=maxsize)
         if mime_type and mime_type.startswith("image/"):
-            backend = "pillow" if FORCE_PIL else "pyvips"
+            backend = "pyvips"
             return process_image(path, quality=quality, maxsize=maxsize)
     except ValueError as e:
         return None, PreviewResponse(ok=False, backend=backend, error=str(e))
@@ -448,12 +430,6 @@ def dispatch(path, quality, maxsize, maxzoom):
 
 
 def process_image(path, *, maxsize, quality):
-    return process_image_with_timing(path, maxsize=maxsize, quality=quality)
-
-
-def process_image_with_timing(path, *, maxsize, quality):
-    if FORCE_PIL:
-        return process_image_pillow(path, maxsize=maxsize, quality=quality)
     return process_image_pyvips(path, maxsize=maxsize, quality=quality)
 
 
@@ -480,45 +456,6 @@ def process_image_pyvips(path, *, maxsize, quality):
     )
 
 
-def process_image_pillow(path, *, maxsize, quality):
-    t_load = perf_counter()
-    with Image.open(path) as img:
-        # Force decode to include I/O in load timing
-        img.load()
-        t_proc = perf_counter()
-        # Resize
-        w, h = img.size
-        img.thumbnail((min(w, maxsize), min(h, maxsize)))
-        # Transpose pixels according to EXIF Orientation
-        orientation = img.getexif().get(274, 1)
-        if orientation in EXIF_ORI:
-            img = img.transpose(EXIF_ORI[orientation])
-        # Save as AVIF
-        imgdata = io.BytesIO()
-        t_save = perf_counter()
-        img.save(
-            imgdata,
-            format="avif",
-            quality=quality,
-            speed=10,
-            max_threads=1,
-            avif=1,
-        )
-
-    t_end = perf_counter()
-    ret = imgdata.getvalue()
-
-    load_ms = (t_proc - t_load) * 1000
-    proc_ms = (t_save - t_proc) * 1000
-    save_ms = (t_end - t_save) * 1000
-    return ret, PreviewResponse(
-        ok=True,
-        mime="image/avif",
-        backend="pillow",
-        timings=[round(load_ms, 1), round(proc_ms, 1), round(save_ms, 1)],
-    )
-
-
 def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     t_load_start = perf_counter()
     pdf = fitz.open(path)
@@ -530,19 +467,13 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     t_load_end = perf_counter()
 
     t_save_start = perf_counter()
-    if FORCE_PIL:
-        ret = pix.pil_tobytes(
-            format="avif", quality=quality, speed=10, max_threads=1, avif=1
-        )
-        backend = "pdf"
-    else:
-        img = pyvips.Image.new_from_memory(
-            pix.samples_mv, pix.width, pix.height, pix.n, "uchar"
-        )
-        ret = img.write_to_buffer(
-            ".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True
-        )
-        backend = "pdf+pyvips"
+    img = pyvips.Image.new_from_memory(
+        pix.samples_mv, pix.width, pix.height, pix.n, "uchar"
+    )
+    ret = img.write_to_buffer(
+        ".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True
+    )
+    backend = "pdf+pyvips"
     t_save_end = perf_counter()
 
     return ret, PreviewResponse(
