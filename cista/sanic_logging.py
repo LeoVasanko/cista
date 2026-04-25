@@ -236,7 +236,8 @@ class _EmojiFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         emoji = _LEVEL_EMOJI.get(record.levelno, "▪️")
-        return f"{emoji}  {record.getMessage()}"
+        sep = "  " if record.levelno in (logging.INFO, logging.WARNING) else " "
+        return f"{emoji}{sep}{record.getMessage()}"
 
 
 def configure_main_logging() -> None:
