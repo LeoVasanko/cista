@@ -21,6 +21,7 @@ import av
 import fitz  # PyMuPDF
 import numpy as np
 import pillow_heif
+import pyvips
 from blake3 import blake3
 from PIL import Image
 from sanic import Blueprint, empty, raw, redirect
@@ -107,9 +108,17 @@ class _PreviewWorker:
         if self.proc.stdin is None or self.proc.stdout is None:
             raise WorkerProtocolError("worker streams not available")
 
-        line = msgspec.json.encode(
-            PreviewRequest(path=str(filepath), quality=quality, maxsize=maxsize, maxzoom=maxzoom)
-        ) + b"\n"
+        line = (
+            msgspec.json.encode(
+                PreviewRequest(
+                    path=str(filepath),
+                    quality=quality,
+                    maxsize=maxsize,
+                    maxzoom=maxzoom,
+                )
+            )
+            + b"\n"
+        )
         self.proc.stdin.write(line)
         await self.proc.stdin.drain()
 
@@ -211,7 +220,9 @@ class _PreviewWorkerPool:
             msgspec.json.DecodeError,
         ) as e:
             replace = True
-            logger.warning("Preview worker protocol failure for %s: %s", filepath.name, e)
+            logger.warning(
+                "Preview worker protocol failure for %s: %s", filepath.name, e
+            )
             raise PreviewError(filepath.name)
         finally:
             if replace:
@@ -231,7 +242,9 @@ class _PreviewWorkerPool:
                 self._idle.get_nowait()
             except asyncio.QueueEmpty:
                 break
-        await asyncio.gather(*(worker.kill() for worker in workers), return_exceptions=True)
+        await asyncio.gather(
+            *(worker.kill() for worker in workers), return_exceptions=True
+        )
 
 
 async def start_preview_workers() -> None:
@@ -263,7 +276,9 @@ async def shutdown_preview_workers() -> None:
             proc.kill()
         except ProcessLookupError:
             pass
-    await asyncio.gather(*(proc.wait() for proc in list(_active_procs)), return_exceptions=True)
+    await asyncio.gather(
+        *(proc.wait() for proc in list(_active_procs)), return_exceptions=True
+    )
     _active_procs.clear()
 
 
@@ -348,20 +363,21 @@ async def preview(req, path):
 
     # Generate preview
     try:
-        img, preview_resp = await _run_preview_process(filepath, quality, maxsize, maxzoom)
+        img, preview_resp = await _run_preview_process(
+            filepath, quality, maxsize, maxzoom
+        )
     except PreviewTimeout:
         return empty(504)
     except PreviewError:
         return empty(422)
     if preview_resp and preview_resp.backend:
-        if preview_resp.load_ms is not None:
-            load_ms = int(round(preview_resp.load_ms))
-            process_ms = int(round(preview_resp.process_ms or 0.0))
-            save_ms = int(round(preview_resp.save_ms or 0.0))
-            timing_detail = f"{load_ms}/{process_ms}/{save_ms}"
+        if preview_resp.timings:
+            timing_detail = "/".join(
+                str(int(round(value))) for value in preview_resp.timings
+            )
+            req.ctx._log_extra = f"{preview_resp.backend} {timing_detail} ➛"
         else:
-            timing_detail = str(int(round(preview_resp.total_ms or 0.0)))
-        req.ctx._log_extra = f"{preview_resp.backend} {timing_detail} ➛"
+            req.ctx._log_extra = preview_resp.backend
     if not img:
         # Preview generation failed, redirect to the file itself
         return redirect(f"/files/{path}", status=303)
@@ -409,16 +425,10 @@ def process_image(path, *, maxsize, quality):
 def process_image_with_timing(path, *, maxsize, quality):
     if FORCE_PIL:
         return process_image_pillow(path, maxsize=maxsize, quality=quality)
-    try:
-        return process_image_pyvips(path, maxsize=maxsize, quality=quality)
-    except Exception as e:
-        logger.debug("Falling back to Pillow preview for %s: %s", path.name, e)
-        return process_image_pillow(path, maxsize=maxsize, quality=quality)
+    return process_image_pyvips(path, maxsize=maxsize, quality=quality)
 
 
 def process_image_pyvips(path, *, maxsize, quality):
-    import pyvips
-
     t_start = perf_counter()
     img = pyvips.Image.new_from_file(str(path), access="sequential")
     img = img.autorot()
@@ -437,7 +447,7 @@ def process_image_pyvips(path, *, maxsize, quality):
         ok=True,
         mime="image/avif",
         backend="pyvips",
-        total_ms=round((t_end - t_start) * 1000, 1),
+        timings=[round((t_end - t_start) * 1000, 1)],
     )
 
 
@@ -476,10 +486,7 @@ def process_image_pillow(path, *, maxsize, quality):
         ok=True,
         mime="image/avif",
         backend="pillow",
-        load_ms=round(load_ms, 1),
-        process_ms=round(proc_ms, 1),
-        save_ms=round(save_ms, 1),
-        total_ms=round((t_end - t_load) * 1000, 1),
+        timings=[round(load_ms, 1), round(proc_ms, 1), round(save_ms, 1)],
     )
 
 
@@ -494,18 +501,29 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     t_load_end = perf_counter()
 
     t_save_start = perf_counter()
-    ret = pix.pil_tobytes(
-        format="avif", quality=quality, speed=10, max_threads=1, avif=1
-    )
+    if FORCE_PIL:
+        ret = pix.pil_tobytes(
+            format="avif", quality=quality, speed=10, max_threads=1, avif=1
+        )
+        backend = "pdf"
+    else:
+        img = pyvips.Image.new_from_memory(
+            pix.samples_mv, pix.width, pix.height, pix.n, "uchar"
+        )
+        ret = img.write_to_buffer(
+            ".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True
+        )
+        backend = "pdf+pyvips"
     t_save_end = perf_counter()
 
     return ret, PreviewResponse(
         ok=True,
         mime="image/avif",
-        backend="pdf",
-        load_ms=round((t_load_end - t_load_start) * 1000, 1),
-        save_ms=round((t_save_end - t_save_start) * 1000, 1),
-        total_ms=round((t_save_end - t_load_start) * 1000, 1),
+        backend=backend,
+        timings=[
+            round((t_load_end - t_load_start) * 1000, 1),
+            round((t_save_end - t_save_start) * 1000, 1),
+        ],
     )
 
 
@@ -623,9 +641,10 @@ def process_video(path, *, maxsize, quality):
         ok=True,
         mime="image/avif",
         backend="video",
-        load_ms=round((t_load_end - t_load_start) * 1000, 1),
-        save_ms=round((t_save_end - t_save_start) * 1000, 1),
-        total_ms=round((t_save_end - t_load_start) * 1000, 1),
+        timings=[
+            round((t_load_end - t_load_start) * 1000, 1),
+            round((t_save_end - t_save_start) * 1000, 1),
+        ],
     )
     del imgdata, istream, ostream, icc, occ, frame
     gc.collect()

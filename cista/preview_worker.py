@@ -8,6 +8,7 @@ Framed response format:
     (blake3(packet))(uint32 json size)(uint32 payload size)(json)(binary payload)
 where packet = (uint32 json size)(uint32 payload size)(json)(binary payload).
 """
+
 import logging
 import struct
 import sys
@@ -28,10 +29,7 @@ class PreviewResponse(msgspec.Struct, omit_defaults=True):
     ok: bool
     mime: str | None = None
     backend: str | None = None
-    load_ms: float | None = None
-    process_ms: float | None = None
-    save_ms: float | None = None
-    total_ms: float | None = None
+    timings: list[float] | None = None
     error: str | None = None
 
 
@@ -50,9 +48,7 @@ def _write_response(resp: PreviewResponse, payload: bytes) -> None:
 
 def _run_once() -> None:
     if len(sys.argv) != 5:
-        sys.stderr.write(
-            f"Usage: {sys.argv[0]} <path> <quality> <maxsize> <maxzoom>\n"
-        )
+        sys.stderr.write(f"Usage: {sys.argv[0]} <path> <quality> <maxsize> <maxzoom>\n")
         sys.exit(1)
 
     from cista.preview import dispatch
@@ -76,7 +72,9 @@ def _run_loop() -> None:
             return
         try:
             req = _dec_req.decode(line)
-            result, resp = dispatch(Path(req.path), req.quality, req.maxsize, req.maxzoom)
+            result, resp = dispatch(
+                Path(req.path), req.quality, req.maxsize, req.maxzoom
+            )
             _write_response(resp, result or b"")
         except Exception as e:
             _write_response(PreviewResponse(ok=False, error=str(e)), b"")
