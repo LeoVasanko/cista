@@ -8,12 +8,11 @@
 </template>
 
 <script setup lang="ts">
-import { connect, uploadUrl } from '@/repositories/WS';
 import { useMainStore } from '@/stores/main'
 import { getDocuments } from '@/stores/documentStore'
 import { Doc } from '@/repositories/Document'
 import { collator } from '@/utils';
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -29,6 +28,22 @@ type CloudFile = {
   cloudName: string
   cloudPos: number
 }
+
+type UploadRange = {
+  name: string
+  size: number
+  start: number
+  end: number
+}
+
+type InflightBlock = {
+  name: string
+  start: number
+  end: number
+  startedAt: number
+}
+
+const UPLOAD_BLOCK_SIZE = 16 << 20  // 16 MiB
 function pasteHandler(event: ClipboardEvent) {
   const items = Array.from(event.clipboardData?.items ?? [])
   const infiles = [] as File[]
@@ -46,7 +61,8 @@ function pasteHandler(event: ClipboardEvent) {
   if (infiles.length || dirs.length) {
     event.preventDefault()
     uploadFiles(infiles)
-    for (const entry of dirs) pasteDirectory(entry, `${props.path!.join('/')}/${entry.name}`)
+    const base = props.path!.join('/')
+    for (const entry of dirs) pasteDirectory(entry, `${base ? `${base}/` : ''}${entry.name}`)
   }
 }
 const pasteDirectory = async (entry: FileSystemDirectoryEntry, loc: string) => {
@@ -82,7 +98,7 @@ const uploadFiles = (infiles: File[]) => {
     if (!folderName && file.webkitRelativePath) folderName = relPath.split('/')[0] ?? ''
     files.push({
       file,
-      cloudName: loc + '/' + relPath,
+      cloudName: `${loc ? `${loc}/` : ''}${relPath}`,
       cloudPos: 0,
     })
   }
@@ -130,8 +146,12 @@ const uploadCloudFiles = (files: CloudFile[]) => {
 }
 
 const cancelUploads = () => {
+  uploadRunId += 1
   upqueue = []
   blockQueue = []
+  inflightBlocks.clear()
+  uploadedBytes.clear()
+  store.uprogress.status = 'idle'
   statReset()
 }
 
@@ -152,51 +172,98 @@ const uprogress_init = {
   status: 'idle',
 }
 store.uprogress = {...uprogress_init}
+// Track uploaded bytes for each file to handle out-of-order uploads
+const uploadedBytes = new Map<string, Set<number>>()
+const inflightBlocks = new Map<string, InflightBlock>()
+let smoothedBlockMs = 1500
+let lastProgressTick = Date.now()
+let lastVisualUploaded = 0
+
+const inflightKey = (name: string, start: number) => `${name}:${start}`
+
+const completedUploadedBytes = (name: string, size: number) => {
+  const uploaded = uploadedBytes.get(name)
+  if (!uploaded) return 0
+  const blockSize = UPLOAD_BLOCK_SIZE
+  let total = 0
+  for (let i = 0; i < size; i += blockSize) {
+    if (uploaded.has(i)) total += Math.min(blockSize, size - i)
+  }
+  return total
+}
+
+const simulatedInflightBytes = (name: string, now: number) => {
+  let total = 0
+  for (const block of inflightBlocks.values()) {
+    if (block.name !== name) continue
+    const size = block.end - block.start
+    const elapsed = Math.max(0, now - block.startedAt)
+    const fraction = Math.min(0.98, elapsed / Math.max(200, smoothedBlockMs))
+    total += size * fraction
+  }
+  return total
+}
+
+const refreshProgress = (now: number) => {
+  const name = store.uprogress.filename
+  const size = store.uprogress.filesize
+  if (!name || !size) {
+    lastProgressTick = now
+    return 0
+  }
+
+  const completed = completedUploadedBytes(name, size)
+  const estimated = simulatedInflightBytes(name, now)
+  const visualUploaded = Math.min(size, Math.round(completed + estimated))
+  const delta = Math.max(0, visualUploaded - lastVisualUploaded)
+  const dt = Math.max(1, now - lastProgressTick)
+
+  store.uprogress.filepos = visualUploaded
+  store.uprogress.xfer = store.uprogress.filestart + visualUploaded
+
+  if (delta > 0) {
+    store.uprogress.statbytes += delta
+    store.uprogress.statdur += dt
+    store.uprogress.tlast = now
+  }
+
+  lastVisualUploaded = visualUploaded
+  lastProgressTick = now
+  return delta
+}
+
 setInterval(() => {
-  if (Date.now() - store.uprogress.tlast > 3000) {
-    // Reset
+  const now = Date.now()
+  const delta = refreshProgress(now)
+  if (delta > 0) return
+  if (now - store.uprogress.tlast > 3000) {
     store.uprogress.statbytes = 0
     store.uprogress.statdur = 1
   } else {
-    // Running average by decay
-    store.uprogress.statbytes *= .9
-    store.uprogress.statdur *= .9
+    store.uprogress.statbytes *= .95
+    store.uprogress.statdur *= .95
   }
 }, 100)
-// Track uploaded bytes for each file to handle out-of-order uploads
-const uploadedBytes = new Map<string, Set<number>>()
 
-const statUpdate = ({name, size, start, end}: {name: string, size: number, start: number, end: number}) => {
+const statUpdate = ({name, size, start, end}: UploadRange) => {
   if (name !== store.uprogress.filename) return  // If stats have been reset
-  const now = Date.now()
 
   // Track which bytes have been uploaded (using start to end range)
   if (!uploadedBytes.has(name)) uploadedBytes.set(name, new Set())
   const uploaded = uploadedBytes.get(name)!
-  const blockSize = 1 << 20
+  const blockSize = UPLOAD_BLOCK_SIZE
 
   // Mark all bytes in this block as uploaded
   for (let i = start; i < end; i += blockSize) {
     uploaded.add(i)
   }
-
-  // Calculate total uploaded bytes for progress
-  let totalUploaded = 0
-  for (let i = 0; i < size; i += blockSize) {
-    if (uploaded.has(i)) totalUploaded += blockSize
-  }
-
-  store.uprogress.xfer = store.uprogress.filestart + totalUploaded
-  store.uprogress.filepos = totalUploaded
-  store.uprogress.statbytes += end - start
-  store.uprogress.statdur += now - store.uprogress.tlast
-  store.uprogress.tlast = now
+  refreshProgress(Date.now())
 
   // Check if file is fully uploaded by examining the block queue
   const currentUpload = blockQueue[0]
   if (!currentUpload) return
 
-  if (currentUpload.file.cloudName === name && currentUpload.blockIndex >= currentUpload.blocks.length) {
+  if (currentUpload.file.cloudName === name && currentUpload.completed >= currentUpload.blocks.length) {
     // All blocks for this file have been uploaded
     uploadedBytes.delete(name)  // Clean up tracking
     store.uprogress.filestart += size
@@ -210,11 +277,15 @@ const statNextFile = () => {
   store.uprogress.filepos = 0
   store.uprogress.filesize = f.file.size
   store.uprogress.filename = f.cloudName
+  lastVisualUploaded = 0
+  lastProgressTick = Date.now()
 }
 const statReset = () => {
   Object.assign(store.uprogress, uprogress_init)
   store.uprogress.t0 = Date.now()
   store.uprogress.tlast = store.uprogress.t0 + 1
+  lastVisualUploaded = 0
+  lastProgressTick = store.uprogress.t0
 }
 const statsAdd = (f: CloudFile[]) => {
   if (store.uprogress.files.length === 0) statReset()
@@ -224,10 +295,12 @@ const statsAdd = (f: CloudFile[]) => {
   statNextFile()
 }
 let upqueue = [] as CloudFile[]
+const MAX_PARALLEL_REQUESTS = 4
+const RETRY_DELAY_MS = 400
 
 // Helper function to get upload blocks for a file, prioritizing final 4 blocks if file >= 32 MiB
 const getUploadBlocks = (file: CloudFile): {start: number, end: number}[] => {
-  const BLOCK_SIZE = 1 << 20  // 1 MiB
+  const BLOCK_SIZE = UPLOAD_BLOCK_SIZE
   const MIN_SIZE_FOR_REORDER = 32 * BLOCK_SIZE  // 32 MiB = 33554432 bytes
   const FINAL_BLOCKS_COUNT = 2
 
@@ -261,95 +334,162 @@ const getUploadBlocks = (file: CloudFile): {start: number, end: number}[] => {
   return blocks
 }
 
-// TODO: Rewrite as WebSocket class
-const WSCreate = async () => await new Promise<WebSocket>(resolve => {
-  const ws = connect(uploadUrl, {
-    open(ev: Event) { resolve(ws) },
-    error(ev: Event) {
-      console.error('Upload socket error', ev)
-      store.error = 'Upload socket error'
-    },
-    message(ev: MessageEvent) {
-      const res = JSON.parse(ev!.data)
-      if ('error' in res) {
-        console.error('Upload socket error', res.error)
-        store.error = res.error.message
-        return
-      }
-      if (res.status === 'ack') {
-        statUpdate(res.req)
-      } else console.log('Unknown upload response', res)
-    },
-  })
-  // @ts-ignore
-  ws.sendMsg = (msg: any) => ws.send(JSON.stringify(msg))
-  // @ts-ignore
-  ws.sendData = async (data: any) => {
-    // Wait until the WS is ready to send another message
-    store.uprogress.status = "uploading"
-    await new Promise(resolve => {
-      const t = setInterval(() => {
-        if (ws.bufferedAmount > 1<<20) return
-        resolve(undefined)
-        clearInterval(t)
-      }, 1)
-    })
-    store.uprogress.status = "processing"
-    ws.send(data)
-  }
-})
-
 type BlockUpload = {
   file: CloudFile
   blocks: {start: number, end: number}[]
-  blockIndex: number
+  nextIndex: number
+  completed: number
+  runId: number
 }
 
 let blockQueue = [] as BlockUpload[]
+let workerRunning = false
+let uploadRunId = 0
 
-const worker = async () => {
-  const ws = await WSCreate()
-  while (blockQueue.length) {
-    const upload = blockQueue[0]!
-    const f = upload.file
-    const block = upload.blocks[upload.blockIndex]!
+const enqueuePendingUploads = () => {
+  while (upqueue.length) {
+    const file = upqueue.shift()!
+    const blocks = getUploadBlocks(file)
+    blockQueue.push({ file, blocks, nextIndex: 0, completed: 0, runId: uploadRunId })
+  }
+}
 
-    const control = { name: f.cloudName, size: f.file.size, start: block.start, end: block.end }
-    const data = f.file.slice(block.start, block.end)
+const uploadUrlForFile = (cloudName: string) => {
+  const normalized = cloudName.replace(/^\/+/, '')
+  const encoded = normalized.split('/').map(encodeURIComponent).join('/')
+  return `/files/${encoded}`
+}
 
-    // Note: files may get modified during I/O
-    // @ts-ignore FIXME proper WebSocket class, avoid attaching functions to WebSocket object
-    ws.sendMsg(control)
-    // @ts-ignore
-    await ws.sendData(data)
+const uploadBlock = async (upload: BlockUpload, block: {start: number, end: number}) => {
+  const body = upload.file.file.slice(block.start, block.end)
+  const range = `bytes ${block.start}-${block.end - 1}/${upload.file.file.size}`
+  const fallbackReq = {
+    name: upload.file.cloudName,
+    size: upload.file.file.size,
+    start: block.start,
+    end: block.end,
+  }
+  let attempt = 0
 
-    // Move to next block
-    upload.blockIndex++
-    if (upload.blockIndex >= upload.blocks.length) {
-      // File upload complete
-      blockQueue.shift()
+  while (true) {
+    attempt += 1
+    if (upload.runId !== uploadRunId) throw new Error('Upload cancelled')
+    try {
+      const res = await fetch(uploadUrlForFile(upload.file.cloudName), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Range': range,
+        },
+        body,
+      })
+      if (!res.ok) {
+        const message = await res.text().catch(() => '')
+        const retryable = res.status >= 500 || res.status === 408 || res.status === 429
+        if (!retryable) throw new Error(message || `HTTP ${res.status}`)
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS))
+        continue
+      }
+      const payload = await res.json().catch(() => null)
+      return payload?.status === 'ack' && payload.req ? payload.req : fallbackReq
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (message === 'Upload cancelled') throw err
+      if (upload.runId !== uploadRunId) throw new Error('Upload cancelled')
+      if (attempt % 10 === 0) {
+        console.warn(`Upload retry ${attempt} for ${upload.file.cloudName}: ${message}`)
+      }
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS))
     }
   }
-  if (blockQueue.length) startWorker()
-  store.uprogress.status = "idle"
-  workerRunning = false
 }
-let workerRunning: any = false
-const startWorker = () => {
-  if (workerRunning === false) workerRunning = setTimeout(() => {
-    // Convert new CloudFile entries to BlockUpload entries
-    while (upqueue.length) {
-      const file = upqueue.shift()!
-      const blocks = getUploadBlocks(file)
-      blockQueue.push({ file, blocks, blockIndex: 0 })
-    }
 
-    if (blockQueue.length) {
-      workerRunning = true
-      worker()
-    } else {
-      workerRunning = false
+const startInflightBlock = (name: string, block: {start: number, end: number}) => {
+  inflightBlocks.set(inflightKey(name, block.start), {
+    name,
+    start: block.start,
+    end: block.end,
+    startedAt: Date.now(),
+  })
+}
+
+const finishInflightBlock = (name: string, block: {start: number, end: number}) => {
+  const key = inflightKey(name, block.start)
+  const info = inflightBlocks.get(key)
+  if (!info) return
+  const elapsed = Math.max(1, Date.now() - info.startedAt)
+  smoothedBlockMs = smoothedBlockMs * 0.85 + elapsed * 0.15
+  inflightBlocks.delete(key)
+}
+
+const worker = async (runId: number) => {
+  try {
+    while (runId === uploadRunId) {
+      enqueuePendingUploads()
+      if (!blockQueue.length) break
+
+      const upload = blockQueue[0]!
+      const inflight = new Set<Promise<void>>()
+
+      while (runId === uploadRunId && upload.completed < upload.blocks.length) {
+        while (
+          runId === uploadRunId
+          && upload.nextIndex < upload.blocks.length
+          && inflight.size < MAX_PARALLEL_REQUESTS
+        ) {
+          const block = upload.blocks[upload.nextIndex++]!
+          store.uprogress.status = 'uploading'
+          startInflightBlock(upload.file.cloudName, block)
+          let task: Promise<void>
+          task = uploadBlock(upload, block)
+            .then(req => {
+              finishInflightBlock(upload.file.cloudName, block)
+              upload.completed += 1
+              statUpdate(req)
+            })
+            .catch(err => {
+              finishInflightBlock(upload.file.cloudName, block)
+              throw err
+            })
+            .finally(() => {
+              inflight.delete(task)
+            })
+          inflight.add(task)
+        }
+
+        if (!inflight.size) break
+        await Promise.race(inflight)
+      }
+
+      if (runId !== uploadRunId) return
+
+      if (upload.completed >= upload.blocks.length) {
+        blockQueue.shift()
+      } else {
+        break
+      }
     }
+  } catch (err: any) {
+    if (runId !== uploadRunId) return
+    console.error('Upload error', err)
+    store.error = err?.message || 'Upload failed'
+    uploadRunId += 1
+    upqueue = []
+    blockQueue = []
+    inflightBlocks.clear()
+  } finally {
+    store.uprogress.status = 'idle'
+    workerRunning = false
+    if (upqueue.length) startWorker()
+  }
+}
+
+const startWorker = () => {
+  if (workerRunning) return
+  workerRunning = true
+  const runId = uploadRunId
+  setTimeout(() => {
+    void worker(runId)
   }, 0)
 }
 

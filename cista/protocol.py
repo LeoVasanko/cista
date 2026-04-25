@@ -12,7 +12,6 @@ from cista.util import filename
 
 ## Control commands
 
-
 class ControlBase(msgspec.Struct, tag_field="op", tag=str.lower):
     def __call__(self):
         raise NotImplementedError
@@ -118,19 +117,9 @@ class Cp(ControlBase):
 ControlTypes = MkDir | Rename | Rm | Mv | Cp
 
 
-## File uploads and downloads
-
-
-class FileRange(msgspec.Struct):
-    name: str
-    size: int
-    start: int
-    end: int
-
-
 class StatusMsg(msgspec.Struct):
     status: str
-    req: FileRange
+    req: Any
 
 
 class ErrorMsg(msgspec.Struct):

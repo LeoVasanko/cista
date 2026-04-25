@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import mimetypes
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import cpu_count
@@ -11,8 +12,8 @@ from wsgiref.handlers import format_date_time
 
 import sanic.helpers
 from blake3 import blake3
-from sanic import Blueprint, Sanic, empty, raw, redirect
-from sanic.exceptions import Forbidden, NotFound
+from sanic import Blueprint, Sanic, empty, json, raw, redirect
+from sanic.exceptions import BadRequest, Forbidden, NotFound
 from sanic.log import logger
 from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
@@ -20,7 +21,7 @@ from zstandard import ZstdCompressor
 
 from cista import auth, config, preview, session, sso, watching
 from cista.preview import shutdown_preview_workers, start_preview_workers
-from cista.api import bp
+from cista.api import bp, fileserver
 from cista.sanic_logging import configure_access_logging, configure_main_logging, format_access_log
 from cista.sanic_logging import logger as access_logger
 from cista.util.apphelpers import handle_sanic_exception
@@ -127,6 +128,68 @@ def http_fileserver(app):
         """Verify access to file server routes."""
         await auth.verify(request)
 
+    @bp.put("/files/<name:path>")
+    async def upload_file_chunk(request, *args, **kwargs):
+        body = request.body
+        header = request.headers.get("content-range")
+        if header:
+            start, end, total = _parse_content_range(header, len(body))
+        else:
+            start = 0
+            end = len(body)
+            total = end
+        raw_name = kwargs.get("name")
+        if raw_name is None and args:
+            raw_name = args[0]
+        if not isinstance(raw_name, str) or not raw_name:
+            prefix = "/files/"
+            if not request.path.startswith(prefix):
+                raise BadRequest("Invalid upload path")
+            raw_name = request.path[len(prefix) :]
+        rel_name = unquote(raw_name)
+        upload_info = await asyncio.to_thread(
+            fileserver.upload_info,
+            rel_name,
+            start,
+            body,
+            total,
+        )
+        extras = []
+        chunk_len = end - start
+        whole_file = start == 0 and end == total
+        if not whole_file:
+            start_mib = _to_mib_int(start)
+            chunk_mib = _to_mib_int(chunk_len)
+            # Keep range logs compact for fixed-size upload blocks.
+            if chunk_mib == 16:
+                extras.append(f"{start_mib}MiB")
+            else:
+                extras.append(f"{start_mib}+{chunk_mib}MiB")
+        if upload_info.get("created"):
+            extras.append(f"created {_to_mib_int(total)}MiB")
+        size_before = upload_info.get("size_before")
+        size_after = upload_info.get("size_after")
+        if (
+            size_before is not None
+            and size_after is not None
+            and size_before != size_after
+        ):
+            extras.append("resized")
+        request.ctx._log_extra = " ".join(extras) if extras else None
+        path = PurePosixPath(rel_name)
+        watching.notify_change(path, *path.parents)
+        return json(
+            {
+                "status": "ack",
+                "req": {
+                    "name": rel_name,
+                    "size": total,
+                    "start": start,
+                    "end": end,
+                },
+            }
+        )
+
     bp.static(
         "/files/",
         config.config.path,
@@ -138,6 +201,30 @@ def http_fileserver(app):
 
 
 www = {}
+_CONTENT_RANGE_RE = re.compile(r"^bytes (\d+)-(\d+)/(\d+)$")
+
+
+def _parse_content_range(header: str, body_len: int) -> tuple[int, int, int]:
+    m = _CONTENT_RANGE_RE.fullmatch(header.strip())
+    if m is None:
+        raise BadRequest("Invalid Content-Range format")
+    start, end_inclusive, total = (int(v) for v in m.groups())
+    if total <= 0:
+        raise BadRequest("Invalid Content-Range total size")
+    if start > end_inclusive:
+        raise BadRequest("Invalid Content-Range range")
+    if end_inclusive >= total:
+        raise BadRequest("Content-Range exceeds total size")
+    expected_len = end_inclusive - start + 1
+    if expected_len != body_len:
+        raise BadRequest(
+            f"Content length mismatch for range: expected {expected_len}, got {body_len}"
+        )
+    return start, end_inclusive + 1, total
+
+
+def _to_mib_int(value_bytes: int) -> int:
+    return round(value_bytes / (1 << 20))
 
 
 def _load_wwwroot(www):

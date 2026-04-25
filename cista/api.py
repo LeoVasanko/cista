@@ -1,5 +1,4 @@
 import asyncio
-import typing
 from pathlib import PurePosixPath
 from secrets import token_bytes
 
@@ -9,7 +8,7 @@ from sanic.exceptions import BadRequest
 
 from cista import __version__, auth, config, sso, watching
 from cista.fileio import FileServer
-from cista.protocol import ControlTypes, FileRange, StatusMsg
+from cista.protocol import ControlTypes, StatusMsg
 from cista.util.apphelpers import asend, websocket_wrapper
 
 bp = Blueprint("api", url_prefix="/api")
@@ -24,65 +23,6 @@ async def start_fileserver(app):
 @bp.after_server_stop
 async def stop_fileserver(app):
     await fileserver.stop()
-
-
-@bp.websocket("upload")
-@websocket_wrapper
-async def upload(req, ws):
-    alink = fileserver.alink
-    while True:
-        req = None
-        text = await ws.recv()
-        if not isinstance(text, str):
-            raise ValueError(
-                f"Expected JSON control, got binary len(data) = {len(text)}",
-            )
-        req = msgspec.json.decode(text, type=FileRange)
-        pos = req.start
-        while True:
-            data = await ws.recv()
-            if not isinstance(data, bytes):
-                break
-            if len(data) > req.end - pos:
-                raise ValueError(
-                    f"Expected up to {req.end - pos} bytes, got {len(data)} bytes"
-                )
-            sentsize = await alink(("upload", req.name, pos, data, req.size))
-            pos += typing.cast(int, sentsize)
-            if pos >= req.end:
-                break
-        if pos != req.end:
-            d = f"{len(data)} bytes" if isinstance(data, bytes) else data
-            raise ValueError(f"Expected {req.end - pos} more bytes, got {d}")
-        # Signal the watcher about the uploaded file and its parent directories
-        path = PurePosixPath(req.name)
-        watching.notify_change(path, *path.parents)
-        # Report success
-        res = StatusMsg(status="ack", req=req)
-        await asend(ws, res)
-
-
-@bp.websocket("download")
-@websocket_wrapper
-async def download(req, ws):
-    alink = fileserver.alink
-    while True:
-        req = None
-        text = await ws.recv()
-        if not isinstance(text, str):
-            raise ValueError(
-                f"Expected JSON control, got binary len(data) = {len(text)}",
-            )
-        req = msgspec.json.decode(text, type=FileRange)
-        pos = req.start
-        while pos < req.end:
-            end = min(req.end, pos + (1 << 20))
-            data = typing.cast(bytes, await alink(("download", req.name, pos, end)))
-            await asend(ws, data)
-            pos += len(data)
-        # Report success
-        res = StatusMsg(status="ack", req=req)
-        await asend(ws, res)
 
 
 @bp.websocket("control")

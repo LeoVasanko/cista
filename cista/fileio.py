@@ -1,9 +1,8 @@
-import asyncio
 import os
+import threading
 
 from cista import config
 from cista.util import filename
-from cista.util.asynclink import AsyncLink
 from cista.util.lrucache import LRUCache
 
 
@@ -62,38 +61,32 @@ class File:
 
 class FileServer:
     async def start(self):
-        self.alink = AsyncLink()
-        self.worker = asyncio.get_event_loop().run_in_executor(
-            None,
-            self.worker_thread,
-            self.alink.to_sync,
-        )
         self.cache = LRUCache(File, capacity=10, maxage=5.0)
+        self.cache_lock = threading.Lock()
+        self.file_locks: dict[str, threading.Lock] = {}
 
     async def stop(self):
-        await self.alink.stop()
-        await self.worker
+        self.cache.close()
 
-    def worker_thread(self, slink):
+    @staticmethod
+    def _stat_size(path):
         try:
-            for req in slink:
-                with req as (command, *args):
-                    if command == "upload":
-                        req.set_result(self.upload(*args))
-                    elif command == "download":
-                        req.set_result(self.download(*args))
-                    else:
-                        raise NotImplementedError(f"Unhandled {command=} {args}")
-        finally:
-            self.cache.close()
+            return os.stat(path).st_size
+        except FileNotFoundError:
+            return None
 
-    def upload(self, name, pos, data, file_size):
+    def upload_info(self, name, pos, data, file_size):
         name = filename.sanitize(name)
-        f = self.cache[name]
-        f.write(pos, data, file_size=file_size)
-        return len(data)
-
-    def download(self, name, start, end):
-        name = filename.sanitize(name)
-        f = self.cache[name]
-        return f[start:end]
+        with self.cache_lock:
+            f = self.cache[name]
+            lock = self.file_locks.setdefault(name, threading.Lock())
+        with lock:
+            size_before = self._stat_size(f.path)
+            f.write(pos, data, file_size=file_size)
+            size_after = self._stat_size(f.path)
+        return {
+            "written": len(data),
+            "created": size_before is None,
+            "size_before": size_before,
+            "size_after": size_after,
+        }
