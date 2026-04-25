@@ -10,6 +10,8 @@ where packet = (uint32 json size)(uint32 payload size)(json)(binary payload).
 """
 
 import logging
+import contextlib
+import io
 import struct
 import sys
 from pathlib import Path
@@ -31,6 +33,7 @@ class PreviewResponse(msgspec.Struct, omit_defaults=True):
     backend: str | None = None
     timings: list[float] | None = None
     error: str | None = None
+    stderr: str | None = None
 
 
 _enc = msgspec.json.Encoder()
@@ -70,14 +73,34 @@ def _run_loop() -> None:
         line = sys.stdin.buffer.readline()
         if not line:
             return
+        stderr_capture = io.StringIO()
+        handler = logging.StreamHandler(stderr_capture)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(handler)
         try:
-            req = _dec_req.decode(line)
-            result, resp = dispatch(
-                Path(req.path), req.quality, req.maxsize, req.maxzoom
-            )
+            with contextlib.redirect_stderr(stderr_capture):
+                req = _dec_req.decode(line)
+                result, resp = dispatch(
+                    Path(req.path), req.quality, req.maxsize, req.maxzoom
+                )
+            if not resp.ok:
+                captured = stderr_capture.getvalue().strip()
+                if captured:
+                    resp = PreviewResponse(
+                        ok=False,
+                        backend=resp.backend,
+                        error=resp.error,
+                        stderr=captured,
+                    )
             _write_response(resp, result or b"")
         except Exception as e:
-            _write_response(PreviewResponse(ok=False, error=str(e)), b"")
+            captured = stderr_capture.getvalue().strip()
+            _write_response(
+                PreviewResponse(ok=False, error=str(e), stderr=captured or None), b""
+            )
+        finally:
+            root_logger.removeHandler(handler)
+            handler.close()
 
 
 def main() -> None:

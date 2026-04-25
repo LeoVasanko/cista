@@ -135,7 +135,11 @@ class _PreviewWorker:
 
         resp = msgspec.json.decode(meta_raw, type=PreviewResponse)
         if not resp.ok:
-            raise PreviewError(resp.error or "preview worker error")
+            raise PreviewError(
+                resp.error or "preview worker error",
+                stderr=resp.stderr,
+                backend=resp.backend,
+            )
         return payload or None, resp
 
     async def kill(self) -> None:
@@ -207,7 +211,7 @@ class _PreviewWorkerPool:
         except WorkerChecksumError:
             replace = True
             logger.error("Preview checksum mismatch for %s", filepath.name)
-            raise PreviewError(filepath.name)
+            raise PreviewError(f"worker checksum mismatch for {filepath.name}")
         except PreviewError:
             raise
         except (
@@ -223,7 +227,9 @@ class _PreviewWorkerPool:
             logger.warning(
                 "Preview worker protocol failure for %s: %s", filepath.name, e
             )
-            raise PreviewError(filepath.name)
+            raise PreviewError(
+                f"worker protocol failure for {filepath.name}: {e}"
+            )
         finally:
             if replace:
                 await self._replace_worker(worker)
@@ -295,6 +301,17 @@ class PreviewTimeout(Exception):
 class PreviewError(Exception):
     """Raised when the preview subprocess exits with a non-zero status."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        stderr: str | None = None,
+        backend: str | None = None,
+    ):
+        super().__init__(message)
+        self.stderr = stderr
+        self.backend = backend
+
 
 async def _run_preview_process(
     filepath, quality: int, maxsize: int, maxzoom: float
@@ -302,7 +319,7 @@ async def _run_preview_process(
     """Run preview request in a persistent worker process."""
     await start_preview_workers()
     if _preview_pool is None:
-        raise PreviewError(filepath.name)
+        raise PreviewError(f"preview worker pool unavailable for {filepath.name}")
     return await _preview_pool.run(filepath, quality, maxsize, maxzoom)
 
 
@@ -368,7 +385,15 @@ async def preview(req, path):
         )
     except PreviewTimeout:
         return empty(504)
-    except PreviewError:
+    except PreviewError as e:
+        if e.backend:
+            req.ctx._log_extra = e.backend
+        detail = str(e)
+        if detail == "preview worker error" and e.stderr:
+            captured = e.stderr.strip()
+            if captured:
+                detail = captured.splitlines()[0]
+        logger.error("%s preview: %s", filepath, detail)
         return empty(422)
     if preview_resp and preview_resp.backend:
         if preview_resp.timings:
@@ -403,19 +428,23 @@ async def preview(req, path):
 
 
 def dispatch(path, quality, maxsize, maxzoom):
+    backend = "unknown"
     try:
         if path.suffix.lower() in DOC_PREVIEW_SUFFIXES:
+            backend = "pdf"
             return process_pdf(path, quality=quality, maxsize=maxsize, maxzoom=maxzoom)
         mime_type, _ = mimetypes.guess_type(path.name)
         if mime_type and mime_type.startswith("video/"):
+            backend = "video"
             return process_video(path, quality=quality, maxsize=maxsize)
         if mime_type and mime_type.startswith("image/"):
+            backend = "pillow" if FORCE_PIL else "pyvips"
             return process_image(path, quality=quality, maxsize=maxsize)
     except ValueError as e:
-        logger.warning(f"Cannot generate preview for {path}: {e}")
+        return None, PreviewResponse(ok=False, backend=backend, error=str(e))
     except Exception as e:
-        logger.exception(f"Error generating preview for {path}: {e}")
-    return None, PreviewResponse(ok=False)
+        return None, PreviewResponse(ok=False, backend=backend, error=str(e))
+    return None, PreviewResponse(ok=False, backend=backend, error="preview unsupported")
 
 
 def process_image(path, *, maxsize, quality):
