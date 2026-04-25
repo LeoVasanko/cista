@@ -354,10 +354,14 @@ async def preview(req, path):
     except PreviewError:
         return empty(422)
     if preview_resp and preview_resp.backend:
-        load_ms = int(round(preview_resp.load_ms or 0.0))
-        process_ms = int(round(preview_resp.process_ms or 0.0))
-        save_ms = int(round(preview_resp.save_ms or 0.0))
-        req.ctx._log_extra = f"{preview_resp.backend} {load_ms}/{process_ms}/{save_ms} ="
+        if preview_resp.load_ms is not None:
+            load_ms = int(round(preview_resp.load_ms))
+            process_ms = int(round(preview_resp.process_ms or 0.0))
+            save_ms = int(round(preview_resp.save_ms or 0.0))
+            timing_detail = f"{load_ms}/{process_ms}/{save_ms}"
+        else:
+            timing_detail = str(int(round(preview_resp.total_ms or 0.0)))
+        req.ctx._log_extra = f"{preview_resp.backend} {timing_detail} ➛"
     if not img:
         # Preview generation failed, redirect to the file itself
         return redirect(f"/files/{path}", status=303)
@@ -415,16 +419,12 @@ def process_image_with_timing(path, *, maxsize, quality):
 def process_image_pyvips(path, *, maxsize, quality):
     import pyvips
 
-    t_load = perf_counter()
+    t_start = perf_counter()
     img = pyvips.Image.new_from_file(str(path), access="sequential")
-    t_proc = perf_counter()
-
     img = img.autorot()
     scale = min(maxsize / img.width, maxsize / img.height, 1.0)
     if scale < 1.0:
         img = img.resize(scale)
-
-    t_save = perf_counter()
     ret = img.write_to_buffer(
         ".avif",
         Q=quality,
@@ -433,17 +433,11 @@ def process_image_pyvips(path, *, maxsize, quality):
     )
     t_end = perf_counter()
 
-    load_ms = (t_proc - t_load) * 1000
-    proc_ms = (t_save - t_proc) * 1000
-    save_ms = (t_end - t_save) * 1000
     return ret, PreviewResponse(
         ok=True,
         mime="image/avif",
         backend="pyvips",
-        load_ms=round(load_ms, 1),
-        process_ms=round(proc_ms, 1),
-        save_ms=round(save_ms, 1),
-        total_ms=round((t_end - t_load) * 1000, 1),
+        total_ms=round((t_end - t_start) * 1000, 1),
     )
 
 
