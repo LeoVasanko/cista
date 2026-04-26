@@ -7,6 +7,7 @@ import pytest_asyncio
 from sanic import Sanic
 
 from cista import auth, config, watching
+from cista.api import bp as api_bp
 from cista.auth import bp as auth_bp
 
 
@@ -41,6 +42,9 @@ def setup_storage(tmp_path: Path):
     _persist_config()
     watching.state.root = []
     watching.rootpath = tmp_path
+    (tmp_path / "hello.txt").write_text("hello", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "a.txt").write_text("A", encoding="utf-8")
     yield tmp_path
     watching.state.root = []
 
@@ -56,6 +60,7 @@ async def client(setup_storage: Path):
         "PROPFIND",
     )
     app.blueprint(auth_bp)
+    app.blueprint(api_bp)
     yield app.asgi_client
 
 
@@ -189,3 +194,27 @@ async def test_token_user_scoped(client):
     # Actually the token key lookup will fail, and since there's no session fallback...
     # With auth header present but invalid, it should return 401
     assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_create_share_token(client):
+    _, res = await client.post(
+        "/api/share-tokens",
+        json={"paths": ["hello.txt", "docs"], "mode": "ro", "name": "selection"},
+        headers={"Authorization": _basic_auth("alice", "secret")},
+    )
+    assert res.status_code == 200
+    data = res.json
+    assert data["kind"] == "share"
+    assert data["mode"] == "ro"
+    assert data["paths"] == ["hello.txt", "docs"]
+    assert "token:" in data["url"]
+
+    _, res = await client.get(
+        "/auth/tokens",
+        headers={"Authorization": _basic_auth("alice", "secret")},
+    )
+    assert res.status_code == 200
+    share_tokens = [t for t in res.json["tokens"] if t.get("kind") == "share"]
+    assert len(share_tokens) == 1
+    assert share_tokens[0]["mode"] == "ro"

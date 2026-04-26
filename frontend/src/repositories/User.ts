@@ -93,3 +93,14 @@ export async function deleteToken(tokenId: string) {
   const data = await Client.delete(`${url_tokens}/${tokenId}`)
   return data
 }
+
+export async function createShareToken(paths: string[], mode: 'ro' | 'rw' = 'ro') {
+  const data = await Client.post('/api/share-tokens', { paths, mode })
+  return data as {
+    id: string
+    key: string
+    url: string
+    mode: 'ro' | 'rw'
+    paths: string[]
+  }
+}

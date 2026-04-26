@@ -106,16 +106,38 @@ def setup_storage(tmp_path: Path):
     user = config.User()
     auth.set_password(user, "secret")
     token = config.Token(key="test_token_123", username="alice")
+    share_ro = config.Token(
+        key="share_ro_123",
+        username="alice",
+        kind="share",
+        mode="ro",
+        share_paths=["hello.txt", "docs"],
+    )
+    share_rw = config.Token(
+        key="share_rw_123",
+        username="alice",
+        kind="share",
+        mode="rw",
+        share_paths=["docs"],
+    )
     config.config = config.Config(
         path=tmp_path,
         listen=":0",
         public=False,
         users={"alice": user},
-        tokens={"test_token_123": token},
+        tokens={
+            "test_token_123": token,
+            "share_ro_123": share_ro,
+            "share_rw_123": share_rw,
+        },
     )
     watching.state.root = []
     watching.rootpath = tmp_path
     (tmp_path / "hello.txt").write_text("hello", encoding="utf-8")
+    (tmp_path / "secret.txt").write_text("secret", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "a.txt").write_text("A", encoding="utf-8")
+    (tmp_path / "docs" / "b.txt").write_text("B", encoding="utf-8")
     yield tmp_path
     watching.state.root = []
 
@@ -222,3 +244,49 @@ async def test_ntlm_auth_with_token(client):
     )
     assert res3.status_code == 200
     assert res3.body == b"hello"
+
+
+@pytest.mark.asyncio
+async def test_share_token_limits_visible_paths(client):
+    _, res = await client.get(
+        "/files/docs/a.txt", headers=_basic_auth("token", "share_ro_123")
+    )
+    assert res.status_code == 200
+    assert res.body == b"A"
+
+    _, res = await client.get(
+        "/files/hello.txt", headers=_basic_auth("token", "share_ro_123")
+    )
+    assert res.status_code == 200
+    assert res.body == b"hello"
+
+    _, res = await client.get(
+        "/files/secret.txt", headers=_basic_auth("token", "share_ro_123")
+    )
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_share_token_read_only_blocks_writes(client):
+    _, res = await client.delete(
+        "/files/hello.txt", headers=_basic_auth("token", "share_ro_123")
+    )
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_share_token_rw_allows_writes_in_scope_only(client):
+    _, res = await client.delete(
+        "/files/docs/a.txt", headers=_basic_auth("token", "share_rw_123")
+    )
+    assert res.status_code == 204
+
+    _, res = await client.get(
+        "/files/docs/a.txt", headers=_basic_auth("token", "share_rw_123")
+    )
+    assert res.status_code == 404
+
+    _, res = await client.delete(
+        "/files/secret.txt", headers=_basic_auth("token", "share_rw_123")
+    )
+    assert res.status_code == 404

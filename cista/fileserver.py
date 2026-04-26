@@ -14,7 +14,7 @@ from wsgiref.handlers import format_date_time
 from sanic import Blueprint, HTTPResponse, empty, json
 from sanic.exceptions import BadRequest, NotFound
 
-from cista import auth, config, watching
+from cista import auth, config, sharefs, watching
 from cista.api import fileserver
 from cista.util import filename
 
@@ -40,6 +40,7 @@ async def verify_fileserver(request):
 
 @bp.put("/<name:path>")
 async def upload_file_chunk(request, name):
+    auth.ensure_write_allowed(request)
     body = request.body
     header = request.headers.get("content-range")
     if header:
@@ -49,7 +50,7 @@ async def upload_file_chunk(request, name):
         end = len(body)
         total = end
 
-    rel, _ = _safe_relpath(name)
+    rel, path = _safe_relpath(name, request=request)
     rel_name = rel.as_posix()
     upload_info = await asyncio.to_thread(
         fileserver.upload_info,
@@ -76,7 +77,8 @@ async def upload_file_chunk(request, name):
     if size_before is not None and size_after is not None and size_before != size_after:
         extras.append("resized")
     request.ctx._log_extra = " ".join(extras) if extras else None
-    watching.notify_change(rel, *rel.parents)
+    real_rel = PurePosixPath(path.relative_to(config.config.path.resolve()).as_posix())
+    watching.notify_change(real_rel, *real_rel.parents)
     return json(
         {
             "status": "ack",
@@ -92,7 +94,8 @@ async def upload_file_chunk(request, name):
 
 @bp.delete("/<name:path>")
 async def delete_file(request, name):
-    rel, path = _safe_relpath(name)
+    auth.ensure_write_allowed(request)
+    rel, path = _safe_relpath(name, request=request)
     if not rel.parts:
         raise BadRequest("Refusing to delete root folder")
 
@@ -105,23 +108,27 @@ async def delete_file(request, name):
             path.unlink()
 
     await asyncio.to_thread(_delete)
-    watching.notify_change(rel, *rel.parents)
+    real_rel = PurePosixPath(path.relative_to(config.config.path.resolve()).as_posix())
+    watching.notify_change(real_rel, *real_rel.parents)
     return empty(status=204)
 
 
 @bp.route("/<name:path>", methods=["MKCOL"])
 async def create_folder(request, name):
-    rel, path = _safe_relpath(name)
+    auth.ensure_write_allowed(request)
+    rel, path = _safe_relpath(name, request=request)
     if not rel.parts:
         raise BadRequest("Refusing to create root folder")
     await asyncio.to_thread(path.mkdir, parents=True, exist_ok=False)
-    watching.notify_change(rel, *rel.parents)
+    real_rel = PurePosixPath(path.relative_to(config.config.path.resolve()).as_posix())
+    watching.notify_change(real_rel, *real_rel.parents)
     return empty(status=201)
 
 
 @bp.post("/", name="post_root", strict_slashes=False)
 @bp.post("/<name:path>", name="post_path")
 async def copy_or_move(request, name=""):
+    auth.ensure_write_allowed(request)
     provided_args = set(request.args.keys())
     if not provided_args:
         raise BadRequest("No query arguments passed")
@@ -145,13 +152,13 @@ async def copy_or_move(request, name=""):
     if not mv_keys and not cp_keys:
         raise BadRequest("No keys given")
 
-    dst_rel, dst_abs = _safe_relpath(name)
+    dst_rel, dst_abs = _safe_relpath(name, request=request)
 
     dst_exists = dst_abs.exists()
     dst_is_dir = dst_exists and dst_abs.is_dir()
 
     ordered_keys = cp_keys + mv_keys
-    key_paths = _get_key_paths(set(ordered_keys))
+    key_paths = _get_key_paths(request, set(ordered_keys))
     missing = [key for key in ordered_keys if key not in key_paths]
     if missing:
         raise NotFound("Files not found", context={"missing": missing})
@@ -194,7 +201,7 @@ async def copy_or_move(request, name=""):
             for key in op_keys:
                 try:
                     src_rel = key_paths[key]
-                    src_abs = _resolve_from_relpath(src_rel)
+                    src_abs = _resolve_from_relpath(src_rel, request=request)
 
                     if op_multi:
                         if not dst_is_dir:
@@ -224,7 +231,7 @@ async def copy_or_move(request, name=""):
                             )
                         dst_item_rel = dst_rel
 
-                    dst_item_abs = _resolve_from_relpath(dst_item_rel)
+                    dst_item_abs = _resolve_from_relpath(dst_item_rel, request=request)
 
                     if op_name == "mv":
                         # A no-op rename should still return success.
@@ -263,7 +270,15 @@ async def copy_or_move(request, name=""):
 
     notify_paths = [p for p in changed if p.parts]
     if notify_paths:
-        watching.notify_change(*notify_paths)
+        real_notify_paths: list[PurePosixPath] = []
+        for p in notify_paths:
+            real_abs = _resolve_from_relpath(p, request=request)
+            real_notify_paths.append(
+                PurePosixPath(
+                    real_abs.relative_to(config.config.path.resolve()).as_posix()
+                )
+            )
+        watching.notify_change(*real_notify_paths)
 
     return json(
         {
@@ -299,7 +314,29 @@ async def dav_options(request, name=""):
 @bp.route("/", methods=["PROPFIND"], name="propfind_root", strict_slashes=False)
 @bp.route("/<name:path>", methods=["PROPFIND"], name="propfind_path")
 async def dav_propfind(request, name=""):
-    rel, path = _safe_relpath(name)
+    rel, path = _safe_relpath(name, request=request)
+    token = auth.request_share_token(request)
+    if token is not None and not rel.parts:
+        base = config.config.path.resolve()
+        entries = [_propfind_entry(PurePosixPath(), base)]
+        depth = request.headers.get("depth", "1").strip()
+        if depth == "infinity":
+            return HTTPResponse(status=403)
+        if depth == "1":
+            for root in sharefs.build_share_roots(token):
+                child_abs = (base / root.real_rel).resolve()
+                if not child_abs.exists() or not child_abs.is_relative_to(base):
+                    continue
+                with contextlib.suppress(OSError):
+                    entries.append(
+                        _propfind_entry(PurePosixPath(root.alias), child_abs)
+                    )
+        return HTTPResponse(
+            body=_build_propfind_xml(entries),
+            status=207,
+            content_type='application/xml; charset="utf-8"',
+        )
+
     if not path.exists():
         raise NotFound(f"Not found: {name}")
     depth = request.headers.get("depth", "1").strip()
@@ -316,12 +353,15 @@ async def dav_propfind(request, name=""):
 @bp.route("/", methods=["COPY"], name="copy_root", strict_slashes=False)
 @bp.route("/<name:path>", methods=["COPY"], name="copy_path")
 async def dav_copy(request, name=""):
+    auth.ensure_write_allowed(request)
     dest_header = request.headers.get("destination")
     if not dest_header:
         raise BadRequest("Missing Destination header")
     overwrite = request.headers.get("overwrite", "T").strip().upper() != "F"
-    _src_rel, src_abs = _safe_relpath(name)
-    dst_rel, dst_abs = _parse_webdav_destination(dest_header)
+    _src_rel, src_abs = _safe_relpath(name, request=request)
+    dst_rel, dst_abs = _parse_webdav_destination(dest_header, request=request)
+    if auth.request_share_token(request) is not None and not dst_rel.parts:
+        raise BadRequest("Destination cannot be virtual root")
     request.ctx._log_extra = f"→ {dst_rel}"
     if not src_abs.exists():
         raise NotFound(f"Source not found: {name}")
@@ -342,19 +382,25 @@ async def dav_copy(request, name=""):
             shutil.copy2(src_abs, dst_abs)
 
     await asyncio.to_thread(_do_copy)
-    watching.notify_change(dst_rel, *dst_rel.parents)
+    real_dst_rel = PurePosixPath(
+        dst_abs.relative_to(config.config.path.resolve()).as_posix()
+    )
+    watching.notify_change(real_dst_rel, *real_dst_rel.parents)
     return HTTPResponse(status=201 if not dst_existed else 204)
 
 
 @bp.route("/", methods=["MOVE"], name="move_root", strict_slashes=False)
 @bp.route("/<name:path>", methods=["MOVE"], name="move_path")
 async def dav_move(request, name=""):
+    auth.ensure_write_allowed(request)
     dest_header = request.headers.get("destination")
     if not dest_header:
         raise BadRequest("Missing Destination header")
     overwrite = request.headers.get("overwrite", "T").strip().upper() != "F"
-    src_rel, src_abs = _safe_relpath(name)
-    dst_rel, dst_abs = _parse_webdav_destination(dest_header)
+    _src_rel, src_abs = _safe_relpath(name, request=request)
+    dst_rel, dst_abs = _parse_webdav_destination(dest_header, request=request)
+    if auth.request_share_token(request) is not None and not dst_rel.parts:
+        raise BadRequest("Destination cannot be virtual root")
     request.ctx._log_extra = f"→ {dst_rel}"
     if not src_abs.exists():
         raise NotFound(f"Source not found: {name}")
@@ -372,7 +418,15 @@ async def dav_move(request, name=""):
         shutil.move(src_abs, dst_abs)
 
     await asyncio.to_thread(_do_move)
-    watching.notify_change(src_rel, *src_rel.parents, dst_rel, *dst_rel.parents)
+    real_src_rel = PurePosixPath(
+        src_abs.relative_to(config.config.path.resolve()).as_posix()
+    )
+    real_dst_rel = PurePosixPath(
+        dst_abs.relative_to(config.config.path.resolve()).as_posix()
+    )
+    watching.notify_change(
+        real_src_rel, *real_src_rel.parents, real_dst_rel, *real_dst_rel.parents
+    )
     return HTTPResponse(status=201 if not dst_existed else 204)
 
 
@@ -399,8 +453,15 @@ def _to_mib_int(value_bytes: int) -> int:
     return round(value_bytes / (1 << 20))
 
 
-def _safe_relpath(path: str) -> tuple[PurePosixPath, Path]:
+def _safe_relpath(path: str, *, request=None) -> tuple[PurePosixPath, Path]:
     """Resolve a user path under storage root and enforce containment."""
+    token = auth.request_share_token(request) if request is not None else None
+    if token is not None:
+        vrel, _rrel, resolved, is_root = sharefs.resolve_virtual_path(token, path)
+        if is_root:
+            return vrel, config.config.path.resolve()
+        return vrel, resolved
+
     base = config.config.path.resolve()
     try:
         sanitized = filename.sanitize(unquote(path))
@@ -413,8 +474,12 @@ def _safe_relpath(path: str) -> tuple[PurePosixPath, Path]:
     return rel, resolved
 
 
-def _resolve_from_relpath(rel: PurePosixPath) -> Path:
+def _resolve_from_relpath(rel: PurePosixPath, *, request=None) -> Path:
     """Resolve a relative path under storage root and enforce containment."""
+    token = auth.request_share_token(request) if request is not None else None
+    if token is not None:
+        return sharefs.resolve_virtual_rel_to_real(token, rel)
+
     base = config.config.path.resolve()
     resolved = (base / rel).resolve()
     if not resolved.is_relative_to(base):
@@ -423,9 +488,12 @@ def _resolve_from_relpath(rel: PurePosixPath) -> Path:
 
 
 async def _send_static_file(request, name: str, *, head_only: bool):
-    _, path = _safe_relpath(name)
+    _, path = _safe_relpath(name, request=request)
 
-    st = await asyncio.to_thread(path.stat)
+    try:
+        st = await asyncio.to_thread(path.stat)
+    except FileNotFoundError:
+        raise NotFound(f"File not found: {name}") from None
     if path.is_dir():
         raise NotFound(f"Not a file: {name}")
 
@@ -513,8 +581,12 @@ def _parse_range_header(header: str, size: int) -> tuple[int, int] | None:
     return start, size
 
 
-def _get_key_paths(wanted: set[str]) -> dict[str, PurePosixPath]:
+def _get_key_paths(request, wanted: set[str]) -> dict[str, PurePosixPath]:
     """Map file keys to their current relative filesystem paths."""
+    token = auth.request_share_token(request)
+    if token is not None:
+        return sharefs.key_paths_for_token(token, wanted)
+
     loc = PurePosixPath()
     ret: dict[str, PurePosixPath] = {}
     with watching.state.lock:
@@ -533,7 +605,9 @@ def _get_key_paths(wanted: set[str]) -> dict[str, PurePosixPath]:
 # ---------------------------------------------------------------------------
 
 
-def _parse_webdav_destination(dest_header: str) -> tuple[PurePosixPath, Path]:
+def _parse_webdav_destination(
+    dest_header: str, *, request=None
+) -> tuple[PurePosixPath, Path]:
     """Parse a WebDAV Destination header and resolve it to a storage path."""
     parsed = urlparse(dest_header)
     raw_path = parsed.path  # still percent-encoded
@@ -544,7 +618,7 @@ def _parse_webdav_destination(dest_header: str) -> tuple[PurePosixPath, Path]:
         rel_str = raw_path[len(prefix) + 1 :]
     else:
         raise BadRequest("Destination must be within /files")
-    return _safe_relpath(rel_str)
+    return _safe_relpath(rel_str, request=request)
 
 
 def _rel_to_href(rel: PurePosixPath, *, is_dir: bool) -> str:

@@ -6,8 +6,9 @@ from sanic import Blueprint, json
 from sanic.exceptions import BadRequest
 from sanic.log import logger
 
-from cista import __version__, auth, config, sso, watching
+from cista import __version__, auth, config, sharefs, sso, watching
 from cista.auth import (
+    create_share_token_handler,
     create_token_handler,
     delete_token_handler,
     list_tokens_handler,
@@ -68,15 +69,27 @@ async def watch(req, ws):
         ).decode()
     )
     uuid = token_bytes(16)
+    share_token = auth.request_share_token(req)
     try:
         q, space, root = await asyncio.get_event_loop().run_in_executor(
             req.app.ctx.threadexec, subscribe, uuid, ws
         )
         await ws.send(space)
-        await ws.send(root)
+        if share_token is None:
+            await ws.send(root)
+        else:
+            await ws.send(watching.format_root(sharefs.build_virtual_root(share_token)))
         # Send updates
         while True:
-            await ws.send(await q.get())
+            msg = await q.get()
+            if share_token is None or (
+                isinstance(msg, str) and msg.startswith('{"space"')
+            ):
+                await ws.send(msg)
+            else:
+                await ws.send(
+                    watching.format_root(sharefs.build_virtual_root(share_token))
+                )
     except RuntimeError as e:
         if str(e) == "cannot schedule new futures after shutdown":
             return  # Server shutting down, drop the WebSocket
@@ -153,3 +166,8 @@ async def create_api_token(request):
 @bp.delete("tokens/<token_id>")
 async def delete_api_token(request, token_id):
     return await delete_token_handler(request, token_id)
+
+
+@bp.post("share-tokens")
+async def create_share_token(request):
+    return await create_share_token_handler(request)

@@ -5,6 +5,7 @@ import hmac
 import re
 import secrets
 import struct
+from pathlib import PurePosixPath
 from time import time
 from unicodedata import normalize
 
@@ -15,8 +16,9 @@ from sanic import Blueprint, html, json, redirect
 from sanic.exceptions import BadRequest, Forbidden, Unauthorized
 from sanic.log import logger
 
-from cista import config, session
+from cista import config, session, sharefs
 from cista.util import pwgen
+from cista.util.filename import sanitize
 
 _LOGIN_PAGE_CSS = """\
 /* ===========================================
@@ -611,6 +613,8 @@ def _basic_auth_login(request):
                 request.ctx.session = None
                 request.ctx.username = token.username
                 request.ctx.user = user
+                request.ctx.auth_token_id = password
+                request.ctx.auth_token = token
                 user.lastSeen = int(time())
                 return user
         raise Unauthorized("Invalid token", quiet=True)
@@ -653,6 +657,9 @@ async def _token_auth_login(request, *, privileged=False):
     token = config.config.tokens.get(password)
     if not token:
         return False
+
+    request.ctx.auth_token_id = password
+    request.ctx.auth_token = token
 
     sso = _get_sso()
     if sso.paskia_enabled() and token.sso_user_id:
@@ -823,6 +830,8 @@ async def _ntlm_auth_login(request, *, privileged=False):
                     try:
                         data = await sso.check_permissions(token.sso_user_id, perm)
                         request.ctx.sso_user = data
+                        request.ctx.auth_token_id = tid
+                        request.ctx.auth_token = token
                         ctx = data.get("ctx", {}) if isinstance(data, dict) else {}
                         user_info = ctx.get("user", {}) if isinstance(ctx, dict) else {}
                         request.ctx.username = user_info.get("display_name", "")
@@ -854,6 +863,8 @@ async def _ntlm_auth_login(request, *, privileged=False):
                         request.ctx.session = None
                         request.ctx.username = token.username
                         request.ctx.user = user
+                        request.ctx.auth_token_id = tid
+                        request.ctx.auth_token = token
                         request.ctx._create_session_username = token.username
                         logger.debug(
                             "NTLM auth success for local user %s (token=%s...)",
@@ -1294,6 +1305,26 @@ def _token_belongs_to_user(token, username, sso_user_id):
     return bool(sso_user_id is not None and token.sso_user_id == sso_user_id)
 
 
+def request_token(request) -> config.Token | None:
+    token = getattr(request.ctx, "auth_token", None)
+    return token if isinstance(token, config.Token) else None
+
+
+def request_share_token(request) -> config.Token | None:
+    token = request_token(request)
+    if token is None:
+        return None
+    return token if sharefs.is_share_token(token) else None
+
+
+def ensure_write_allowed(request) -> None:
+    token = request_share_token(request)
+    if token is None:
+        return
+    if token.mode != "rw":
+        raise Forbidden("Share token is read-only", quiet=True)
+
+
 # Token management handlers (shared between /auth and /api blueprints)
 
 
@@ -1310,6 +1341,8 @@ async def list_tokens_handler(request):
                     "sso_user_id": t.sso_user_id,
                     "name": t.name,
                     "created": t.created,
+                    "kind": t.kind,
+                    "mode": t.mode,
                 }
             )
     return json({"tokens": tokens})
@@ -1358,6 +1391,9 @@ async def create_token_handler(request):
         "sso_user_id": sso_user_id or "",
         "name": name,
         "created": int(time()),
+        "kind": "api",
+        "mode": "rw",
+        "share_paths": [],
     }
     config.update_token(token, changes)
     scheme = request.scheme
@@ -1371,6 +1407,100 @@ async def create_token_handler(request):
             "username": username or "",
             "sso_user_id": sso_user_id or "",
             "name": name,
+            "kind": "api",
+            "mode": "rw",
+        }
+    )
+
+
+async def create_share_token_handler(request):
+    await verify(request)
+    current_username, current_sso_user_id = _current_user_id(request)
+    try:
+        if request.headers.content_type == "application/json":
+            paths = request.json.get("paths")
+            mode = request.json.get("mode", "ro")
+            name = request.json.get("name", "")
+        else:
+            paths = request.form.get("paths", [])
+            mode = request.form.get("mode", ["ro"])[0]
+            name = request.form.get("name", [""])[0]
+    except (KeyError, IndexError):
+        raise BadRequest("Missing fields") from None
+
+    if not isinstance(paths, list) or not paths:
+        raise BadRequest("paths must be a non-empty array")
+    if mode not in ("ro", "rw"):
+        raise BadRequest("mode must be ro or rw")
+
+    clean_paths: list[str] = []
+    seen: set[str] = set()
+    base = config.config.path.resolve()
+    for raw_path in paths:
+        if not isinstance(raw_path, str):
+            raise BadRequest("paths must contain strings")
+        try:
+            clean = sanitize(raw_path)
+        except ValueError as e:
+            raise BadRequest(f"Invalid path: {e}") from e
+        if not clean:
+            continue
+        rel = PurePosixPath(clean)
+        resolved = (base / rel).resolve()
+        if not resolved.is_relative_to(base):
+            raise BadRequest("Invalid path")
+        if not resolved.exists():
+            raise BadRequest(f"Path does not exist: {clean}")
+        key = rel.as_posix()
+        if key in seen:
+            continue
+        seen.add(key)
+        clean_paths.append(key)
+
+    if not clean_paths:
+        raise BadRequest("No valid paths selected")
+
+    sso = _get_sso()
+    username = ""
+    sso_user_id = ""
+    if sso.paskia_enabled():
+        sso_user_id = current_sso_user_id or ""
+        if not sso_user_id:
+            raise BadRequest("Could not determine SSO user")
+    else:
+        username = current_username or ""
+        if not username:
+            raise BadRequest("Could not determine user")
+        if username not in config.config.users:
+            raise BadRequest("User does not exist")
+
+    token = secrets.token_urlsafe(12)
+    changes = {
+        "key": token,
+        "username": username,
+        "sso_user_id": sso_user_id,
+        "name": name,
+        "created": int(time()),
+        "kind": "share",
+        "mode": mode,
+        "share_paths": clean_paths,
+    }
+    config.update_token(token, changes)
+
+    scheme = request.scheme
+    host = request.host or "localhost"
+    share_url = f"{scheme}://token:{token}@{host}/#/"
+    return json(
+        {
+            "id": token,
+            "key": token,
+            "url": share_url,
+            "username": username,
+            "sso_user_id": sso_user_id,
+            "name": name,
+            "kind": "share",
+            "mode": mode,
+            "paths": clean_paths,
         }
     )
 

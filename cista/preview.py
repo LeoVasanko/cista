@@ -25,7 +25,7 @@ from sanic import Blueprint, empty, raw, redirect
 from sanic.exceptions import NotFound
 from sanic.log import logger
 
-from cista import auth, config
+from cista import auth, config, sharefs
 from cista.preview_worker import PreviewRequest, PreviewResponse
 from cista.util.filename import sanitize
 
@@ -388,8 +388,16 @@ async def preview(req, path):
     maxsize = int(req.args.get("px", 1024))
     maxzoom = float(req.args.get("zoom", 2.0))
     quality = int(req.args.get("q", 60))
-    rel = PurePosixPath(sanitize(unquote(path)))
-    filepath = config.config.path / rel
+    share_token = auth.request_share_token(req)
+    if share_token is not None:
+        rel, _real_rel, filepath, is_root = sharefs.resolve_virtual_path(
+            share_token, path
+        )
+        if is_root:
+            raise NotFound from None
+    else:
+        rel = PurePosixPath(sanitize(unquote(path)))
+        filepath = config.config.path / rel
     try:
         stat = filepath.lstat()
     except FileNotFoundError:

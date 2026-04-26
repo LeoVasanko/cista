@@ -16,7 +16,7 @@ from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
 from zstandard import ZstdCompressor
 
-from cista import auth, config, fileserver, preview, session, sso, watching
+from cista import auth, config, fileserver, preview, session, sharefs, sso, watching
 from cista.api import bp
 from cista.preview import shutdown_preview_workers, start_preview_workers
 from cista.sanic_logging import (
@@ -240,25 +240,43 @@ async def favicon(req):
     return redirect("/assets/logo-ctv8tVwU.svg", status=308)
 
 
-def get_files(wanted: set) -> list[tuple[PurePosixPath, Path]]:
+def get_files(req, wanted: set) -> list[tuple[PurePosixPath, Path]]:
     loc = PurePosixPath()
     idx = 0
     ret = []
     level: int | None = None
     parent: PurePosixPath | None = None
-    with watching.state.lock:
-        root = watching.state.root
-        while idx < len(root):
-            f = root[idx]
-            loc = PurePosixPath(*loc.parts[: f.level - 1]) / f.name
-            if parent is not None and f.level <= level:
-                level = parent = None
-            if f.key in wanted:
-                level, parent = f.level, loc.parent
-            if parent is not None:
-                wanted.discard(f.key)
-                ret.append((loc.relative_to(parent), watching.rootpath / loc))
-            idx += 1
+    token = auth.request_share_token(req)
+
+    if token is None:
+        with watching.state.lock:
+            root = watching.state.root
+            while idx < len(root):
+                f = root[idx]
+                loc = PurePosixPath(*loc.parts[: f.level - 1]) / f.name
+                if parent is not None and f.level <= level:
+                    level = parent = None
+                if f.key in wanted:
+                    level, parent = f.level, loc.parent
+                if parent is not None:
+                    wanted.discard(f.key)
+                    ret.append((loc.relative_to(parent), watching.rootpath / loc))
+                idx += 1
+        return ret
+
+    root = sharefs.build_virtual_root(token)
+    while idx < len(root):
+        f = root[idx]
+        loc = PurePosixPath(*loc.parts[: f.level - 1]) / f.name
+        if parent is not None and f.level <= level:
+            level = parent = None
+        if f.key in wanted:
+            level, parent = f.level, loc.parent
+        if parent is not None:
+            wanted.discard(f.key)
+            real_path = sharefs.resolve_virtual_rel_to_real(token, loc)
+            ret.append((loc.relative_to(parent), real_path))
+        idx += 1
     return ret
 
 
@@ -268,7 +286,7 @@ async def zip_download(req, keys, zipfile, ext):
     await auth.verify(req)
 
     wanted = set(keys.split("+"))
-    files = get_files(wanted)
+    files = get_files(req, wanted)
 
     if not files:
         raise NotFound(

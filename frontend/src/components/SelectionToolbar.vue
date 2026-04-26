@@ -15,6 +15,11 @@
     </div>
     <span class="select-size">{{ selectionDisplay.size }}</span>
     <DownloadButton />
+    <button
+      class="action-button"
+      title="Copy share link (Alt-click for read/write)"
+      @click="copyShareLink"
+    >share</button>
     <SvgButton name="copy" tooltip="Copy here" @click="op('cp', dst)" />
     <SvgButton name="paste" tooltip="Move here" @click="op('mv', dst)" />
     <SvgButton name="trash" tooltip="Delete ⚠️" @click="op('rm')" />
@@ -30,6 +35,8 @@
 
 <script setup lang="ts">
 import { apiFetch } from '@/repositories/Client'
+import type { ISimpleError } from '@/repositories/Client'
+import { createShareToken } from '@/repositories/User'
 import router from '@/router'
 import { useMainStore } from '@/stores/main'
 import { formatSize } from '@/utils'
@@ -168,6 +175,35 @@ const op = async (opName: string, dst?: string) => {
     if (opName === 'rm' || opName === 'mv') {
       for (const path of paths) store.unhideDoc(path)
     }
+  }
+}
+
+const copyShareLink = async (ev: MouseEvent) => {
+  const mode: 'ro' | 'rw' = ev.altKey ? 'rw' : 'ro'
+  const sel = store.selectedFiles
+  const paths = sel.keys
+    .map(key => {
+      const doc = sel.docs[key]
+      if (!doc) return ''
+      if (doc.loc === '/' || !doc.loc) return doc.name
+      return `${doc.loc}/${doc.name}`
+    })
+    .filter(Boolean)
+
+  if (!paths.length) {
+    store.showToast('No selected files')
+    return
+  }
+
+  try {
+    const token = await createShareToken(paths, mode)
+    await navigator.clipboard.writeText(token.url)
+    store.showToast(
+      mode === 'rw' ? 'Copied read/write share link' : 'Copied share link'
+    )
+  } catch (e) {
+    const httpError = e as ISimpleError
+    store.showToast(httpError.message || 'Failed to create share link')
   }
 }
 </script>

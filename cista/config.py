@@ -51,6 +51,9 @@ class Token(msgspec.Struct, omit_defaults=True):
     sso_user_id: str = ""  # set in SSO mode
     name: str = ""
     created: int = 0
+    kind: str = "api"  # api | share
+    mode: str = "rw"  # ro | rw
+    share_paths: list[str] = []
 
 
 # Global variables - initialized during application startup
