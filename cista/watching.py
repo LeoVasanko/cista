@@ -191,7 +191,7 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
         if isfile:
             return [entry]
         # Walk all entries of the directory
-        ret: list[FileEntry] = []
+        ret: list[FileEntry] = [...]  # type: ignore[assignment]
         li = []
         for f in path.iterdir():
             if stop_event.is_set():
