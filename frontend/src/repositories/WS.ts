@@ -1,6 +1,6 @@
-import { useMainStore } from "@/stores/main"
-import { showAuthIframe, AuthCancelledError, isAuthIframeOpen } from 'paskia'
-import type { FileEntry, UpdateEntry, errorEvent } from "./Document"
+import { useMainStore } from '@/stores/main'
+import { AuthCancelledError, isAuthIframeOpen, showAuthIframe } from 'paskia'
+import type { FileEntry, UpdateEntry, errorEvent } from './Document'
 
 export const watchUrl = '/api/watch'
 
@@ -25,18 +25,22 @@ export const loadSession = () => {
     console.log(`Loaded session with ${tree.length} items cached`)
     return true
   } catch (error) {
-    console.log("Loading session failed", error)
+    console.log('Loading session failed', error)
     return false
   }
 }
 
 const saveSession = () => {
-  localStorage["cista-files"] = JSON.stringify(tree)
+  localStorage['cista-files'] = JSON.stringify(tree)
 }
 
-export const connect = (path: string, handlers: Partial<Record<keyof WebSocketEventMap, any>>) => {
+export const connect = (
+  path: string,
+  handlers: Partial<Record<keyof WebSocketEventMap, any>>
+) => {
   const webSocket = new WebSocket(new URL(path, location.origin.replace(/^http/, 'ws')))
-  for (const [event, handler] of Object.entries(handlers)) webSocket.addEventListener(event, handler)
+  for (const [event, handler] of Object.entries(handlers))
+    webSocket.addEventListener(event, handler)
   return webSocket
 }
 
@@ -51,7 +55,7 @@ async function handleWsAuthError(msg: any) {
     // Stop reconnection attempts while showing auth dialog
     awaitingAuth = true
     store.authInProgress = true
-    store.error = ''  // Clear any connection message
+    store.error = '' // Clear any connection message
     if (watchTimeout !== null) {
       clearTimeout(watchTimeout)
       watchTimeout = null
@@ -89,9 +93,9 @@ export const watchConnect = () => {
 
   wsWatch = connect(watchUrl, {
     message: handleWatchMessage,
-    close: watchReconnect,
+    close: watchReconnect
   })
-  wsWatch.addEventListener("message", event => {
+  wsWatch.addEventListener('message', event => {
     if (store.connected) return
     const msg = JSON.parse(event.data)
     if ('error' in msg) {
@@ -103,7 +107,7 @@ export const watchConnect = () => {
       }
       return
     }
-    if ("server" in msg) {
+    if ('server' in msg) {
       console.log('Connected to backend', msg)
       store.server = msg.server
       store.connected = true
@@ -141,7 +145,7 @@ const watchReconnect = (event: MessageEvent) => {
     return
   }
   if (store.connected) {
-    console.warn("Disconnected from server", event)
+    console.warn('Disconnected from server', event)
     store.connected = false
     store.error = 'Reconnecting...'
   }
@@ -150,7 +154,6 @@ const watchReconnect = (event: MessageEvent) => {
   // The server closes the websocket after errors, so we need to reopen it
   watchTimeout = setTimeout(watchConnect, reconnDelay)
 }
-
 
 const handleWatchMessage = (event: MessageEvent) => {
   const msg = JSON.parse(event.data)
@@ -192,13 +195,14 @@ function handleUpdateMessage(updateData: { update: UpdateEntry[] }) {
     if (action === 'k') {
       newtree.push(...tree.slice(oidx, oidx + arg))
       oidx += arg
-    }
-    else if (action === 'd') oidx += arg
+    } else if (action === 'd') oidx += arg
     else if (action === 'i') newtree.push(...arg)
-    else console.log("Unknown update action", action, arg)
+    else console.log('Unknown update action', action, arg)
   }
   if (oidx != tree.length)
-    throw Error(`Tree update out of sync, number of entries mismatch: got ${oidx}, expected ${tree.length}, new tree ${newtree.length}`)
+    throw Error(
+      `Tree update out of sync, number of entries mismatch: got ${oidx}, expected ${tree.length}, new tree ${newtree.length}`
+    )
   store.updateRoot(newtree)
   tree = newtree
   saveSession()

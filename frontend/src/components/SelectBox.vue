@@ -10,13 +10,12 @@
   >
 </template>
 
-<script setup lang=ts>
-import { useMainStore } from '@/stores/main'
+<script setup lang="ts">
 import type { Doc } from '@/repositories/Document'
+import { useMainStore } from '@/stores/main'
 
 const props = defineProps<{
   doc: Doc
 }>()
 const store = useMainStore()
-
 </script>

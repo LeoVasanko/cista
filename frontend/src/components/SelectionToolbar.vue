@@ -30,11 +30,11 @@
 
 <script setup lang="ts">
 import { apiFetch } from '@/repositories/Client'
-import { useMainStore } from '@/stores/main'
-import { computed, ref } from 'vue'
-import { formatSize } from '@/utils'
-import CursorTooltip from './CursorTooltip.vue'
 import router from '@/router'
+import { useMainStore } from '@/stores/main'
+import { formatSize } from '@/utils'
+import { computed, ref } from 'vue'
+import CursorTooltip from './CursorTooltip.vue'
 
 const unselectTooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)
 
@@ -50,7 +50,11 @@ const navigateTo = (path: string) => {
 }
 
 const filesUrl = (path: string) =>
-  '/files/' + path.split('/').map(part => encodeURIComponent(part)).join('/')
+  '/files/' +
+  path
+    .split('/')
+    .map(part => encodeURIComponent(part))
+    .join('/')
 
 const parseErrorMessage = async (res: Response) => {
   try {
@@ -110,7 +114,7 @@ const selectionDisplay = computed<SelectionDisplay>(() => {
       if (count === 1) {
         displayName = truncateName(names[0]!)
       } else {
-        const folderName = loc ? loc.split('/').pop()! : (store.server.name || 'Root')
+        const folderName = loc ? loc.split('/').pop()! : store.server.name || 'Root'
         displayName = `${truncateName(folderName)} (${count})`
       }
       return {
@@ -166,7 +170,6 @@ const op = async (opName: string, dst?: string) => {
     }
   }
 }
-
 </script>
 
 <style>

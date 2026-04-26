@@ -13,20 +13,20 @@
 
 <script setup lang="ts">
 import { Doc } from '@/repositories/Document'
-import { computed, ref } from 'vue'
 import { formatSize } from '@/utils'
-import SparseIndicator from './SparseIndicator.vue'
+import { computed, ref } from 'vue'
 import CursorTooltip from './CursorTooltip.vue'
+import SparseIndicator from './SparseIndicator.vue'
 
 const props = defineProps<{
-    doc: Doc
+  doc: Doc
 }>()
 
 const tooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)
 
 const sizeClass = computed(() => {
   const unit = props.doc.sizedisp.split('\u202F').slice(-1)[0]!
-  return +unit ? "bytes" : unit
+  return +unit ? 'bytes' : unit
 })
 
 const tooltipText = computed(() => {

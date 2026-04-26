@@ -31,24 +31,24 @@
   </a>
 </template>
 
-<script setup lang=ts>
-import { ref, computed } from 'vue'
-import { useMainStore } from '@/stores/main'
-import { Doc } from '@/repositories/Document'
-import { formatSize } from '@/utils'
+<script setup lang="ts">
 import MediaPreview from '@/components/MediaPreview.vue'
+import { Doc } from '@/repositories/Document'
+import { useMainStore } from '@/stores/main'
+import { formatSize } from '@/utils'
+import { computed, ref } from 'vue'
 import CursorTooltip from './CursorTooltip.vue'
 import SparseIndicator from './SparseIndicator.vue'
 
 const store = useMainStore()
 type EditingProp = {
-  rename: (name: string) => void;
-  exit: () => void;
+  rename: (name: string) => void
+  exit: () => void
 }
 
 const props = defineProps<{
-  doc: Doc,
-  editing?: EditingProp,
+  doc: Doc
+  editing?: EditingProp
 }>()
 const m = ref<typeof MediaPreview | null>(null)
 const tooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)

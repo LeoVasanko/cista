@@ -74,10 +74,18 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive, onMounted, watch } from 'vue'
-import { listUsers, createUser, updateUser, deleteUser, updatePublic, updateServerName, getServerConfig } from '@/repositories/User'
 import type { ISimpleError } from '@/repositories/Client'
+import {
+  createUser,
+  deleteUser,
+  getServerConfig,
+  listUsers,
+  updatePublic,
+  updateServerName,
+  updateUser
+} from '@/repositories/User'
 import { useMainStore } from '@/stores/main'
+import { onMounted, reactive, ref, watch } from 'vue'
 
 interface User {
   username: string
@@ -92,7 +100,7 @@ const success = ref('')
 const copyButtonText = ref('📋')
 const serverSettings = reactive({
   public: false,
-  name: '',
+  name: ''
 })
 
 let nameDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -163,10 +171,13 @@ const renameUser = async (user: User) => {
 }
 
 const resetPassword = async (user: User) => {
-  if (!confirm(`Reset password for ${user.username}? A new password will be generated.`)) return
+  if (
+    !confirm(`Reset password for ${user.username}? A new password will be generated.`)
+  )
+    return
   try {
     success.value = ''
-    const result = await updateUser(user.username, { password: "" })
+    const result = await updateUser(user.username, { password: '' })
     if (result.password) {
       success.value = `Password reset for ${user.username}. New password: ${result.password}`
     }
@@ -195,7 +206,10 @@ const copySuccess = async (isButtonClick: boolean = false) => {
       // Show "Copied!" indication on button
       copyButtonText.value = '✅ Copied!'
       // Hide password/key and button immediately after copying
-      const baseMessage = success.value.replace(/(?:Password|New password|Key): .+/, 'Copied to clipboard!')
+      const baseMessage = success.value.replace(
+        /(?:Password|New password|Key): .+/,
+        'Copied to clipboard!'
+      )
       success.value = baseMessage
       // Hide the entire message after 3 seconds
       setTimeout(() => {
@@ -258,18 +272,24 @@ onMounted(() => {
 })
 
 // Load users and config when dialog opens
-watch(() => store.dialog, (newVal) => {
-  if (newVal === 'usermgmt') {
-    loadServerConfig()
-    if (!store.server.paskia) {
-      loadUsers()
+watch(
+  () => store.dialog,
+  newVal => {
+    if (newVal === 'usermgmt') {
+      loadServerConfig()
+      if (!store.server.paskia) {
+        loadUsers()
+      }
     }
   }
-})
+)
 
-watch(() => store.server.public, (newVal) => {
-  serverSettings.public = newVal || false
-})
+watch(
+  () => store.server.public,
+  newVal => {
+    serverSettings.public = newVal || false
+  }
+)
 </script>
 
 <style scoped>

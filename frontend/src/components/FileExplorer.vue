@@ -72,14 +72,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted, nextTick } from 'vue'
-import { useMainStore } from '@/stores/main'
-import { Doc } from '@/repositories/Document'
-import FileRenameInput from './FileRenameInput.vue'
 import { apiFetch } from '@/repositories/Client'
+import { Doc } from '@/repositories/Document'
+import { useMainStore } from '@/stores/main'
 import { formatSize } from '@/utils'
-import { useRouter } from 'vue-router'
 import ContextMenu from '@imengyu/vue3-context-menu'
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  shallowRef,
+  watchEffect
+} from 'vue'
+import { useRouter } from 'vue-router'
+import FileRenameInput from './FileRenameInput.vue'
 
 const props = defineProps<{
   path: Array<string>
@@ -89,7 +97,11 @@ const store = useMainStore()
 const router = useRouter()
 
 const filesUrl = (path: string) =>
-  '/files/' + path.split('/').map(part => encodeURIComponent(part)).join('/')
+  '/files/' +
+  path
+    .split('/')
+    .map(part => encodeURIComponent(part))
+    .join('/')
 
 const parseErrorMessage = async (res: Response) => {
   try {
@@ -120,7 +132,7 @@ const rename = async (doc: Doc, newName: string) => {
 }
 defineExpose({
   newFolder() {
-    console.log("New folder")
+    console.log('New folder')
     const now = Math.floor(Date.now() / 1000)
     editing.value = new Doc({
       loc: loc.value,
@@ -129,7 +141,7 @@ defineExpose({
       dir: true,
       mtime: now,
       size: 0,
-      allocated: 0,
+      allocated: 0
     })
     store.cursor = editing.value.key
   },
@@ -146,7 +158,9 @@ defineExpose({
       store.cursor = docs[0]!.key
       // Also focus the element directly (watchEffect won't trigger if cursor unchanged)
       nextTick(() => {
-        const a = document.querySelector(`#file-${store.cursor} .name a`) as HTMLAnchorElement | null
+        const a = document.querySelector(
+          `#file-${store.cursor} .name a`
+        ) as HTMLAnchorElement | null
         if (a) a.focus()
       })
     }
@@ -164,8 +178,12 @@ defineExpose({
     }
     this.cursorMove(1, null)
   },
-  up(ev: KeyboardEvent) { this.cursorMove(-1, ev) },
-  down(ev: KeyboardEvent) { this.cursorMove(1, ev) },
+  up(ev: KeyboardEvent) {
+    this.cursorMove(-1, ev)
+  },
+  down(ev: KeyboardEvent) {
+    this.cursorMove(1, ev)
+  },
   left(ev: KeyboardEvent) {
     // Only go back if we're in a subfolder (not at root)
     if (props.path.length > 0) {
@@ -173,7 +191,9 @@ defineExpose({
     }
   },
   right(ev: KeyboardEvent) {
-    const a = document.querySelector(`#file-${store.cursor} a`) as HTMLAnchorElement | null
+    const a = document.querySelector(
+      `#file-${store.cursor} a`
+    ) as HTMLAnchorElement | null
     if (a) a.click()
   },
   cursorMove(d: number, ev: KeyboardEvent | null) {
@@ -187,8 +207,9 @@ defineExpose({
     const N = docs.length
     const mod = (a: number, b: number) => ((a % b) + b) % b
     const increment = (i: number, d: number) => mod(i + d, N + 1)
-    const index =
-      store.cursor ? docs.findIndex(doc => doc.key === store.cursor) : docs.length
+    const index = store.cursor
+      ? docs.findIndex(doc => doc.key === store.cursor)
+      : docs.length
     const moveto = increment(index, d)
     store.cursor = docs[moveto]?.key ?? ''
     const tr = store.cursor ? document.getElementById(`file-${store.cursor}`) : ''
@@ -206,8 +227,7 @@ defineExpose({
     scrolltr = tr
     if (!scrolltimer) {
       scrolltimer = setTimeout(() => {
-        if (scrolltr)
-          scrolltr.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        if (scrolltr) scrolltr.scrollIntoView({ block: 'center', behavior: 'smooth' })
         scrolltimer = null
       }, 300)
     }
@@ -219,7 +239,9 @@ defineExpose({
   }
 })
 const focusHeader = () => {
-  const el = document.querySelector('.headermain input[type="search"]') as HTMLElement | null
+  const el = document.querySelector(
+    '.headermain input[type="search"]'
+  ) as HTMLElement | null
   if (el) el.focus()
 }
 const focusBreadcrumb = () => {
@@ -250,14 +272,17 @@ const updateModified = () => {
   nowkey.value = Math.floor(Date.now() / 1000)
 }
 onMounted(() => {
-  updateModified(); modifiedTimer = setInterval(updateModified, 1000)
+  updateModified()
+  modifiedTimer = setInterval(updateModified, 1000)
   const active = document.querySelector('.cursor') as HTMLElement | null
   if (active) {
     active.scrollIntoView({ block: 'center', behavior: 'instant' })
     active.focus()
   }
 })
-onUnmounted(() => { clearInterval(modifiedTimer) })
+onUnmounted(() => {
+  clearInterval(modifiedTimer)
+})
 const mkdir = async (doc: Doc, name: string) => {
   doc.name = name
   doc.key = crypto.randomUUID()
@@ -349,12 +374,14 @@ const copyImage = async (doc: Doc) => {
     if (blob.type !== 'image/png') {
       const img = new Image()
       img.src = URL.createObjectURL(blob)
-      await new Promise(r => img.onload = r)
+      await new Promise(r => (img.onload = r))
       const canvas = document.createElement('canvas')
       canvas.width = img.naturalWidth
       canvas.height = img.naturalHeight
       canvas.getContext('2d')!.drawImage(img, 0, 0)
-      const pngBlob = await new Promise<Blob>(r => canvas.toBlob(b => r(b!), 'image/png'))
+      const pngBlob = await new Promise<Blob>(r =>
+        canvas.toBlob(b => r(b!), 'image/png')
+      )
       URL.revokeObjectURL(img.src)
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })])
     } else {
@@ -385,12 +412,17 @@ const contextMenu = (ev: MouseEvent, doc: Doc) => {
   store.cursor = doc.key
   const items = [
     { label: '📥 Download', onClick: () => downloadFile(doc) },
-    { label: '🔗 Copy Link', onClick: () => copyLink(doc) },
+    { label: '🔗 Copy Link', onClick: () => copyLink(doc) }
   ]
   if (doc.img) items.push({ label: '📋 Copy Image', onClick: () => copyImage(doc) })
   items.push(
-    { label: '✏️ Rename', onClick: () => { editing.value = doc } },
-    { label: '🗑️ Delete', onClick: () => deleteFile(doc) },
+    {
+      label: '✏️ Rename',
+      onClick: () => {
+        editing.value = doc
+      }
+    },
+    { label: '🗑️ Delete', onClick: () => deleteFile(doc) }
   )
   ContextMenu.showContextMenu({ x: ev.x, y: ev.y, items })
 }

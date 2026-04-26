@@ -25,6 +25,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "argon2-cffi>=25.1.0",
+    "aspose-words>=26.4.0",
     "av>=15.0.0",
     "blake3>=1.0.5",
     "docopt-ng>=0.9.0",
@@ -115,8 +116,57 @@ filterwarnings = [
     "ignore::DeprecationWarning",
 ]
 
+[tool.ruff]
+target-version = "py311"
+
 [tool.ruff.lint]
-extend-select = ["E402"]
+select = ["ALL"]
+ignore = [
+    "COM812", # formatter compatibility
+    "ISC001", # formatter compatibility
+    "ANN001", # legacy codebase: no full runtime annotation coverage yet
+    "ANN002", # legacy codebase: no full runtime annotation coverage yet
+    "ANN003", # legacy codebase: no full runtime annotation coverage yet
+    "ANN201", # legacy codebase: no full runtime annotation coverage yet
+    "ANN202", # legacy codebase: no full runtime annotation coverage yet
+    "ANN204", # legacy codebase: no full runtime annotation coverage yet
+    "ANN205", # legacy codebase: no full runtime annotation coverage yet
+    "ARG001", # framework and callback signatures commonly require unused args
+    "BLE001", # broad catch remains in boundary/proxy/error-handling paths
+    "C901", # legacy complexity; keep other correctness rules enabled
+    "D100", # legacy docs not yet standardized
+    "D101", # legacy docs not yet standardized
+    "D102", # legacy docs not yet standardized
+    "D103", # legacy docs not yet standardized
+    "D104", # legacy docs not yet standardized
+    "D105", # legacy docs not yet standardized
+    "D107", # legacy docs not yet standardized
+    "D200", # legacy docs not yet standardized
+    "D203", # avoid D203/D211 conflict under ALL selection
+    "D212", # legacy docs not yet standardized
+    "D213", # legacy docs not yet standardized
+    "D400", # legacy docs not yet standardized
+    "D401", # legacy docs not yet standardized
+    "D413", # legacy docs not yet standardized
+    "D415", # legacy docs not yet standardized
+    "E501", # existing long literals/log strings
+    "EM101", # exception-message style; low signal for this project
+    "EM102", # exception-message style; low signal for this project
+    "INP001", # scripts folder intentionally lacks package markers
+    "PLC0415", # lazy imports used to avoid startup/circular import issues
+    "PLR0911", # legacy complexity; keep other correctness rules enabled
+    "PLR0912", # legacy complexity; keep other correctness rules enabled
+    "PLR0913", # legacy complexity; keep other correctness rules enabled
+    "PLR0915", # legacy complexity; keep other correctness rules enabled
+    "PLR2004", # legacy comparisons use inline constants
+    "PLW0603", # module-level shared state exists in server runtime code
+    "SLF001", # cohesive modules occasionally need private-member access
+    "TRY002", # exception-class strictness too noisy on legacy handlers
+    "TRY003", # exception-message strictness too noisy on legacy handlers
+    "TRY004", # type-check strictness too noisy on legacy handlers
+    "TRY300", # stylistic try/else preference
+    "TRY301", # stylistic raise-in-try preference
+]
 isort.known-first-party = ["cista"]
 per-file-ignores."tests/*" = ["S", "ANN", "D", "INP", "PLR2004"]
 per-file-ignores."scripts/*" = ["T20"]

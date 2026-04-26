@@ -11,15 +11,15 @@
 </template>
 
 <script setup lang="ts">
-import { useMainStore } from '@/stores/main'
 import { Cog } from '@/assets/svg'
+import { useMainStore } from '@/stores/main'
 import { exists } from '@/utils/fileutil'
 
 const cog = Cog
 const store = useMainStore()
 const props = defineProps<{
-  path: string[],
-  documents: Document[],
+  path: string[]
+  documents: Document[]
 }>()
 </script>
 

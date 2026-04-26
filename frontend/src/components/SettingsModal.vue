@@ -44,10 +44,10 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref } from 'vue'
-import { changePassword } from '@/repositories/User'
 import type { ISimpleError } from '@/repositories/Client'
+import { changePassword } from '@/repositories/User'
 import { useMainStore } from '@/stores/main'
+import { reactive, ref } from 'vue'
 
 const confirmLoading = ref<boolean>(false)
 const store = useMainStore()

@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { icons, type IconName } from '@/assets/svg'
+import { type IconName, icons } from '@/assets/svg'
 import { ref } from 'vue'
 import CursorTooltip from './CursorTooltip.vue'
 

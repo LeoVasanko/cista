@@ -62,8 +62,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMainStore } from '@/stores/main'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 const store = useMainStore()
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -88,7 +88,7 @@ const formatGB = (bytes: number) => {
 const fmtSize = (bytes: number, angle: number) => {
   const s = formatGB(bytes)
   const a = Math.abs(angle % 180)
-  return (Math.min(a, 180 - a) < 15 && /^[0689]+$/.test(s)) ? `${s}.` : s
+  return Math.min(a, 180 - a) < 15 && /^[0689]+$/.test(s) ? `${s}.` : s
 }
 
 const truncateLabel = (name: string, maxLen = 10): string => {
@@ -157,7 +157,7 @@ const freeColor = computed(() => {
   if (!s.disk) return '#6c6'
   const freePct = s.free / s.disk
   if (freePct > 0.25) return '#5b5'
-  if (freePct > 0.10) return '#ff0'
+  if (freePct > 0.1) return '#ff0'
   return '#f00'
 })
 
@@ -165,23 +165,24 @@ const PIE_RADIUS = 55
 const LABEL_RADIUS = 62
 
 const getPoint = (angle: number, radius: number) => {
-  const rad = TAU * (angle - 90) / 360
+  const rad = (TAU * (angle - 90)) / 360
   return { x: pieCx + radius * Math.cos(rad), y: pieCy + radius * Math.sin(rad) }
 }
 
 const sectorInfo = computed(() => {
   const s = store.space
-  if (!s.disk) return {
-    storage: { angle: 45, pct: 0.25 },
-    free: { angle: 180, pct: 0.5 },
-    other: { angle: 270, pct: 0.25 }
-  }
+  if (!s.disk)
+    return {
+      storage: { angle: 45, pct: 0.25 },
+      free: { angle: 180, pct: 0.5 },
+      other: { angle: 270, pct: 0.25 }
+    }
 
   const storagePct = s.allocated / s.disk
   const freePct = s.free / s.disk
   const otherPct = (s.used - s.allocated) / s.disk
 
-  const storageAngle = storagePct * 180  // midpoint of storage sector
+  const storageAngle = storagePct * 180 // midpoint of storage sector
   const freeStart = storagePct * 360
   const freeAngle = freeStart + freePct * 180
   const otherStart = (storagePct + freePct) * 360
@@ -200,13 +201,19 @@ const rawAngles = computed(() => ({
   other: sectorInfo.value.other.angle
 }))
 
-const getSizeRotation = (angle: number) => angle < 180 ? angle - 90 : angle + 90
-const getSizeAnchor = (angle: number) => angle < 180 ? 'end' : 'start'
+const getSizeRotation = (angle: number) => (angle < 180 ? angle - 90 : angle + 90)
+const getSizeAnchor = (angle: number) => (angle < 180 ? 'end' : 'start')
 
 const INNER_LABEL_RADIUS = PIE_RADIUS * 0.95
-const storageInnerPos = computed(() => getPoint(sectorInfo.value.storage.angle, INNER_LABEL_RADIUS))
-const freeInnerPos = computed(() => getPoint(sectorInfo.value.free.angle, INNER_LABEL_RADIUS))
-const otherInnerPos = computed(() => getPoint(sectorInfo.value.other.angle, INNER_LABEL_RADIUS))
+const storageInnerPos = computed(() =>
+  getPoint(sectorInfo.value.storage.angle, INNER_LABEL_RADIUS)
+)
+const freeInnerPos = computed(() =>
+  getPoint(sectorInfo.value.free.angle, INNER_LABEL_RADIUS)
+)
+const otherInnerPos = computed(() =>
+  getPoint(sectorInfo.value.other.angle, INNER_LABEL_RADIUS)
+)
 
 // Collision avoidance for curved name labels
 const labelLengths = computed(() => ({
@@ -269,11 +276,17 @@ const createArcPath = (centerAngle: number, id: string, labelLen: number) => {
   }
 }
 
-const storageLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.storage!, 'storage', storageName.value.length))
-const freeLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.free!, 'free', 4))
-const otherLabelPath = computed(() => createArcPath(adjustedLabelAngles.value.other!, 'other', 5))
+const storageLabelPath = computed(() =>
+  createArcPath(adjustedLabelAngles.value.storage!, 'storage', storageName.value.length)
+)
+const freeLabelPath = computed(() =>
+  createArcPath(adjustedLabelAngles.value.free!, 'free', 4)
+)
+const otherLabelPath = computed(() =>
+  createArcPath(adjustedLabelAngles.value.other!, 'other', 5)
+)
 
-const handleClick = () => isExpanded.value ? collapse() : expand()
+const handleClick = () => (isExpanded.value ? collapse() : expand())
 
 const applyAnimState = (t: number, opacity: number) => {
   const widget = widgetRef.value
@@ -296,9 +309,9 @@ const animate = (duration: number, expanding: boolean, onComplete?: () => void) 
   const tick = (now: number) => {
     const elapsed = now - startTime
     const progress = Math.min(elapsed / duration, 1)
-    const eased = 1 - Math.pow(1 - progress, 3)  // easeOutCubic
+    const eased = 1 - Math.pow(1 - progress, 3) // easeOutCubic
     const t = expanding ? eased : 1 - eased
-    applyAnimState(t, t)  // opacity follows position
+    applyAnimState(t, t) // opacity follows position
     if (progress < 1) {
       animationFrame = requestAnimationFrame(tick)
     } else {

@@ -16,7 +16,11 @@ export async function logoutUser() {
   return data
 }
 
-export async function changePassword(username: string, passwordChange: string, password: string) {
+export async function changePassword(
+  username: string,
+  passwordChange: string,
+  password: string
+) {
   const data = await Client.post(url_password, {
     username,
     passwordChange,
@@ -32,7 +36,11 @@ export async function listUsers() {
   return data
 }
 
-export async function createUser(username: string, password?: string, privileged?: boolean) {
+export async function createUser(
+  username: string,
+  password?: string,
+  privileged?: boolean
+) {
   const data = await Client.post(url_users, {
     username,
     password,
@@ -41,7 +49,10 @@ export async function createUser(username: string, password?: string, privileged
   return data
 }
 
-export async function updateUser(username: string, changes: { password?: string, privileged?: boolean }) {
+export async function updateUser(
+  username: string,
+  changes: { password?: string; privileged?: boolean }
+) {
   const data = await Client.put(`${url_users}/${username}`, changes)
   return data
 }
@@ -63,7 +74,7 @@ export async function updateServerName(name: string) {
 
 export async function getServerConfig() {
   const data = await Client.get('/api/config')
-  return data as { name: string, public: boolean }
+  return data as { name: string; public: boolean }
 }
 
 export const url_tokens = '/api/tokens'

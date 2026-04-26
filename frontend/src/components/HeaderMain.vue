@@ -26,13 +26,13 @@
 </template>
 
 <script setup lang="ts">
+import { resumeWatching } from '@/repositories/WS'
+import router from '@/router'
 import { useMainStore } from '@/stores/main'
 import { useSsoAuthStore } from '@/stores/ssoAuth'
-import { ref } from 'vue'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import { showAuthIframe } from 'paskia'
-import { resumeWatching } from '@/repositories/WS'
-import router from '@/router';
+import { ref } from 'vue'
 import DiskSpace from './DiskSpace.vue'
 
 const store = useMainStore()
@@ -78,7 +78,7 @@ const updateSearch = (ev: Event) => {
     pendingRouteUpdate = null
     let p = loc
     p = p ? `/${p}` : ''
-    const url = q ? `${p}//${q}` : (p || '/')
+    const url = q ? `${p}//${q}` : p || '/'
     const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
     // Use replace to avoid building up history for each keystroke
     router.replace(u)
@@ -96,45 +96,66 @@ const settingsMenu = (e: Event) => {
   if (ssoStore.isExternalAuth && store.user.isLoggedIn) {
     items.push({
       label: '👤 ' + (store.user.username || 'User Account'),
-      onClick: () => { window.location.href = '/auth/' }
+      onClick: () => {
+        window.location.href = '/auth/'
+      }
     })
   }
 
   // Only show password change for non-SSO users
   if (!ssoStore.isExternalAuth && store.user.isLoggedIn) {
-    items.push({ label: '🔑 Change Password', onClick: () => { store.dialog = 'settings' }})
+    items.push({
+      label: '🔑 Change Password',
+      onClick: () => {
+        store.dialog = 'settings'
+      }
+    })
   }
 
   if (store.user.isLoggedIn) {
-    items.push({ label: '🔑 API Tokens', onClick: () => { store.dialog = 'tokens' }})
+    items.push({
+      label: '🔑 API Tokens',
+      onClick: () => {
+        store.dialog = 'tokens'
+      }
+    })
   }
 
   if (store.user.privileged) {
-    items.push({ label: '⚙️ Admin Settings', onClick: () => { store.dialog = 'usermgmt' }})
+    items.push({
+      label: '⚙️ Admin Settings',
+      onClick: () => {
+        store.dialog = 'usermgmt'
+      }
+    })
   }
 
   if (store.user.isLoggedIn) {
     items.push({ label: '🚪 Logout', onClick: () => store.logout() })
   } else if (store.server.public) {
     // Show login option only in public mode (non-public modes trigger auth automatically)
-    items.push({ label: '🔐 Login', onClick: async () => {
-      try {
-        await showAuthIframe('/auth/restricted/#theme=light')
-        resumeWatching()
-      } catch (e) {
-        console.log('Login cancelled')
+    items.push({
+      label: '🔐 Login',
+      onClick: async () => {
+        try {
+          await showAuthIframe('/auth/restricted/#theme=light')
+          resumeWatching()
+        } catch (e) {
+          console.log('Login cancelled')
+        }
       }
-    }})
+    })
   }
   ContextMenu.showContextMenu({
     // @ts-ignore
-    x: e.target.getBoundingClientRect().right, y: e.target.getBoundingClientRect().bottom,
-    items,
+    x: e.target.getBoundingClientRect().right,
+    y: e.target.getBoundingClientRect().bottom,
+    items
   })
 }
 defineExpose({
   toggleSearchInput,
-  clearSearch,
+  clearSearch
 })
 </script>
 

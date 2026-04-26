@@ -9,13 +9,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted, nextTick } from 'vue'
-import { useMainStore } from '@/stores/main'
-import { Doc } from '@/repositories/Document'
 import { apiFetch } from '@/repositories/Client'
-import { useRouter } from 'vue-router'
-import ContextMenu from '@imengyu/vue3-context-menu'
+import { Doc } from '@/repositories/Document'
+import { useMainStore } from '@/stores/main'
 import type { SortOrder } from '@/utils/docsort'
+import ContextMenu from '@imengyu/vue3-context-menu'
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  shallowRef,
+  watchEffect
+} from 'vue'
+import { useRouter } from 'vue-router'
 
 const props = defineProps<{
   path: Array<string>
@@ -25,7 +33,11 @@ const store = useMainStore()
 const router = useRouter()
 
 const filesUrl = (path: string) =>
-  '/files/' + path.split('/').map(part => encodeURIComponent(part)).join('/')
+  '/files/' +
+  path
+    .split('/')
+    .map(part => encodeURIComponent(part))
+    .join('/')
 
 const parseErrorMessage = async (res: Response) => {
   try {
@@ -38,7 +50,9 @@ const parseErrorMessage = async (res: Response) => {
 
 // File rename
 const editing = shallowRef<Doc | null>(null)
-const exit = () => { editing.value = null }
+const exit = () => {
+  editing.value = null
+}
 const rename = async (doc: Doc, newName: string) => {
   const oldName = doc.name
   doc.name = newName // We should get an update from watch but this is quicker
@@ -59,7 +73,9 @@ const gallery = ref<HTMLElement>()
 const columnCount = ref(1)
 const updateColumns = () => {
   if (!gallery.value) return
-  columnCount.value = getComputedStyle(gallery.value).gridTemplateColumns.split(' ').length
+  columnCount.value = getComputedStyle(gallery.value).gridTemplateColumns.split(
+    ' '
+  ).length
 }
 const columns = computed(() => columnCount.value)
 defineExpose({
@@ -72,7 +88,7 @@ defineExpose({
       dir: true,
       mtime: now,
       size: 0,
-      allocated: 0,
+      allocated: 0
     })
     store.cursor = editing.value.key
   },
@@ -93,7 +109,9 @@ defineExpose({
       store.cursor = docs[0]!.key
       // Also focus the element directly (watchEffect won't trigger if cursor unchanged)
       nextTick(() => {
-        const a = document.querySelector(`#file-${store.cursor}`) as HTMLAnchorElement | null
+        const a = document.querySelector(
+          `#file-${store.cursor}`
+        ) as HTMLAnchorElement | null
         if (a) a.focus()
       })
     }
@@ -111,10 +129,18 @@ defineExpose({
     }
     this.cursorMove(1, null)
   },
-  up(ev: KeyboardEvent) { this.cursorMove(-columns.value, ev) },
-  down(ev: KeyboardEvent) { this.cursorMove(columns.value, ev) },
-  left(ev: KeyboardEvent) { this.cursorMove(-1, ev) },
-  right(ev: KeyboardEvent) { this.cursorMove(1, ev) },
+  up(ev: KeyboardEvent) {
+    this.cursorMove(-columns.value, ev)
+  },
+  down(ev: KeyboardEvent) {
+    this.cursorMove(columns.value, ev)
+  },
+  left(ev: KeyboardEvent) {
+    this.cursorMove(-1, ev)
+  },
+  right(ev: KeyboardEvent) {
+    this.cursorMove(1, ev)
+  },
   cursorMove(d: number, ev: KeyboardEvent | null) {
     const select = !!ev?.shiftKey
     // Move cursor up or down (keyboard navigation)
@@ -126,11 +152,10 @@ defineExpose({
     const N = docs.length
     const mod = (a: number, b: number) => ((a % b) + b) % b
     const increment = (i: number, d: number) => mod(i + d, N + 1)
-    const index =
-      store.cursor ? docs.findIndex(doc => doc.key === store.cursor) : N
+    const index = store.cursor ? docs.findIndex(doc => doc.key === store.cursor) : N
     // Stop navigation sideways away from the grid (only with up/down)
-    if (ev && index === 0 && ev.key === "ArrowLeft") return
-    if (ev && index === N - 1 && ev.key === "ArrowRight") return
+    if (ev && index === 0 && ev.key === 'ArrowLeft') return
+    if (ev && index === N - 1 && ev.key === 'ArrowRight') return
     // Calculate new position
     let moveto
     if (index === N) moveto = d > 0 ? 0 : N - 1
@@ -155,8 +180,7 @@ defineExpose({
     scrolltr = tr
     if (!scrolltimer) {
       scrolltimer = setTimeout(() => {
-        if (scrolltr)
-          scrolltr.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        if (scrolltr) scrolltr.scrollIntoView({ block: 'center', behavior: 'smooth' })
         scrolltimer = null
       }, 300)
     }
@@ -168,7 +192,9 @@ defineExpose({
   }
 })
 const focusHeader = () => {
-  const el = document.querySelector('.headermain input[type="search"]') as HTMLElement | null
+  const el = document.querySelector(
+    '.headermain input[type="search"]'
+  ) as HTMLElement | null
   if (el) el.focus()
 }
 const focusBreadcrumb = () => {
@@ -181,8 +207,13 @@ watchEffect(() => {
   if (store.cursor && store.cursor !== editing.value?.key) editing.value = null
   if (editing.value) store.cursor = editing.value.key
   if (store.cursor) {
-    const a = document.querySelector(`#file-${store.cursor}`) as HTMLAnchorElement | null
-    if (a) { a.focus(); a.scrollIntoView({ block: 'center', behavior: 'smooth' }) }
+    const a = document.querySelector(
+      `#file-${store.cursor}`
+    ) as HTMLAnchorElement | null
+    if (a) {
+      a.focus()
+      a.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
   }
 })
 watchEffect(() => {
@@ -288,12 +319,14 @@ const copyImage = async (doc: Doc) => {
     if (blob.type !== 'image/png') {
       const img = new Image()
       img.src = URL.createObjectURL(blob)
-      await new Promise(r => img.onload = r)
+      await new Promise(r => (img.onload = r))
       const canvas = document.createElement('canvas')
       canvas.width = img.naturalWidth
       canvas.height = img.naturalHeight
       canvas.getContext('2d')!.drawImage(img, 0, 0)
-      const pngBlob = await new Promise<Blob>(r => canvas.toBlob(b => r(b!), 'image/png'))
+      const pngBlob = await new Promise<Blob>(r =>
+        canvas.toBlob(b => r(b!), 'image/png')
+      )
       URL.revokeObjectURL(img.src)
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })])
     } else {
@@ -324,12 +357,17 @@ const contextMenu = (ev: MouseEvent, doc: Doc) => {
   store.cursor = doc.key
   const items = [
     { label: '📥 Download', onClick: () => downloadFile(doc) },
-    { label: '🔗 Copy Link', onClick: () => copyLink(doc) },
+    { label: '🔗 Copy Link', onClick: () => copyLink(doc) }
   ]
   if (doc.img) items.push({ label: '📋 Copy Image', onClick: () => copyImage(doc) })
   items.push(
-    { label: '✏️ Rename', onClick: () => { editing.value = doc } },
-    { label: '🗑️ Delete', onClick: () => deleteFile(doc) },
+    {
+      label: '✏️ Rename',
+      onClick: () => {
+        editing.value = doc
+      }
+    },
+    { label: '🗑️ Delete', onClick: () => deleteFile(doc) }
   )
   ContextMenu.showContextMenu({ x: ev.x, y: ev.y, items })
 }

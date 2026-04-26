@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed } from 'vue'
 
 defineEmits(['cancel'])
 
@@ -38,16 +38,17 @@ const props = defineProps<{
   }
 }>()
 
-const percent = computed(() => props.status.xfer / props.status.total * 100)
+const percent = computed(() => (props.status.xfer / props.status.total) * 100)
 const speed = computed(() => {
   let s = props.status.statbytes / props.status.statdur / 1e3
   const tsince = (Date.now() - props.status.tlast) / 1e3
-  if (tsince > 5 / s) return 0  // Less than fifth of previous speed => stalled
-  if (tsince > 1 / s) return 1 / tsince  // Next block is late or not coming, decay
-  return s  // "Current speed"
+  if (tsince > 5 / s) return 0 // Less than fifth of previous speed => stalled
+  if (tsince > 1 / s) return 1 / tsince // Next block is late or not coming, decay
+  return s // "Current speed"
 })
-const speeddisp = computed(() => speed.value ? speed.value.toFixed(speed.value < 10 ? 1 : 0) + '\u202FMB/s': 'stalled')
-
+const speeddisp = computed(() =>
+  speed.value ? speed.value.toFixed(speed.value < 10 ? 1 : 0) + '\u202FMB/s' : 'stalled'
+)
 </script>
 
 <style scoped>

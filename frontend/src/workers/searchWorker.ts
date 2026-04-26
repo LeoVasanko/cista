@@ -37,14 +37,14 @@ interface ResultMessage {
 }
 
 // Worker state
-let recentDocuments: WorkerDoc[] = []  // Sorted by mtime descending
+let recentDocuments: WorkerDoc[] = [] // Sorted by mtime descending
 let currentSearchId = 0
 
 // Search result cache - cleared when documents change
 interface CacheEntry {
-  query: string         // Normalized query string
-  results: WorkerDoc[]  // Matched results (up to limit)
-  complete: boolean     // True if search scanned all documents
+  query: string // Normalized query string
+  results: WorkerDoc[] // Matched results (up to limit)
+  complete: boolean // True if search scanned all documents
 }
 const searchCache: CacheEntry[] = []
 const MAX_CACHE_SIZE = 10
@@ -53,11 +53,21 @@ const RESULT_LIMIT = 100
 // Normalize string for search (remove diacritics, lowercase)
 // Haystack adds ^ and $ markers to allow matching start/end of name
 function normalizeHaystack(str: string): string {
-  return '^' + str.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase() + '$'
+  return (
+    '^' +
+    str
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase() +
+    '$'
+  )
 }
 
 function normalizeQuery(str: string): string {
-  return str.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  return str
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
 }
 
 // Test if document matches search query
@@ -143,8 +153,12 @@ async function performSearch(rawQuery: string, loc: string, searchId: number) {
 
   // Slow path: scan all documents
   const batchSize = 500
-  for (let i = 0; i < recentDocuments.length && results.length < RESULT_LIMIT; i += batchSize) {
-    if (currentSearchId !== searchId) return  // Superseded
+  for (
+    let i = 0;
+    i < recentDocuments.length && results.length < RESULT_LIMIT;
+    i += batchSize
+  ) {
+    if (currentSearchId !== searchId) return // Superseded
 
     // Process batch
     const end = Math.min(i + batchSize, recentDocuments.length)
@@ -175,7 +189,13 @@ async function performSearch(rawQuery: string, loc: string, searchId: number) {
 }
 
 // Post results to main thread
-function postResults(docs: WorkerDoc[], query: string, loc: string, id: number, done: boolean) {
+function postResults(
+  docs: WorkerDoc[],
+  query: string,
+  loc: string,
+  id: number,
+  done: boolean
+) {
   const sorted = sortResults(docs, query, loc)
   postMessage({
     type: 'results',
@@ -188,20 +208,21 @@ function postResults(docs: WorkerDoc[], query: string, loc: string, id: number, 
 // Sort results by relevance
 function sortResults(docs: WorkerDoc[], query: string, loc: string): WorkerDoc[] {
   const locsub = loc + '/'
-  return [...docs].sort((a, b) => (
-    // Current folder first
-    Number(b.loc === loc) - Number(a.loc === loc) ||
-    // Then subfolders
-    Number(b.loc.startsWith(locsub)) - Number(a.loc.startsWith(locsub)) ||
-    // Then by location
-    collator.compare(a.loc, b.loc) ||
-    // Folders before files
-    Number(b.dir) - Number(a.dir) ||
-    // Exact name match first
-    Number(b.name.includes(query)) - Number(a.name.includes(query)) ||
-    // Finally by name
-    collator.compare(a.name, b.name)
-  ))
+  return [...docs].sort(
+    (a, b) =>
+      // Current folder first
+      Number(b.loc === loc) - Number(a.loc === loc) ||
+      // Then subfolders
+      Number(b.loc.startsWith(locsub)) - Number(a.loc.startsWith(locsub)) ||
+      // Then by location
+      collator.compare(a.loc, b.loc) ||
+      // Folders before files
+      Number(b.dir) - Number(a.dir) ||
+      // Exact name match first
+      Number(b.name.includes(query)) - Number(a.name.includes(query)) ||
+      // Finally by name
+      collator.compare(a.name, b.name)
+  )
 }
 
 // Handle incoming messages
@@ -220,7 +241,12 @@ self.onmessage = async (e: MessageEvent<IncomingMessage>) => {
       await performSearch(msg.query, msg.loc, msg.id)
     } else {
       // Empty query - no results needed
-      postMessage({ type: 'results', docs: [], id: msg.id, done: true } as ResultMessage)
+      postMessage({
+        type: 'results',
+        docs: [],
+        id: msg.id,
+        done: true
+      } as ResultMessage)
     }
   }
 }

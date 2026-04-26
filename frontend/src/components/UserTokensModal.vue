@@ -67,10 +67,10 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, nextTick } from 'vue'
-import { listTokens, createToken, deleteToken } from '@/repositories/User'
 import type { ISimpleError } from '@/repositories/Client'
+import { createToken, deleteToken, listTokens } from '@/repositories/User'
 import { useMainStore } from '@/stores/main'
+import { nextTick, ref, watch } from 'vue'
 
 interface Token {
   id: string
@@ -145,7 +145,7 @@ const submitCreate = async () => {
     if (result.url) {
       createdToken.value = {
         ...(result as CreatedToken),
-        url: ensureFilesBaseUrl((result as CreatedToken).url),
+        url: ensureFilesBaseUrl((result as CreatedToken).url)
       }
       mode.value = 'created'
     }
@@ -188,12 +188,15 @@ const formatDate = (ts: number) => {
 }
 
 // Load tokens when dialog opens
-watch(() => store.dialog, (newVal) => {
-  if (newVal === 'tokens') {
-    resetCreate()
-    loadTokens()
+watch(
+  () => store.dialog,
+  newVal => {
+    if (newVal === 'tokens') {
+      resetCreate()
+      loadTokens()
+    }
   }
-})
+)
 </script>
 
 <style scoped>

@@ -13,9 +13,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watchEffect, nextTick } from 'vue'
 import { useMainStore } from '@/stores/main'
 import { holdGlobalBackdrop, releaseGlobalBackdrop } from 'paskia'
+import { nextTick, ref, watchEffect } from 'vue'
 
 const overlay = ref<HTMLDivElement | null>(null)
 const dialog = ref<HTMLDivElement | null>(null)
@@ -27,9 +27,9 @@ const close = () => {
 }
 
 const props = defineProps<{
-    title: string,
-    name: typeof store.dialog,
-  }>()
+  title: string
+  name: typeof store.dialog
+}>()
 
 const show = () => {
   store.dialog = props.name

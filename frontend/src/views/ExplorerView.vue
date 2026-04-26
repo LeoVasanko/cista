@@ -18,12 +18,12 @@
 </template>
 
 <script setup lang="ts">
-import { watchEffect, ref, computed, watch } from 'vue'
-import { useMainStore } from '@/stores/main'
+import FileExplorer from '@/components/FileExplorer.vue'
 import { getDocuments } from '@/stores/documentStore'
+import { useMainStore } from '@/stores/main'
 import { collator } from '@/utils'
 import { sorted, sortedGrouped } from '@/utils/docsort'
-import FileExplorer from '@/components/FileExplorer.vue'
+import { computed, ref, watch, watchEffect } from 'vue'
 
 const store = useMainStore()
 const fileExplorer = ref()
@@ -40,7 +40,7 @@ const folderPath = computed(() => props.path.join('/'))
 watch(
   () => [props.query, props.path.join('/')] as const,
   ([query, loc]) => {
-    if (store.query === query) return  // Already searching this query
+    if (store.query === query) return // Already searching this query
     store.search(query, loc)
   },
   { immediate: true }
@@ -55,9 +55,14 @@ const documents = computed(() => {
     // Access docVersion to make this reactive to document changes
     void store.docVersion
     const hidden = store.hiddenPaths
-    const docs = getDocuments().filter(doc => doc.loc === loc && !hidden.has(doc.loc ? `${doc.loc}/${doc.name}` : doc.name))
+    const docs = getDocuments().filter(
+      doc =>
+        doc.loc === loc && !hidden.has(doc.loc ? `${doc.loc}/${doc.name}` : doc.name)
+    )
     // Overlay ghosts for this location (excluding hidden ones)
-    const ghosts = store.ghosts.filter(g => g.loc === loc && !hidden.has(g.loc ? `${g.loc}/${g.name}` : g.name))
+    const ghosts = store.ghosts.filter(
+      g => g.loc === loc && !hidden.has(g.loc ? `${g.loc}/${g.name}` : g.name)
+    )
     // Merge: ghosts that don't conflict with real docs
     const realNames = new Set(docs.map(d => d.name))
     const merged = [...docs, ...ghosts.filter(g => !realNames.has(g.name))]
@@ -66,7 +71,9 @@ const documents = computed(() => {
 
   // Search results from worker (also filter hidden)
   const hidden = store.hiddenPaths
-  const docs = store.searchResults.filter(doc => !hidden.has(doc.loc ? `${doc.loc}/${doc.name}` : doc.name))
+  const docs = store.searchResults.filter(
+    doc => !hidden.has(doc.loc ? `${doc.loc}/${doc.name}` : doc.name)
+  )
 
   // Custom sort override in effect? Use grouped sorting to keep folders together
   const order = store.prefs.sortFiltered
@@ -81,11 +88,15 @@ watchEffect(() => {
 })
 
 // Only auto-switch gallery mode when entering a new folder or on initial file list load
-watch([() => props.path.join('/'), () => store.documentCount], ([path, len], [oldPath, oldLen]) => {
-  // React to path change or initial document load (0 → non-zero)
-  if (path === oldPath && oldLen !== undefined && oldLen > 0) return
-  store.prefs.gallery = documents.value.some(d => d.previewable)
-}, { immediate: true })
+watch(
+  [() => props.path.join('/'), () => store.documentCount],
+  ([path, len], [oldPath, oldLen]) => {
+    // React to path change or initial document load (0 → non-zero)
+    if (path === oldPath && oldLen !== undefined && oldLen > 0) return
+    store.prefs.gallery = documents.value.some(d => d.previewable)
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>

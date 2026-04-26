@@ -17,15 +17,15 @@ import { computed, ref } from 'vue'
 import CursorTooltip from './CursorTooltip.vue'
 
 const props = defineProps<{
-    doc: Doc
-    now: number
+  doc: Doc
+  now: number
 }>()
 
 const tooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)
 
 // Reference props.now to trigger reactivity when time updates
 const modified = computed(() => {
-  props.now  // trigger reactivity
+  props.now // trigger reactivity
   return formatUnixDate(props.doc.mtime)
 })
 

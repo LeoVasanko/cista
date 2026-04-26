@@ -1,7 +1,7 @@
+import { clearTree } from '@/repositories/WS'
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
 import { useMainStore } from './main'
-import { clearTree } from '@/repositories/WS'
 
 export const useSsoAuthStore = defineStore('ssoAuth', () => {
   const isExternalAuth = computed(() => {

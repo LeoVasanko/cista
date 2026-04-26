@@ -1,6 +1,7 @@
 .*
 *.lock
 !.gitignore
+!.pre-commit-config.yaml
 __pycache__/
 *.egg-info/
 /cista/_version.py

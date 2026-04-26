@@ -13,7 +13,7 @@
 
 <script setup lang="ts">
 import { Doc } from '@/repositories/Document'
-import { ref, onMounted, nextTick } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 
 const input = ref<HTMLInputElement | null>(null)
 const name = ref('')

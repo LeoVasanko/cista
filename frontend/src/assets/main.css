@@ -24,7 +24,7 @@
     --header-color: #ccc;
     --input-background: var(--soft-color);
     --input-color: #ddd;
-    }
+  }
 }
 @media screen and (max-width: 600px) {
   .size,
@@ -50,8 +50,12 @@
     display: flex;
     justify-content: space-between;
   }
-  header .headermain { order: 1; }
-  header .breadcrumb { align-self: stretch; }
+  header .headermain {
+    order: 1;
+  }
+  header .breadcrumb {
+    align-self: stretch;
+  }
 }
 @media print {
   :root {
@@ -74,7 +78,7 @@
     max-width: none !important;
   }
   .breadcrumb > a::after {
-    content: '/';
+    content: "/";
   }
   .breadcrumb svg {
     fill: black !important;
@@ -101,7 +105,8 @@
   video::-webkit-media-controls {
     display: none;
   }
-  tr, figure {
+  tr,
+  figure {
     page-break-inside: avoid;
   }
   .selection {
@@ -134,7 +139,7 @@ main {
 body {
   background-color: var(--primary-background);
   font-size: 1rem;
-  font-family: 'Roboto';
+  font-family: "Roboto";
   color: var(--primary-color);
   margin: 0;
   /* Prevent any scrolling on body */
@@ -145,7 +150,7 @@ body {
 }
 tbody .size,
 tbody .modified {
-  font-family: 'Roboto Mono';
+  font-family: "Roboto Mono";
 }
 header {
   flex: 0 0 auto;
@@ -209,9 +214,13 @@ header nav.headermain {
   position: relative;
   z-index: 100;
 }
-.spacer { flex-grow: 1 }
-.smallgap { flex-shrink: 1; width: 2em }
-
+.spacer {
+  flex-grow: 1;
+}
+.smallgap {
+  flex-shrink: 1;
+  width: 2em;
+}
 
 .error-message {
   padding: .5em;

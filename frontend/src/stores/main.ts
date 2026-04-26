@@ -1,11 +1,11 @@
-import type { FileEntry, FUID, SelectedItems } from '@/repositories/Document'
+import type { FUID, FileEntry, SelectedItems } from '@/repositories/Document'
 import { Doc } from '@/repositories/Document'
-import { defineStore, type StateTree } from 'pinia'
+import { resumeWatching, watchConnect } from '@/repositories/WS'
 import { collator } from '@/utils'
-import { watchConnect, resumeWatching } from '@/repositories/WS'
-import { sorted, type SortOrder } from '@/utils/docsort'
+import { type SortOrder, sorted } from '@/utils/docsort'
 import SearchWorker from '@/workers/searchWorker?worker'
-import { getDocuments, setDocuments, documentRef } from './documentStore'
+import { type StateTree, defineStore } from 'pinia'
+import { documentRef, getDocuments, setDocuments } from './documentStore'
 
 // Singleton search worker instance
 let searchWorker: Worker | null = null
@@ -19,8 +19,8 @@ function getSearchWorker(): Worker {
   if (!searchWorker) {
     searchWorker = new SearchWorker()
     // Set up message handler once
-    searchWorker.onmessage = (e) => {
-      if (!searchStore || e.data.id !== searchId) return  // Stale result
+    searchWorker.onmessage = e => {
+      if (!searchStore || e.data.id !== searchId) return // Stale result
 
       // Convert plain data back to Doc instances
       const docs = e.data.docs.map((d: any) => new Doc(d))
@@ -34,7 +34,7 @@ function getSearchWorker(): Worker {
       // Throttle rapid intermediate updates to reduce UI flicker
       const now = performance.now()
       if (!e.data.done && now - lastResultUpdate < 50) {
-        return  // Skip intermediate update if too recent
+        return // Skip intermediate update if too recent
       }
       lastResultUpdate = now
 
@@ -73,13 +73,13 @@ export const useMainStore = defineStore('main', {
     searchLoading: false,
     _searchRouteTimer: null as ReturnType<typeof setTimeout> | null,
     fileExplorer: null as any,
-    error: '' as string,  // Permanent status message (e.g., "Reconnecting...")
-    toast: '' as string,  // Temporary toast (auto-dismisses)
+    error: '' as string, // Permanent status message (e.g., "Reconnecting...")
+    toast: '' as string, // Temporary toast (auto-dismisses)
     toastTimeout: null as ReturnType<typeof setTimeout> | null,
     connected: false,
     authInProgress: false,
     cursor: '' as string,
-    server: {} as Record<string, any> & { public?: boolean, paskia?: boolean },
+    server: {} as Record<string, any> & { public?: boolean; paskia?: boolean },
     dialog: '' as '' | 'settings' | 'usermgmt' | 'accessdenied' | 'tokens',
     uprogress: {} as any,
     dprogress: {} as any,
@@ -87,19 +87,19 @@ export const useMainStore = defineStore('main', {
       gallery: false,
       sortListing: '' as SortOrder,
       sortFiltered: '' as SortOrder,
-      searchHotkey: '/',  // Character shown for search hotkey (Slash key)
+      searchHotkey: '/' // Character shown for search hotkey (Slash key)
     },
     user: {
       username: '' as string,
       privileged: false as boolean,
-      isLoggedIn: false as boolean,
+      isLoggedIn: false as boolean
     },
     space: {
       disk: 0,
       free: 0,
       used: 0,
       storage: 0,
-      allocated: 0,
+      allocated: 0
     }
   }),
   persist: {
@@ -114,7 +114,7 @@ export const useMainStore = defineStore('main', {
         tree.selected = Array.from(tree.selected)
         return JSON.stringify(tree)
       }
-    },
+    }
   },
   actions: {
     updateRoot(root: FileEntry[]) {
@@ -122,22 +122,26 @@ export const useMainStore = defineStore('main', {
       let loc = [] as string[]
       for (const [level, name, key, mtime, size, allocated, isfile] of root) {
         loc = loc.slice(0, level - 1)
-        docs.push(new Doc({
-          name,
-          loc: level ? loc.join('/') : '/',
-          key,
-          size,
-          allocated,
-          mtime,
-          dir: !isfile,
-        }))
+        docs.push(
+          new Doc({
+            name,
+            loc: level ? loc.join('/') : '/',
+            key,
+            size,
+            allocated,
+            mtime,
+            dir: !isfile
+          })
+        )
         loc.push(name)
       }
       // Store in non-reactive external storage
       setDocuments(docs)
       // Clear ghosts that now exist in the real list
-      const realPaths = new Set(docs.map(d => d.loc ? `${d.loc}/${d.name}` : d.name))
-      this.ghosts = this.ghosts.filter(g => !realPaths.has(g.loc ? `${g.loc}/${g.name}` : g.name))
+      const realPaths = new Set(docs.map(d => (d.loc ? `${d.loc}/${d.name}` : d.name)))
+      this.ghosts = this.ghosts.filter(
+        g => !realPaths.has(g.loc ? `${g.loc}/${g.name}` : g.name)
+      )
       // Clear hidden paths that no longer exist (deletion confirmed)
       for (const path of this.hiddenPaths.keys()) {
         if (!realPaths.has(path)) this.hiddenPaths.delete(path)
@@ -224,14 +228,14 @@ export const useMainStore = defineStore('main', {
         size: doc.size,
         allocated: doc.allocated,
         mtime: doc.mtime,
-        dir: doc.dir,
+        dir: doc.dir
       }))
       worker.postMessage({ type: 'update', documents: docData })
     },
     search(query: string, loc: string) {
       const worker = getSearchWorker()
       const id = ++searchId
-      searchStore = this  // Store reference for worker callback
+      searchStore = this // Store reference for worker callback
 
       // Update query immediately so watchers know we're handling this
       this.query = query
@@ -264,7 +268,8 @@ export const useMainStore = defineStore('main', {
 
       // Delay showing loading indicator to avoid flicker on fast searches
       loadingTimer = setTimeout(() => {
-        if (searchId === id) {  // Still the current search
+        if (searchId === id) {
+          // Still the current search
           this.searchLoading = true
         }
         loadingTimer = null
@@ -296,7 +301,7 @@ export const useMainStore = defineStore('main', {
       this.cursor = ''
     },
     async logout() {
-      console.log("Logout")
+      console.log('Logout')
       try {
         const res = await fetch('/auth/api/logout', { method: 'POST' })
         if (!res.ok) {
@@ -326,25 +331,29 @@ export const useMainStore = defineStore('main', {
     showSortToast(order: SortOrder | '') {
       const labels: Record<string, string> = {
         '': 'Folders first',
-        'name': 'Alphabetical order',
-        'modified': 'Newest first',
-        'size': 'Largest first',
+        name: 'Alphabetical order',
+        modified: 'Newest first',
+        size: 'Largest first'
       }
       this.showToast(labels[order] || order, 1200)
     },
     focusBreadcrumb() {
-      (document.querySelector('.breadcrumb') as HTMLAnchorElement).focus()
+      ;(document.querySelector('.breadcrumb') as HTMLAnchorElement).focus()
     },
     cancelDownloads() {
-      location.reload()  // FIXME
+      location.reload() // FIXME
     },
     cancelUploads() {
-      location.reload()  // FIXME
-    },
+      location.reload() // FIXME
+    }
   },
   getters: {
-    sortOrder(): SortOrder { return this.query ? this.prefs.sortFiltered : this.prefs.sortListing },
-    isUserLogged(): boolean { return this.user.isLoggedIn },
+    sortOrder(): SortOrder {
+      return this.query ? this.prefs.sortFiltered : this.prefs.sortListing
+    },
+    isUserLogged(): boolean {
+      return this.user.isLoggedIn
+    },
     /** Get documents count (triggers on docVersion change) */
     documentCount(): number {
       // Access docVersion to make this reactive
@@ -366,7 +375,7 @@ export const useMainStore = defineStore('main', {
         missing: new Set(),
         docs: {},
         keys: [],
-        recursive: [],
+        recursive: []
       }
       for (const doc of docs) {
         if (selected.has(doc.key)) {
@@ -384,7 +393,10 @@ export const useMainStore = defineStore('main', {
         const nremove = base.loc.length
         ret.recursive.push([base.name, basepath, base])
         for (const doc of docs) {
-          if (doc.loc === basepath || doc.loc.startsWith(basepath) && doc.loc[basepath.length] === '/') {
+          if (
+            doc.loc === basepath ||
+            (doc.loc.startsWith(basepath) && doc.loc[basepath.length] === '/')
+          ) {
             const full = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
             const rel = full.slice(nremove)
             ret.recursive.push([rel, full, doc])

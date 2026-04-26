@@ -1,4 +1,4 @@
-import { apiJson, apiFetch, AuthCancelledError } from 'paskia'
+import { AuthCancelledError, apiFetch, apiJson } from 'paskia'
 
 // Type for API error responses
 interface ApiError {

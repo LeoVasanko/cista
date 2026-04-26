@@ -37,17 +37,21 @@
 
 <script setup lang="ts">
 import { Home } from '@/assets/svg'
+import { exists } from '@/utils/fileutil'
 import { nextTick, onBeforeUpdate, ref, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
-import { exists } from '@/utils/fileutil'
 import CursorTooltip from './CursorTooltip.vue'
 
 const home = Home
 const router = useRouter()
 
 const links = [] as Array<HTMLElement>
-const setLinkRef = (index: number, el: any) => { if (el) links[index] = el }
-onBeforeUpdate(() => { links.length = 1 })  // 1 to keep home
+const setLinkRef = (index: number, el: any) => {
+  if (el) links[index] = el
+}
+onBeforeUpdate(() => {
+  links.length = 1
+}) // 1 to keep home
 
 const homeTooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)
 const pathTooltips = ref<Map<number, InstanceType<typeof CursorTooltip>>>(new Map())
@@ -63,7 +67,8 @@ const props = defineProps<{
 
 const longest = ref<Array<string>>([])
 
-const isCurrent = (index: number) => index == props.path.length ? 'location' : undefined
+const isCurrent = (index: number) =>
+  index == props.path.length ? 'location' : undefined
 
 const focusCurrent = () => {
   nextTick(() => {
@@ -80,7 +85,10 @@ const navigate = (index: number) => {
   const browser = decodeURIComponent(location.hash.slice(1).split('//')[0] ?? '')
   const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
   // Clicking on current link clears the rest of the path and adds new history
-  if (isCurrent(index)) { longest.value.splice(index); router.push(u) }
+  if (isCurrent(index)) {
+    longest.value.splice(index)
+    router.push(u)
+  }
   // Moving along breadcrumbs doesn't create new history
   else if (long.startsWith(browser)) router.replace(u)
   // Nornal navigation from elsewhere (e.g. search result breadcrumbs)
@@ -100,8 +108,7 @@ watchEffect(() => {
   if (!same) longest.value = props.path
   else if (props.path.length > longcut.length) {
     longest.value = longcut.concat(props.path.slice(longcut.length))
-  }
-  else {
+  } else {
     // Prune deleted folders from longest
     for (let i = props.path.length; i < longest.value.length; ++i) {
       if (!exists(longest.value.slice(0, i + 1))) {
@@ -111,10 +118,11 @@ watchEffect(() => {
     }
   }
   // If needed, focus primary navigation to new location
-  if (props.primary) nextTick(() => {
-    const act = document.activeElement as HTMLElement
-    if (!act || [...links, document.body].includes(act)) focusCurrent()
-  })
+  if (props.primary)
+    nextTick(() => {
+      const act = document.activeElement as HTMLElement
+      if (!act || [...links, document.body].includes(act)) focusCurrent()
+    })
 })
 </script>
 

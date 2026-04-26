@@ -8,10 +8,10 @@
 </template>
 
 <script setup lang="ts">
-import { useMainStore } from '@/stores/main'
-import { getDocuments } from '@/stores/documentStore'
 import { Doc } from '@/repositories/Document'
-import { collator } from '@/utils';
+import { getDocuments } from '@/stores/documentStore'
+import { useMainStore } from '@/stores/main'
+import { collator } from '@/utils'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -43,7 +43,7 @@ type InflightBlock = {
   startedAt: number
 }
 
-const UPLOAD_BLOCK_SIZE = 16 << 20  // 16 MiB
+const UPLOAD_BLOCK_SIZE = 16 << 20 // 16 MiB
 function pasteHandler(event: ClipboardEvent) {
   const items = Array.from(event.clipboardData?.items ?? [])
   const infiles = [] as File[]
@@ -62,7 +62,8 @@ function pasteHandler(event: ClipboardEvent) {
     event.preventDefault()
     uploadFiles(infiles)
     const base = props.path!.join('/')
-    for (const entry of dirs) pasteDirectory(entry, `${base ? `${base}/` : ''}${entry.name}`)
+    for (const entry of dirs)
+      pasteDirectory(entry, `${base ? `${base}/` : ''}${entry.name}`)
   }
 }
 const pasteDirectory = async (entry: FileSystemDirectoryEntry, loc: string) => {
@@ -72,8 +73,8 @@ const pasteDirectory = async (entry: FileSystemDirectoryEntry, loc: string) => {
   for (const entry of entries) {
     const cloudName = `${loc}/${entry.name}`
     if (entry.isFile) {
-      const file = await new Promise(resolve => entry.file(resolve)) as File
-      cloudfiles.push({file, cloudName, cloudPos: 0})
+      const file = (await new Promise(resolve => entry.file(resolve))) as File
+      cloudfiles.push({ file, cloudName, cloudPos: 0 })
     } else if (entry.isDirectory) {
       await pasteDirectory(entry, cloudName)
     }
@@ -84,7 +85,9 @@ function uploadHandler(event: Event) {
   event.preventDefault()
   // @ts-ignore
   const input = event.target as HTMLInputElement | null
-  const infiles = Array.from((input ?? (event as DragEvent).dataTransfer)?.files ?? []) as File[]
+  const infiles = Array.from(
+    (input ?? (event as DragEvent).dataTransfer)?.files ?? []
+  ) as File[]
   if (input) input.value = ''
   if (infiles.length) uploadFiles(infiles)
 }
@@ -99,7 +102,7 @@ const uploadFiles = (infiles: File[]) => {
     files.push({
       file,
       cloudName: `${loc ? `${loc}/` : ''}${relPath}`,
-      cloudPos: 0,
+      cloudPos: 0
     })
   }
   uploadCloudFiles(files)
@@ -131,13 +134,34 @@ const uploadCloudFiles = (files: CloudFile[]) => {
     for (let i = 0; i < parts.length; i++) {
       const folderPath = parts.slice(0, i + 1).join('/')
       if (folderPath && !byPath.has(folderPath) && !added.has(folderPath)) {
-        store.addGhost(new Doc({ loc: parts.slice(0, i).join('/'), name: parts[i], key: crypto.randomUUID(), size: 0, allocated: 0, mtime: now, dir: true }))
+        store.addGhost(
+          new Doc({
+            loc: parts.slice(0, i).join('/'),
+            name: parts[i],
+            key: crypto.randomUUID(),
+            size: 0,
+            allocated: 0,
+            mtime: now,
+            dir: true
+          })
+        )
         added.add(folderPath)
       }
     }
     // Ghost file or update existing (overwrite case doesn't need ghost, file already visible)
     const existing = byPath.get(f.cloudName)
-    if (!existing) store.addGhost(new Doc({ loc, name, key: crypto.randomUUID(), size: f.file.size, allocated: 0, mtime: now, dir: false }))
+    if (!existing)
+      store.addGhost(
+        new Doc({
+          loc,
+          name,
+          key: crypto.randomUUID(),
+          size: f.file.size,
+          allocated: 0,
+          mtime: now,
+          dir: false
+        })
+      )
   }
   // @ts-ignore
   upqueue = [...upqueue, ...files]
@@ -169,9 +193,9 @@ const uprogress_init = {
   filename: '',
   filesize: 0,
   filepos: 0,
-  status: 'idle',
+  status: 'idle'
 }
-store.uprogress = {...uprogress_init}
+store.uprogress = { ...uprogress_init }
 // Track uploaded bytes for each file to handle out-of-order uploads
 const uploadedBytes = new Map<string, Set<number>>()
 const inflightBlocks = new Map<string, InflightBlock>()
@@ -240,13 +264,13 @@ setInterval(() => {
     store.uprogress.statbytes = 0
     store.uprogress.statdur = 1
   } else {
-    store.uprogress.statbytes *= .95
-    store.uprogress.statdur *= .95
+    store.uprogress.statbytes *= 0.95
+    store.uprogress.statdur *= 0.95
   }
 }, 100)
 
-const statUpdate = ({name, size, start, end}: UploadRange) => {
-  if (name !== store.uprogress.filename) return  // If stats have been reset
+const statUpdate = ({ name, size, start, end }: UploadRange) => {
+  if (name !== store.uprogress.filename) return // If stats have been reset
 
   // Track which bytes have been uploaded (using start to end range)
   if (!uploadedBytes.has(name)) uploadedBytes.set(name, new Set())
@@ -263,9 +287,12 @@ const statUpdate = ({name, size, start, end}: UploadRange) => {
   const currentUpload = blockQueue[0]
   if (!currentUpload) return
 
-  if (currentUpload.file.cloudName === name && currentUpload.completed >= currentUpload.blocks.length) {
+  if (
+    currentUpload.file.cloudName === name &&
+    currentUpload.completed >= currentUpload.blocks.length
+  ) {
     // All blocks for this file have been uploaded
-    uploadedBytes.delete(name)  // Clean up tracking
+    uploadedBytes.delete(name) // Clean up tracking
     store.uprogress.filestart += size
     statNextFile()
     if (++store.uprogress.fileidx >= store.uprogress.filecount) statReset()
@@ -299,35 +326,35 @@ const MAX_PARALLEL_REQUESTS = 4
 const RETRY_DELAY_MS = 400
 
 // Helper function to get upload blocks for a file, prioritizing final 4 blocks if file >= 32 MiB
-const getUploadBlocks = (file: CloudFile): {start: number, end: number}[] => {
+const getUploadBlocks = (file: CloudFile): { start: number; end: number }[] => {
   const BLOCK_SIZE = UPLOAD_BLOCK_SIZE
-  const MIN_SIZE_FOR_REORDER = 32 * BLOCK_SIZE  // 32 MiB = 33554432 bytes
+  const MIN_SIZE_FOR_REORDER = 32 * BLOCK_SIZE // 32 MiB = 33554432 bytes
   const FINAL_BLOCKS_COUNT = 2
 
   const fileSize = file.file.size
-  const blocks: {start: number, end: number}[] = []
+  const blocks: { start: number; end: number }[] = []
 
   if (fileSize >= MIN_SIZE_FOR_REORDER) {
     // File is large enough, prioritize final blocks
-    const finalBlocksStart = fileSize - (FINAL_BLOCKS_COUNT * BLOCK_SIZE)
+    const finalBlocksStart = fileSize - FINAL_BLOCKS_COUNT * BLOCK_SIZE
 
     // Add final blocks first
     for (let i = 0; i < FINAL_BLOCKS_COUNT; i++) {
-      const start = finalBlocksStart + (i * BLOCK_SIZE)
+      const start = finalBlocksStart + i * BLOCK_SIZE
       const end = Math.min(start + BLOCK_SIZE, fileSize)
-      blocks.push({start, end})
+      blocks.push({ start, end })
     }
 
     // Add remaining blocks from beginning
     for (let start = 0; start < finalBlocksStart; start += BLOCK_SIZE) {
       const end = Math.min(start + BLOCK_SIZE, finalBlocksStart)
-      blocks.push({start, end})
+      blocks.push({ start, end })
     }
   } else {
     // File is smaller, use sequential upload
     for (let start = 0; start < fileSize; start += BLOCK_SIZE) {
       const end = Math.min(start + BLOCK_SIZE, fileSize)
-      blocks.push({start, end})
+      blocks.push({ start, end })
     }
   }
 
@@ -336,7 +363,7 @@ const getUploadBlocks = (file: CloudFile): {start: number, end: number}[] => {
 
 type BlockUpload = {
   file: CloudFile
-  blocks: {start: number, end: number}[]
+  blocks: { start: number; end: number }[]
   nextIndex: number
   completed: number
   runId: number
@@ -360,14 +387,17 @@ const uploadUrlForFile = (cloudName: string) => {
   return `/files/${encoded}`
 }
 
-const uploadBlock = async (upload: BlockUpload, block: {start: number, end: number}) => {
+const uploadBlock = async (
+  upload: BlockUpload,
+  block: { start: number; end: number }
+) => {
   const body = upload.file.file.slice(block.start, block.end)
   const range = `bytes ${block.start}-${block.end - 1}/${upload.file.file.size}`
   const fallbackReq = {
     name: upload.file.cloudName,
     size: upload.file.file.size,
     start: block.start,
-    end: block.end,
+    end: block.end
   }
   let attempt = 0
 
@@ -379,9 +409,9 @@ const uploadBlock = async (upload: BlockUpload, block: {start: number, end: numb
         method: 'PUT',
         headers: {
           'Content-Type': 'application/octet-stream',
-          'Content-Range': range,
+          'Content-Range': range
         },
-        body,
+        body
       })
       if (!res.ok) {
         const message = await res.text().catch(() => '')
@@ -404,16 +434,16 @@ const uploadBlock = async (upload: BlockUpload, block: {start: number, end: numb
   }
 }
 
-const startInflightBlock = (name: string, block: {start: number, end: number}) => {
+const startInflightBlock = (name: string, block: { start: number; end: number }) => {
   inflightBlocks.set(inflightKey(name, block.start), {
     name,
     start: block.start,
     end: block.end,
-    startedAt: Date.now(),
+    startedAt: Date.now()
   })
 }
 
-const finishInflightBlock = (name: string, block: {start: number, end: number}) => {
+const finishInflightBlock = (name: string, block: { start: number; end: number }) => {
   const key = inflightKey(name, block.start)
   const info = inflightBlocks.get(key)
   if (!info) return
@@ -433,9 +463,9 @@ const worker = async (runId: number) => {
 
       while (runId === uploadRunId && upload.completed < upload.blocks.length) {
         while (
-          runId === uploadRunId
-          && upload.nextIndex < upload.blocks.length
-          && inflight.size < MAX_PARALLEL_REQUESTS
+          runId === uploadRunId &&
+          upload.nextIndex < upload.blocks.length &&
+          inflight.size < MAX_PARALLEL_REQUESTS
         ) {
           const block = upload.blocks[upload.nextIndex++]!
           store.uprogress.status = 'uploading'

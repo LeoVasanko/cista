@@ -3,9 +3,9 @@
 </template>
 
 <script setup lang="ts">
-import { useMainStore } from '@/stores/main'
 import { apiFetch } from '@/repositories/Client'
 import type { SelectedItems } from '@/repositories/Document'
+import { useMainStore } from '@/stores/main'
 import { zipName } from '@/utils/fileutil'
 
 const store = useMainStore()
@@ -24,9 +24,9 @@ const status_init = {
   filename: '',
   filesize: 0,
   filepos: 0,
-  status: 'idle',
+  status: 'idle'
 }
-store.dprogress = {...status_init}
+store.dprogress = { ...status_init }
 setInterval(() => {
   if (Date.now() - store.dprogress.tlast > 3000) {
     // Reset
@@ -34,8 +34,8 @@ setInterval(() => {
     store.dprogress.statdur = 1
   } else {
     // Running average by decay
-    store.dprogress.statbytes *= .9
-    store.dprogress.statdur *= .9
+    store.dprogress.statbytes *= 0.9
+    store.dprogress.statdur *= 0.9
   }
 }, 100)
 const statReset = () => {
@@ -44,9 +44,8 @@ const statReset = () => {
   store.dprogress.tlast = store.dprogress.t0 + 1
 }
 const cancelDownloads = () => {
-  location.reload()  // FIXME
+  location.reload() // FIXME
 }
-
 
 const linkdl = (href: string) => {
   const a = document.createElement('a')
@@ -156,7 +155,10 @@ const download = async (e: MouseEvent) => {
   if (e.altKey && 'showDirectoryPicker' in window) {
     try {
       // @ts-ignore
-      const handle = await window.showDirectoryPicker({ startIn: 'downloads', mode: 'readwrite' })
+      const handle = await window.showDirectoryPicker({
+        startIn: 'downloads',
+        mode: 'readwrite'
+      })
       await filesystemdl(sel, handle)
       store.selected.clear()
     } catch (e) {
@@ -168,7 +170,6 @@ const download = async (e: MouseEvent) => {
   // Default: ZIP download
   zipdl(sel)
 }
-
 </script>
 
 <style scoped>
