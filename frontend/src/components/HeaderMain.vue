@@ -19,6 +19,12 @@
       />
       <span v-if="!query" class="search-hint" @click="focusSearch">{{ store.prefs.searchHotkey }}</span>
     </div>
+    <div v-if="showSortHints" class="sort-hints">
+      <span class="sort-label">Order</span>
+      <span class="keycap">1</span>
+      <span class="keycap">2</span>
+      <span class="keycap">3</span>
+    </div>
     <div class="spacer smallgap"></div>
     <DiskSpace v-if="store.space.disk" />
     <SvgButton name="cog" @click="settingsMenu" />
@@ -32,17 +38,29 @@ import { useMainStore } from '@/stores/main'
 import { useSsoAuthStore } from '@/stores/ssoAuth'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import { showAuthIframe } from 'paskia'
-import { ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import DiskSpace from './DiskSpace.vue'
 
 const store = useMainStore()
 const ssoStore = useSsoAuthStore()
 const search = ref<HTMLInputElement | null>()
+const textInputFocused = ref(false)
 
 const props = defineProps<{
   path: Array<string>
   query: string
 }>()
+
+const isInputElement = (el: Element | null): boolean => {
+  if (!el || !(el instanceof HTMLElement)) return false
+  return el instanceof HTMLInputElement
+}
+
+const updateTextInputFocused = () => {
+  textInputFocused.value = isInputElement(document.activeElement)
+}
+
+const showSortHints = computed(() => !textInputFocused.value)
 
 const clearSearch = (ev: Event) => {
   const input = search.value
@@ -158,6 +176,17 @@ defineExpose({
   toggleSearchInput,
   clearSearch
 })
+
+onMounted(() => {
+  updateTextInputFocused()
+  window.addEventListener('focusin', updateTextInputFocused)
+  window.addEventListener('focusout', updateTextInputFocused)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('focusin', updateTextInputFocused)
+  window.removeEventListener('focusout', updateTextInputFocused)
+})
 </script>
 
 <style scoped>
@@ -237,6 +266,36 @@ defineExpose({
 @media (hover: hover) and (pointer: fine) {
   .search-hint {
     display: block;
+  }
+}
+.sort-hints {
+  display: none;
+  align-items: center;
+  gap: 0.25em;
+  margin-left: 0.3em;
+  white-space: nowrap;
+}
+.sort-label {
+  margin-right: 0.2em;
+  font-family: system-ui, sans-serif;
+  font-size: 1em;
+  font-weight: 700;
+  color: #ccc;
+}
+.keycap {
+  font-family: system-ui, sans-serif;
+  font-size: 1em;
+  font-weight: 700;
+  color: #333;
+  background: #ccc;
+  border: 1px solid #999;
+  border-radius: 0.3em;
+  padding: 0 0.45em;
+  line-height: 1.4;
+}
+@media screen and (min-width: 800px) {
+  .sort-hints {
+    display: flex;
   }
 }
 </style>
