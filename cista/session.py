@@ -1,38 +1,40 @@
+import secrets
 from time import time
 
-import jwt
-
-from cista.config import derived_secret
-
-
-def session_secret():
-    return derived_secret("session")
-
+# In-memory session store: token -> {"username": str, "exp": int}
+_sessions: dict[str, dict] = {}
 
 max_age = 365 * 86400  # Seconds since last login
 
 
+def _token() -> str:
+    return secrets.token_urlsafe(8)
+
+
+def _purge_expired() -> None:
+    now = time()
+    expired = [t for t, s in _sessions.items() if s["exp"] <= now]
+    for t in expired:
+        del _sessions[t]
+
+
 def get(request):
-    try:
-        return jwt.decode(request.cookies.s, session_secret(), algorithms=["HS256"])
-    except Exception:
-        return False if "s" in request.cookies else None
+    token = request.cookies.get("s")
+    if token is None:
+        return None
+    s = _sessions.get(token)
+    if s is None:
+        return False  # Cookie present but session not found / expired
+    if s["exp"] <= time():
+        del _sessions[token]
+        return False
+    return s
 
 
 def create(res, username, *, secure: bool = True, **kwargs):
-    data = {
-        "exp": int(time()) + max_age,
-        "username": username,
-        **kwargs,
-    }
-    s = jwt.encode(data, session_secret())
-    res.cookies.add_cookie("s", s, httponly=True, max_age=max_age, secure=secure)
-
-
-def update(res, s, *, secure: bool = True, **kwargs):
-    s.update(kwargs)
-    max_age = max(1, s["exp"] - int(time()))
-    token = jwt.encode(s, session_secret())
+    _purge_expired()
+    token = _token()
+    _sessions[token] = {"exp": int(time()) + max_age, "username": username, **kwargs}
     res.cookies.add_cookie("s", token, httponly=True, max_age=max_age, secure=secure)
 
 

@@ -1,4 +1,5 @@
 """WebDAV protocol tests: OPTIONS, PROPFIND, PROPPATCH, COPY, MOVE, LOCK, UNLOCK."""
+
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from uuid import uuid4
@@ -113,9 +114,7 @@ async def test_propfind_file_has_content_length(client, setup_storage: Path):
 
 @pytest.mark.asyncio
 async def test_propfind_depth_infinity_rejected(client, setup_storage: Path):
-    _, res = await client.request(
-        "PROPFIND", "/files/", headers={"Depth": "infinity"}
-    )
+    _, res = await client.request("PROPFIND", "/files/", headers={"Depth": "infinity"})
     assert res.status_code == 403
 
 

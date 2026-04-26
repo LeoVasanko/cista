@@ -9,9 +9,9 @@ Framed response format:
 where packet = (uint32 json size)(uint32 payload size)(json)(binary payload).
 """
 
-import logging
 import contextlib
 import io
+import logging
 import struct
 import sys
 from pathlib import Path

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import gc
 import io
 import mimetypes
@@ -14,10 +15,9 @@ from time import perf_counter
 from urllib.parse import unquote
 from wsgiref.handlers import format_date_time
 
-import msgspec
-
 import av
 import fitz  # PyMuPDF
+import msgspec
 import numpy as np
 import pyvips
 from blake3 import blake3
@@ -28,6 +28,22 @@ from sanic.log import logger
 from cista import auth, config
 from cista.preview_worker import PreviewRequest, PreviewResponse
 from cista.util.filename import sanitize
+
+# OnlyOffice integration is loaded lazily; availability is checked at runtime.
+_onlyoffice = None
+
+
+def _get_onlyoffice():
+    global _onlyoffice
+    if _onlyoffice is None:
+        try:
+            from cista import onlyoffice as oo
+
+            _onlyoffice = oo
+        except Exception:
+            _onlyoffice = False
+    return _onlyoffice
+
 
 bp = Blueprint("preview", url_prefix="/preview")
 
@@ -138,10 +154,8 @@ class _PreviewWorker:
 
     async def kill(self) -> None:
         if self.proc.returncode is None:
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 self.proc.kill()
-            except ProcessLookupError:
-                pass
             await self.proc.wait()
         _active_procs.discard(self.proc)
 
@@ -196,16 +210,16 @@ class _PreviewWorkerPool:
                 timeout=PREVIEW_TIMEOUT,
             )
             return out, resp
-        except asyncio.TimeoutError:
+        except TimeoutError:
             replace = True
             logger.warning(
                 "Preview timeout (%ds) for %s", int(PREVIEW_TIMEOUT), filepath.name
             )
-            raise PreviewTimeout(filepath.name)
-        except WorkerChecksumError:
+            raise PreviewTimeoutError(filepath.name) from None
+        except WorkerChecksumError as e:
             replace = True
             logger.error("Preview checksum mismatch for %s", filepath.name)
-            raise PreviewError(f"worker checksum mismatch for {filepath.name}")
+            raise PreviewError(f"worker checksum mismatch for {filepath.name}") from e
         except PreviewError:
             raise
         except (
@@ -221,15 +235,16 @@ class _PreviewWorkerPool:
             logger.warning(
                 "Preview worker protocol failure for %s: %s", filepath.name, e
             )
-            raise PreviewError(f"worker protocol failure for {filepath.name}: {e}")
+            raise PreviewError(
+                f"worker protocol failure for {filepath.name}: {e}"
+            ) from e
         finally:
             if replace:
                 await self._replace_worker(worker)
+            elif worker.proc.returncode is None:
+                await self._idle.put(worker)
             else:
-                if worker.proc.returncode is None:
-                    await self._idle.put(worker)
-                else:
-                    await self._replace_worker(worker)
+                await self._replace_worker(worker)
 
     async def close(self) -> None:
         self._closed = True
@@ -270,10 +285,8 @@ async def shutdown_preview_workers() -> None:
     if not _active_procs:
         return
     for proc in list(_active_procs):
-        try:
+        with contextlib.suppress(ProcessLookupError):
             proc.kill()
-        except ProcessLookupError:
-            pass
     await asyncio.gather(
         *(proc.wait() for proc in list(_active_procs)), return_exceptions=True
     )
@@ -286,7 +299,7 @@ async def verify_preview(request):
     await auth.verify(request)
 
 
-class PreviewTimeout(Exception):
+class PreviewTimeoutError(Exception):
     """Raised when the preview subprocess exceeds PREVIEW_TIMEOUT."""
 
 
@@ -317,15 +330,56 @@ async def _run_preview_process(
 
 DOC_PREVIEW_SUFFIXES = {".pdf", ".xps", ".epub", ".mobi"}
 
+OFFICE_PREVIEW_SUFFIXES = {
+    ".doc",
+    ".dot",
+    ".docx",
+    ".docm",
+    ".dotx",
+    ".dotm",
+    ".rtf",
+    ".odt",
+    ".ott",
+    ".txt",
+    ".md",
+    ".mhtml",
+    ".mht",
+    ".html",
+    ".htm",
+    ".xml",
+    ".wps",
+    ".wri",
+    # Spreadsheets
+    ".xls",
+    ".xlsx",
+    ".xlsm",
+    ".xlsb",
+    ".xltx",
+    ".xltm",
+    ".ods",
+    ".ots",
+    ".csv",
+    # Presentations
+    ".ppt",
+    ".pptx",
+    ".pptm",
+    ".pps",
+    ".ppsx",
+    ".pot",
+    ".potx",
+    ".odp",
+    ".otp",
+}
+
 
 def is_previewable_path(path) -> bool:
     suffix = path.suffix.lower()
-    if suffix in DOC_PREVIEW_SUFFIXES:
+    if suffix in DOC_PREVIEW_SUFFIXES or suffix in OFFICE_PREVIEW_SUFFIXES:
         return True
     mime_type, _ = mimetypes.guess_type(path.name)
     if not mime_type:
         return False
-    return mime_type.startswith("image/") or mime_type.startswith("video/")
+    return mime_type.startswith(("image/", "video/"))
 
 
 @bp.get("/<path:path>")
@@ -339,7 +393,7 @@ async def preview(req, path):
     try:
         stat = filepath.lstat()
     except FileNotFoundError:
-        raise NotFound() from None
+        raise NotFound from None
 
     if not is_previewable_path(filepath):
         return empty(415)
@@ -363,7 +417,7 @@ async def preview(req, path):
         img, preview_resp = await _run_preview_process(
             filepath, quality, maxsize, maxzoom
         )
-    except PreviewTimeout:
+    except PreviewTimeoutError:
         return empty(504)
     except PreviewError as e:
         if e.backend:
@@ -378,7 +432,7 @@ async def preview(req, path):
     if preview_resp and preview_resp.backend:
         if preview_resp.timings:
             timing_detail = "/".join(
-                str(int(round(value))) for value in preview_resp.timings
+                str(round(value)) for value in preview_resp.timings
             )
             req.ctx._log_extra = f"{preview_resp.backend} {timing_detail} ➛"
         else:
@@ -410,9 +464,15 @@ async def preview(req, path):
 def dispatch(path, quality, maxsize, maxzoom):
     backend = "unknown"
     try:
-        if path.suffix.lower() in DOC_PREVIEW_SUFFIXES:
+        suffix = path.suffix.lower()
+        if suffix in DOC_PREVIEW_SUFFIXES:
             backend = "pdf"
             return process_pdf(path, quality=quality, maxsize=maxsize, maxzoom=maxzoom)
+        if suffix in OFFICE_PREVIEW_SUFFIXES:
+            backend = "onlyoffice"
+            return process_office(
+                path, quality=quality, maxsize=maxsize, maxzoom=maxzoom
+            )
         mime_type, _ = mimetypes.guess_type(path.name)
         if mime_type and mime_type.startswith("video/"):
             backend = "video"
@@ -470,6 +530,36 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     )
     ret = img.write_to_buffer(".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True)
     backend = "pdf+pyvips"
+    t_save_end = perf_counter()
+
+    return ret, PreviewResponse(
+        ok=True,
+        mime="image/avif",
+        backend=backend,
+        timings=[
+            round((t_load_end - t_load_start) * 1000, 1),
+            round((t_save_end - t_save_start) * 1000, 1),
+        ],
+    )
+
+
+def process_office(path, *, quality, maxsize, maxzoom):
+    t_load_start = perf_counter()
+    oo = _get_onlyoffice()
+    if oo is False:
+        raise RuntimeError("OnlyOffice is not installed")
+    if not oo.is_available():
+        raise RuntimeError("OnlyOffice Document Server is not reachable")
+    png_bytes = oo.convert_to_png(path)
+    t_load_end = perf_counter()
+
+    t_save_start = perf_counter()
+    img = pyvips.Image.new_from_buffer(png_bytes, "")
+    scale = min(maxsize / img.width, maxsize / img.height, 1.0)
+    if scale < 1.0:
+        img = img.resize(scale)
+    ret = img.write_to_buffer(".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True)
+    backend = "onlyoffice+pyvips"
     t_save_end = perf_counter()
 
     return ret, PreviewResponse(
@@ -574,7 +664,8 @@ def process_video(path, *, maxsize, quality):
                 "threads": "1",
             },
         )
-        assert isinstance(ostream, av.VideoStream)
+        if not isinstance(ostream, av.VideoStream):
+            raise PreviewError("failed to initialize AV1 video stream")
         ostream.width = frame.width
         ostream.height = frame.height
         ostream.pix_fmt = frame.format.name

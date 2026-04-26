@@ -25,7 +25,6 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "argon2-cffi>=25.1.0",
-    "aspose-words>=26.4.0",
     "av>=15.0.0",
     "blake3>=1.0.5",
     "docopt-ng>=0.9.0",

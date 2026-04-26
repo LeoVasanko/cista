@@ -149,6 +149,7 @@ const settingsMenu = (e: Event) => {
   ContextMenu.showContextMenu({
     // @ts-ignore
     x: e.target.getBoundingClientRect().right,
+    // @ts-ignore
     y: e.target.getBoundingClientRect().bottom,
     items
   })

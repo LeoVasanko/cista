@@ -159,7 +159,9 @@ async def copy_or_move(request, name=""):
     # Validate target shape/type before mutating anything.
     for _op_name, op_keys in (("cp", cp_keys), ("mv", mv_keys)):
         if len(op_keys) > 1 and not dst_is_dir:
-            raise BadRequest("Destination must be an existing directory for multiple keys")
+            raise BadRequest(
+                "Destination must be an existing directory for multiple keys"
+            )
         if not op_keys:
             continue
         if not dst_is_dir:
@@ -172,7 +174,9 @@ async def copy_or_move(request, name=""):
                 for key in op_keys:
                     src_abs = _resolve_from_relpath(key_paths[key])
                     if src_abs.is_dir():
-                        raise BadRequest("Cannot move/copy a directory to an existing file")
+                        raise BadRequest(
+                            "Cannot move/copy a directory to an existing file"
+                        )
 
     changed: set[PurePosixPath] = set()
     completed: list[dict[str, str]] = []
@@ -198,11 +202,15 @@ async def copy_or_move(request, name=""):
                                 "Destination must be an existing directory for multiple keys"
                             )
                         dst_item_rel = (
-                            dst_rel / src_rel.name if dst_rel.parts else PurePosixPath(src_rel.name)
+                            dst_rel / src_rel.name
+                            if dst_rel.parts
+                            else PurePosixPath(src_rel.name)
                         )
                     elif dst_is_dir:
                         dst_item_rel = (
-                            dst_rel / src_rel.name if dst_rel.parts else PurePosixPath(src_rel.name)
+                            dst_rel / src_rel.name
+                            if dst_rel.parts
+                            else PurePosixPath(src_rel.name)
                         )
                     else:
                         if not dst_rel.parts:
@@ -533,7 +541,7 @@ def _parse_webdav_destination(dest_header: str) -> tuple[PurePosixPath, Path]:
     if raw_path in (prefix, prefix + "/"):
         rel_str = ""
     elif raw_path.startswith(prefix + "/"):
-        rel_str = raw_path[len(prefix) + 1:]
+        rel_str = raw_path[len(prefix) + 1 :]
     else:
         raise BadRequest("Destination must be within /files")
     return _safe_relpath(rel_str)
@@ -551,10 +559,9 @@ def _rel_to_href(rel: PurePosixPath, *, is_dir: bool) -> str:
 
 def _dav_xml(element: ET.Element) -> bytes:
     """Serialise an ElementTree element to UTF-8 bytes with XML declaration."""
-    return (
-        b'<?xml version="1.0" encoding="UTF-8"?>'
-        + ET.tostring(element, encoding="unicode").encode("utf-8")
-    )
+    return b'<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(
+        element, encoding="unicode"
+    ).encode("utf-8")
 
 
 def _collect_propfind_entries(rel: PurePosixPath, path: Path, depth: str) -> list[dict]:
@@ -576,7 +583,8 @@ def _propfind_entry(rel: PurePosixPath, path: Path) -> dict:
         "is_dir": is_dir,
         "size": st.st_size,
         "etag": f'"{st.st_mtime:.0f}-{st.st_size}"',
-        "content_type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+        "content_type": mimetypes.guess_type(path.name)[0]
+        or "application/octet-stream",
         "last_modified": format_date_time(st.st_mtime),
         "created": datetime.fromtimestamp(st.st_ctime, tz=UTC).strftime(
             "%Y-%m-%dT%H:%M:%SZ"

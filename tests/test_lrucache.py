@@ -12,19 +12,19 @@ def mock_open(key):
 
 
 def test_contains():
-    cache = LRUCache(open=mock_open, capacity=2, maxage=10)
+    cache = LRUCache(opener=mock_open, capacity=2, maxage=10)
     assert "key1" not in cache
     cache["key1"]
     assert "key1" in cache
 
 
 def test_getitem():
-    cache = LRUCache(open=mock_open, capacity=2, maxage=10)
+    cache = LRUCache(opener=mock_open, capacity=2, maxage=10)
     assert cache["key1"].content == "content-key1"
 
 
 def test_capacity():
-    cache = LRUCache(open=mock_open, capacity=2, maxage=10)
+    cache = LRUCache(opener=mock_open, capacity=2, maxage=10)
     item1 = cache["key1"]
     cache["key2"]
     cache["key3"]
@@ -33,7 +33,7 @@ def test_capacity():
 
 
 def test_expiry():
-    cache = LRUCache(open=mock_open, capacity=2, maxage=0.1)
+    cache = LRUCache(opener=mock_open, capacity=2, maxage=0.1)
     item = cache["key1"]
     sleep(0.2)  # Wait for expiration
     cache.expire_items()
@@ -42,7 +42,7 @@ def test_expiry():
 
 
 def test_close():
-    cache = LRUCache(open=mock_open, capacity=2, maxage=10)
+    cache = LRUCache(opener=mock_open, capacity=2, maxage=10)
     item = cache["key1"]
     cache.close()
     assert "key1" not in cache
@@ -50,7 +50,7 @@ def test_close():
 
 
 def test_lru_mechanism():
-    cache = LRUCache(open=mock_open, capacity=2, maxage=10)
+    cache = LRUCache(opener=mock_open, capacity=2, maxage=10)
     item1 = cache["key1"]
     item2 = cache["key2"]
     cache["key1"]  # Make key1 recently used

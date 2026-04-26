@@ -1,4 +1,5 @@
 """Path traversal and percent-encoding security tests for the fileserver."""
+
 from pathlib import Path
 from uuid import uuid4
 
@@ -22,7 +23,13 @@ def setup_storage(tmp_path: Path):
 @pytest_asyncio.fixture()
 async def client(setup_storage: Path):
     app = Sanic(f"files-path-sec-test-{uuid4().hex}", strict_slashes=True)
-    app.router.ALLOWED_METHODS = (*app.router.ALLOWED_METHODS, "MKCOL", "MOVE", "COPY", "PROPFIND")
+    app.router.ALLOWED_METHODS = (
+        *app.router.ALLOWED_METHODS,
+        "MKCOL",
+        "MOVE",
+        "COPY",
+        "PROPFIND",
+    )
     app.blueprint(fileserver_bp)
     yield app.asgi_client
 

@@ -6,7 +6,6 @@ from pathlib import Path
 from time import time
 from uuid import uuid4
 
-import jwt
 import pytest
 import pytest_asyncio
 from sanic import Sanic
@@ -26,19 +25,28 @@ def _ntlm_type1() -> dict[str, str]:
     return {"Authorization": f"NTLM {base64.b64encode(msg).decode()}"}
 
 
-def _ntlm_type3(username: str, password: str, domain: str, challenge: bytes) -> dict[str, str]:
+def _ntlm_type3(
+    username: str, password: str, domain: str, challenge: bytes
+) -> dict[str, str]:
     """Build an NTLMv2 Type 3 message for testing."""
     from Crypto.Hash import MD4
 
     # NT hash
     nt_hash = MD4.new(password.encode("utf-16le")).digest()
     # NTLMv2 hash
-    ntlmv2_hash = hmac.new(nt_hash, (username.upper() + domain).encode("utf-16le"), hashlib.md5).digest()
+    ntlmv2_hash = hmac.new(
+        nt_hash, (username.upper() + domain).encode("utf-16le"), hashlib.md5
+    ).digest()
 
     # Build a minimal blob
     timestamp = struct.pack("<Q", 0)
     client_nonce = b"\x01" * 8
-    blob = b"\x01\x01\x00\x00\x00\x00\x00\x00" + timestamp + client_nonce + b"\x00\x00\x00\x00"
+    blob = (
+        b"\x01\x01\x00\x00\x00\x00\x00\x00"
+        + timestamp
+        + client_nonce
+        + b"\x00\x00\x00\x00"
+    )
 
     # NT proof
     nt_proof = hmac.new(ntlmv2_hash, challenge + blob, hashlib.md5).digest()
@@ -85,11 +93,11 @@ def _ntlm_type3(username: str, password: str, domain: str, challenge: bytes) -> 
 
 
 def _session_cookie_header(username: str) -> dict[str, str]:
-    token = jwt.encode(
-        {"exp": int(time()) + session.max_age, "username": username},
-        session.session_secret(),
-        algorithm="HS256",
-    )
+    token = "test-" + username
+    session._sessions[token] = {
+        "exp": int(time()) + session.max_age,
+        "username": username,
+    }
     return {"Cookie": f"s={token}"}
 
 
@@ -133,7 +141,9 @@ async def client(setup_storage: Path):
 
 @pytest.mark.asyncio
 async def test_basic_auth_allows_private_file_access(client):
-    _, res = await client.get("/files/hello.txt", headers=_basic_auth("alice", "secret"))
+    _, res = await client.get(
+        "/files/hello.txt", headers=_basic_auth("alice", "secret")
+    )
 
     assert res.status_code == 200
     assert res.body == b"hello"
@@ -162,12 +172,18 @@ async def test_unauthenticated_sends_basic_auth_challenge(client):
     _, res = await client.request("PROPFIND", "/files/")
 
     assert res.status_code == 401
-    assert res.headers.get("www-authenticate", "").lower().startswith('basic realm="cista"')
+    assert (
+        res.headers.get("www-authenticate", "")
+        .lower()
+        .startswith('basic realm="cista"')
+    )
 
 
 @pytest.mark.asyncio
 async def test_basic_auth_with_token(client):
-    _, res = await client.get("/files/hello.txt", headers=_basic_auth("token", "test_token_123"))
+    _, res = await client.get(
+        "/files/hello.txt", headers=_basic_auth("token", "test_token_123")
+    )
 
     assert res.status_code == 200
     assert res.body == b"hello"
@@ -175,7 +191,9 @@ async def test_basic_auth_with_token(client):
 
 @pytest.mark.asyncio
 async def test_browser_unauthenticated_sends_cookie_challenge(client):
-    _, res = await client.get("/files/", headers={"Accept": "text/html,application/xhtml+xml"})
+    _, res = await client.get(
+        "/files/", headers={"Accept": "text/html,application/xhtml+xml"}
+    )
 
     assert res.status_code == 401
     assert res.headers.get("www-authenticate", "").lower().startswith("cookie")

@@ -17,10 +17,10 @@
   <span v-else class="file icon" :class="`ext-${doc.ext}`"></span>
 </template>
 
-<script setup lang=ts>
-import { computed, ref } from 'vue'
-import type { Doc } from '@/repositories/Document'
+<script setup lang="ts">
 import { Play as PlayIcon, Spinner as SpinnerIcon } from '@/assets/svg'
+import type { Doc } from '@/repositories/Document'
+import { computed, ref } from 'vue'
 
 const aud = ref<HTMLAudioElement | null>(null)
 const vid = ref<HTMLVideoElement | null>(null)
@@ -29,7 +29,11 @@ const props = defineProps<{
   doc: Doc
   quality: string
 }>()
-const previewSrc = computed(() => props.doc.previewurl ? `${props.doc.previewurl}?${props.quality}&t=${props.doc.mtime}` : '')
+const previewSrc = computed(() =>
+  props.doc.previewurl
+    ? `${props.doc.previewurl}?${props.quality}&t=${props.doc.mtime}`
+    : ''
+)
 
 const onplay = () => {
   if (!media.value) return
@@ -51,8 +55,11 @@ const applyPoster = (el: HTMLVideoElement) => {
 let fscurrent: HTMLVideoElement | null = null
 const next = () => {
   if (!media.value) return
-  media.value.load()  // Restore poster
-  const medias = Array.from(document.querySelectorAll('video, audio')) as (HTMLAudioElement | HTMLVideoElement)[]
+  media.value.load() // Restore poster
+  const medias = Array.from(document.querySelectorAll('video, audio')) as (
+    | HTMLAudioElement
+    | HTMLVideoElement
+  )[]
   if (medias.length === 0) return
   let el: HTMLAudioElement | HTMLVideoElement | null = null
   for (const i in medias) {
@@ -62,28 +69,32 @@ const next = () => {
     }
   }
   if (!el) return
-  if (el.tagName === "VIDEO" && document.fullscreenElement === media.value) {
+  if (el.tagName === 'VIDEO' && document.fullscreenElement === media.value) {
     // Fullscreen needs to use the current video element for the next video
     // because we are not allowed to fullscreen the next one.
     // FIXME: Write our own player to avoid this problem...
     const elem = media.value as HTMLVideoElement
     const playing = el as HTMLVideoElement
     if (elem === playing) {
-      playing.play()  // Only one video, just replay
+      playing.play() // Only one video, just replay
       return
     }
     if (!fscurrent) {
-      elem.addEventListener('fullscreenchange', ev => {
-        if (!fscurrent) return
-        // Restore the original video element and continue with the one that was playing
-        fscurrent.currentTime = elem.currentTime
-        fscurrent.click()
-        if (!elem.paused) fscurrent.play()
-        fscurrent = null
-        elem.src = props.doc.url
-        applyPoster(elem)
-        onpaused()
-      }, {once: true})
+      elem.addEventListener(
+        'fullscreenchange',
+        ev => {
+          if (!fscurrent) return
+          // Restore the original video element and continue with the one that was playing
+          fscurrent.currentTime = elem.currentTime
+          fscurrent.click()
+          if (!elem.paused) fscurrent.play()
+          fscurrent = null
+          elem.src = props.doc.url
+          applyPoster(elem)
+          onpaused()
+        },
+        { once: true }
+      )
     }
     fscurrent = playing
     elem.src = playing.src
@@ -99,7 +110,10 @@ defineExpose({
     if (!media.value) return false
     if (media.value.paused) {
       media.value.play()
-      for (const el of Array.from(document.querySelectorAll('video, audio')) as (HTMLAudioElement | HTMLVideoElement)[]) {
+      for (const el of Array.from(document.querySelectorAll('video, audio')) as (
+        | HTMLAudioElement
+        | HTMLVideoElement
+      )[]) {
         if (el === media.value) continue
         el.pause()
       }
@@ -108,19 +122,67 @@ defineExpose({
     }
     return true
   },
-  media,
+  media
 })
-
 
 const video = () => ['mkv', 'mp4', 'webm', 'mov', 'avi'].includes(props.doc.ext)
 const audio = () => ['mp3', 'flac', 'ogg', 'aac'].includes(props.doc.ext)
-const archive = () => ['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar'].includes(props.doc.ext)
+const archive = () =>
+  ['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar'].includes(props.doc.ext)
 const showProgress = () => !props.doc.complete && (preview() || props.doc.img)
-const preview = () => (
-  ['bmp', 'ico', 'tif', 'tiff', 'heic', 'heif', 'pdf', 'epub', 'mobi'].includes(props.doc.ext) ||
-  props.doc.size > 500000 &&
-  ['avif', 'webp', 'png', 'jpg', 'jpeg'].includes(props.doc.ext)
-)
+const preview = () =>
+  [
+    'bmp',
+    'ico',
+    'tif',
+    'tiff',
+    'heic',
+    'heif',
+    'pdf',
+    'epub',
+    'mobi',
+    // Documents
+    'doc',
+    'dot',
+    'docx',
+    'docm',
+    'dotx',
+    'dotm',
+    'rtf',
+    'odt',
+    'ott',
+    'txt',
+    'md',
+    'mhtml',
+    'mht',
+    'html',
+    'htm',
+    'xml',
+    'wps',
+    'wri',
+    // Spreadsheets
+    'xls',
+    'xlsx',
+    'xlsm',
+    'xlsb',
+    'xltx',
+    'xltm',
+    'ods',
+    'ots',
+    'csv',
+    // Presentations
+    'ppt',
+    'pptx',
+    'pptm',
+    'pps',
+    'ppsx',
+    'pot',
+    'potx',
+    'odp',
+    'otp'
+  ].includes(props.doc.ext) ||
+  (props.doc.size > 500000 &&
+    ['avif', 'webp', 'png', 'jpg', 'jpeg'].includes(props.doc.ext))
 </script>
 
 <style scoped>

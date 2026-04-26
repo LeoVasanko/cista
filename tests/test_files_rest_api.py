@@ -22,7 +22,13 @@ def setup_storage(tmp_path: Path):
 @pytest_asyncio.fixture()
 async def client(setup_storage: Path):
     app = Sanic(f"files-rest-test-{uuid4().hex}", strict_slashes=True)
-    app.router.ALLOWED_METHODS = (*app.router.ALLOWED_METHODS, "MKCOL", "MOVE", "COPY", "PROPFIND")
+    app.router.ALLOWED_METHODS = (
+        *app.router.ALLOWED_METHODS,
+        "MKCOL",
+        "MOVE",
+        "COPY",
+        "PROPFIND",
+    )
     app.blueprint(fileserver_bp)
     yield app.asgi_client
 
@@ -214,7 +220,9 @@ async def test_post_rejects_multiple_keys_to_file_target(client, setup_storage: 
 
 
 @pytest.mark.asyncio
-async def test_post_rejects_directory_to_existing_file_target(client, setup_storage: Path):
+async def test_post_rejects_directory_to_existing_file_target(
+    client, setup_storage: Path
+):
     (setup_storage / "folder").mkdir()
     (setup_storage / "folder" / "nested.txt").write_text("n", encoding="utf-8")
     (setup_storage / "existing.txt").write_text("e", encoding="utf-8")

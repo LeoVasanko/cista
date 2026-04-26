@@ -21,7 +21,13 @@ def setup_storage(tmp_path: Path):
 @pytest_asyncio.fixture()
 async def client(setup_storage: Path):
     app = Sanic(f"files-static-test-{uuid4().hex}", strict_slashes=True)
-    app.router.ALLOWED_METHODS = (*app.router.ALLOWED_METHODS, "MKCOL", "MOVE", "COPY", "PROPFIND")
+    app.router.ALLOWED_METHODS = (
+        *app.router.ALLOWED_METHODS,
+        "MKCOL",
+        "MOVE",
+        "COPY",
+        "PROPFIND",
+    )
     app.blueprint(fileserver_bp)
     yield app.asgi_client
 

@@ -319,7 +319,9 @@ def _ntlm_parse_type1(data: bytes) -> dict:
     return {"flags": flags}
 
 
-def _ntlm_build_type2(challenge: bytes, type1_flags: int = 0, target_name: str = "cista") -> bytes:
+def _ntlm_build_type2(
+    challenge: bytes, type1_flags: int = 0, target_name: str = "cista"
+) -> bytes:
     target = target_name.encode("utf-16le")
 
     # AV pairs for TargetInfo: NetBIOS + DNS names, terminated by EOL.
@@ -504,7 +506,9 @@ def _ntlmv2_verify(
             ).digest()
 
             # Expected proof = HMAC_MD5(NTLMv2_hash, challenge + blob)
-            expected_proof = hmac.new(ntlmv2_hash, challenge + blob, hashlib.md5).digest()
+            expected_proof = hmac.new(
+                ntlmv2_hash, challenge + blob, hashlib.md5
+            ).digest()
             if hmac.compare_digest(client_proof, expected_proof):
                 return True
 
@@ -623,9 +627,6 @@ def _basic_auth_login(request):
     return user
 
 
-
-
-
 async def _token_auth_login(request, *, privileged=False):
     """Authenticate via Basic token:<secret> in SSO mode.
 
@@ -720,7 +721,9 @@ async def _ntlm_auth_login(request, *, privileged=False):
         logger.warning("NTLM token missing NTLMSSP marker: client=%s", client_key)
 
     if len(data) < 12:
-        logger.warning("NTLM message too short: client=%s bytes=%d", client_key, len(data))
+        logger.warning(
+            "NTLM message too short: client=%s bytes=%d", client_key, len(data)
+        )
         raise Unauthorized("Invalid NTLM message", www_auth_scheme, quiet=True)
 
     msg_type = struct.unpack("<I", data[8:12])[0]
@@ -964,7 +967,9 @@ async def verify(request, *, privileged=False):
                 user = await _ntlm_auth_login(request, privileged=privileged)
             except Unauthorized as e:
                 auth_hdr = (e.headers or {}).get("WWW-Authenticate", "")
-                if (auth_hdr.startswith(("NTLM ", "Negotiate "))) and "realm=" not in auth_hdr:
+                if (
+                    auth_hdr.startswith(("NTLM ", "Negotiate "))
+                ) and "realm=" not in auth_hdr:
                     raise
                 ntlm_failed = True
                 user = None
@@ -1062,8 +1067,9 @@ async def login_page(request):
     doc.style(_LOGIN_PAGE_CSS)
     with doc.div(class_="login-card"):
         doc.h1("Authentication Required")
-        with doc.div(class_="content"), doc.form(
-            method="POST", id="loginForm", autocomplete="on"
+        with (
+            doc.div(class_="content"),
+            doc.form(method="POST", id="loginForm", autocomplete="on"),
         ):
             doc.label("Username:", for_="username")
             doc.input(
@@ -1329,9 +1335,7 @@ async def create_token_handler(request):
         if sso_user_id:
             # Non-admin cannot create tokens for other users
             if sso_user_id != current_sso_user_id:
-                raise Forbidden(
-                    "Cannot create tokens for other users", quiet=True
-                )
+                raise Forbidden("Cannot create tokens for other users", quiet=True)
         else:
             sso_user_id = current_sso_user_id
         if not sso_user_id:
@@ -1339,9 +1343,7 @@ async def create_token_handler(request):
     else:
         if username:
             if username != current_username:
-                raise Forbidden(
-                    "Cannot create tokens for other users", quiet=True
-                )
+                raise Forbidden("Cannot create tokens for other users", quiet=True)
         else:
             username = current_username
         if not username:

@@ -85,7 +85,55 @@ export class Doc {
     if (this.dir) return false
     if (this.img) return true
     // Not a comprehensive list, but good enough for now
-    return ['mp4', 'mkv', 'webm', 'ogg', 'mp3', 'flac', 'aac', 'pdf'].includes(this.ext)
+    return [
+      'mp4',
+      'mkv',
+      'webm',
+      'ogg',
+      'mp3',
+      'flac',
+      'aac',
+      'pdf',
+      // Documents
+      'doc',
+      'dot',
+      'docx',
+      'docm',
+      'dotx',
+      'dotm',
+      'rtf',
+      'odt',
+      'ott',
+      'txt',
+      'md',
+      'mhtml',
+      'mht',
+      'html',
+      'htm',
+      'xml',
+      'wps',
+      'wri',
+      // Spreadsheets
+      'xls',
+      'xlsx',
+      'xlsm',
+      'xlsb',
+      'xltx',
+      'xltm',
+      'ods',
+      'ots',
+      'csv',
+      // Presentations
+      'ppt',
+      'pptx',
+      'pptm',
+      'pps',
+      'ppsx',
+      'pot',
+      'potx',
+      'odp',
+      'otp'
+    ].includes(this.ext)
   }
   get previewurl(): string {
     if (!this.complete || !this.previewable) return ''

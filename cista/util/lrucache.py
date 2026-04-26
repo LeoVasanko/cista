@@ -58,7 +58,9 @@ class LRUCache:
         Expire items that are either too old or exceed cache capacity.
         """
         ts = monotonic() - self.maxage
-        while len(self.cache) > self.capacity or (self.cache and self.cache[-1][2] < ts):
+        while len(self.cache) > self.capacity or (
+            self.cache and self.cache[-1][2] < ts
+        ):
             self.cache.pop()[1].close()
 
     def close(self):

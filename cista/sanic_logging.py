@@ -201,7 +201,9 @@ WS_CLOSE_CODES = {
 }
 
 
-def log_ws_close(ws_id: int, close_code: int | None, duration: float, extra: str | None = None) -> None:
+def log_ws_close(
+    ws_id: int, close_code: int | None, duration: float, extra: str | None = None
+) -> None:
     """Log WebSocket connection close with duration and status."""
     id_str = _format_ws_id(ws_id)
     timing = format_duration_ms(duration * 1000)
@@ -218,7 +220,15 @@ def log_ws_close(ws_id: int, close_code: int | None, duration: float, extra: str
     timing_str = f"{_TIMING}{timing}{_RESET}"
     extra_str = f" {_TIMING}{extra}{_RESET}" if extra else ""
 
-    logger.info("%s %s %s %s %s%s", " " * 19, id_str, method_str, status_str, timing_str, extra_str)
+    logger.info(
+        "%s %s %s %s %s%s",
+        " " * 19,
+        id_str,
+        method_str,
+        status_str,
+        timing_str,
+        extra_str,
+    )
 
 
 def configure_access_logging() -> None:
