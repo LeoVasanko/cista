@@ -7,6 +7,7 @@
   </div>
   <SettingsModal />
   <UserManagementModal />
+  <UserTokensModal />
   <AccessDeniedModal />
   <header>
     <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query" />
@@ -35,6 +36,7 @@ import Router from '@/router/index'
 import type { SortOrder } from './utils/docsort'
 import type SettingsModalVue from './components/SettingsModal.vue'
 import UserManagementModal from './components/UserManagementModal.vue'
+import UserTokensModal from './components/UserTokensModal.vue'
 import AccessDeniedModal from './components/AccessDeniedModal.vue'
 import SelectionToolbar from './components/SelectionToolbar.vue'
 

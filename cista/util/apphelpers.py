@@ -24,10 +24,12 @@ def jres(data, **kwargs):
 
 async def handle_sanic_exception(request, e):
     context, code = {}, 500
+    headers = None
     message = str(e)
     if isinstance(e, SanicException):
         context = e.context or {}
         code = e.status_code
+        headers = getattr(e, "headers", None)
     if not message or not request.app.debug and code == 500:
         message = "Internal Server Error"
     message = f"⚠️ {message}" if code < 500 else f"🛑 {message}"
@@ -41,6 +43,7 @@ async def handle_sanic_exception(request, e):
         return jres(
             response_data,
             status=code,
+            headers=headers,
         )
     # Redirections flash the error message via cookies
     if "redirect" in context:
@@ -60,6 +63,7 @@ def websocket_wrapper(handler):
         extra = username if username else None
         start = time.perf_counter()
         ws_id = log_ws_open(request, extra=extra)
+        close_extra = None
         try:
             await auth.verify(request)
             await handler(request, ws, *args, **kwargs)
@@ -72,6 +76,7 @@ def websocket_wrapper(handler):
             await asend(ws, ErrorMsg({"code": code, "message": message, **context}))
             if not getattr(e, "quiet", False) or code == 500:
                 logger.exception(f"{code} {e!r}")
+            close_extra = f"{code} {message}"
             raise
         finally:
             duration = time.perf_counter() - start
@@ -86,6 +91,6 @@ def websocket_wrapper(handler):
                     close_code = p.close_code
             except AttributeError:
                 pass
-            log_ws_close(ws_id, close_code, duration)
+            log_ws_close(ws_id, close_code, duration, extra=close_extra)
 
     return wrapper

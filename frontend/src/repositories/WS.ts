@@ -2,7 +2,6 @@ import { useMainStore } from "@/stores/main"
 import { showAuthIframe, AuthCancelledError, isAuthIframeOpen } from 'paskia'
 import type { FileEntry, UpdateEntry, errorEvent } from "./Document"
 
-export const controlUrl = '/api/control'
 export const watchUrl = '/api/watch'
 
 let tree = [] as FileEntry[]

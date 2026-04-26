@@ -8,18 +8,18 @@ from ipaddress import IPv6Address
 logger = logging.getLogger("cista.access")
 
 _RESET = "\033[0m"
-_STATUS_INFO = "\033[32m"      # 1xx (green)
-_STATUS_OK = "\033[1;92m"      # 2xx (bright green)
+_STATUS_INFO = "\033[32m"  # 1xx (green)
+_STATUS_OK = "\033[1;92m"  # 2xx (bright green)
 _STATUS_REDIRECT = "\033[32m"  # 3xx (green)
-_STATUS_CLIENT_ERR = "\033[0;31m"   # 4xx (red)
-_STATUS_SERVER_ERR = "\033[1;91m"   # 5xx (bold bright red)
-_METHOD_READ = "\033[0;34m"    # GET, HEAD, OPTIONS (blue)
-_METHOD_WRITE = "\033[1;94m"   # POST, PUT, DELETE, PATCH (bold bright blue)
-_HOST = "\033[38;5;242m"       # hostname (dark grey)
-_PATH = "\033[38;5;250m"       # path (light grey)
-_TIMING = "\033[38;5;242m"     # timing (dark grey)
-_WS_OPEN = "\033[1;93m"        # WebSocket connect (bold bright yellow)
-_WS_CLOSE = "\033[33m"         # WebSocket disconnect (yellow)
+_STATUS_CLIENT_ERR = "\033[0;31m"  # 4xx (red)
+_STATUS_SERVER_ERR = "\033[1;91m"  # 5xx (bold bright red)
+_METHOD_READ = "\033[0;34m"  # GET, HEAD, OPTIONS (blue)
+_METHOD_WRITE = "\033[1;94m"  # POST, PUT, DELETE, PATCH (bold bright blue)
+_HOST = "\033[38;5;242m"  # hostname (dark grey)
+_PATH = "\033[38;5;250m"  # path (light grey)
+_TIMING = "\033[38;5;242m"  # timing (dark grey)
+_WS_OPEN = "\033[1;93m"  # WebSocket connect (bold bright yellow)
+_WS_CLOSE = "\033[33m"  # WebSocket disconnect (yellow)
 _WS_STATUS = "\033[38;5;250m"  # WebSocket close status (normal white)
 
 
@@ -113,7 +113,12 @@ def _format_method_label(label: str, *, color: str | None = None) -> str:
 
 
 def format_access_log(
-    client: str, status: int, method: str, host: str, path: str, duration_ms: float,
+    client: str,
+    status: int,
+    method: str,
+    host: str,
+    path: str,
+    duration_ms: float,
     extra: str | None = None,
 ) -> str:
     ip = _format_left(format_client_ip(client))
@@ -123,7 +128,9 @@ def format_access_log(
     path_str = f"{_PATH}{path}{_RESET}"
     timing_str = f"{_TIMING}{format_duration_ms(duration_ms)}{_RESET}"
     extra_str = f" {_TIMING}{extra}{_RESET}" if extra else ""
-    return f"{ip} {status_str} {method_str} {host_str}{path_str}{extra_str} {timing_str}"
+    return (
+        f"{ip} {status_str} {method_str} {host_str}{path_str}{extra_str} {timing_str}"
+    )
 
 
 _ws_counter = 1
@@ -194,7 +201,7 @@ WS_CLOSE_CODES = {
 }
 
 
-def log_ws_close(ws_id: int, close_code: int | None, duration: float) -> None:
+def log_ws_close(ws_id: int, close_code: int | None, duration: float, extra: str | None = None) -> None:
     """Log WebSocket connection close with duration and status."""
     id_str = _format_ws_id(ws_id)
     timing = format_duration_ms(duration * 1000)
@@ -209,8 +216,9 @@ def log_ws_close(ws_id: int, close_code: int | None, duration: float) -> None:
     method_str = _format_method_label("closed", color=_TIMING)
     status_str = f"{_WS_STATUS}{code} {status}{_RESET}"
     timing_str = f"{_TIMING}{timing}{_RESET}"
+    extra_str = f" {_TIMING}{extra}{_RESET}" if extra else ""
 
-    logger.info("%s %s %s %s %s", " " * 19, id_str, method_str, status_str, timing_str)
+    logger.info("%s %s %s %s %s%s", " " * 19, id_str, method_str, status_str, timing_str, extra_str)
 
 
 def configure_access_logging() -> None:

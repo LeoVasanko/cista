@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import {connect, controlUrl} from '@/repositories/WS'
+import { apiFetch } from '@/repositories/Client'
 import { useMainStore } from '@/stores/main'
 import { computed, ref } from 'vue'
 import { formatSize } from '@/utils'
@@ -47,6 +47,18 @@ const dst = computed(() => props.path!.join('/'))
 
 const navigateTo = (path: string) => {
   router.push('/' + path)
+}
+
+const filesUrl = (path: string) =>
+  '/files/' + path.split('/').map(part => encodeURIComponent(part)).join('/')
+
+const parseErrorMessage = async (res: Response) => {
+  try {
+    const data = await res.json()
+    return data.message || data.detail || `${res.status} ${res.statusText}`
+  } catch {
+    return `${res.status} ${res.statusText}`
+  }
 }
 
 // Truncate long names to reasonable length
@@ -115,43 +127,43 @@ const selectionDisplay = computed<SelectionDisplay>(() => {
   }
 })
 
-const op = (opName: string, dst?: string) => {
+const op = async (opName: string, dst?: string) => {
   const sel = store.selectedFiles
+  const keys = sel.keys
   const paths = sel.keys.map(key => {
     const doc = sel.docs[key]!
     return doc.loc ? `${doc.loc}/${doc.name}` : doc.name
   })
-  const msg = {
-    op: opName,
-    sel: paths
-  }
-  // @ts-ignore
-  if (dst !== undefined) msg.dst = dst
+
   // Hide items being deleted or moved (optimistic update)
   if (opName === 'rm' || opName === 'mv') {
     for (const path of paths) store.hideDoc(path)
   }
-  const control = connect(controlUrl, {
-    message(ev: MessageEvent) {
-      const res = JSON.parse(ev.data)
-      if ('error' in res) {
-        console.error('Control socket error', msg, res.error)
-        store.error = res.error.message
-        // Restore hidden items on error
-        if (opName === 'rm' || opName === 'mv') {
-          for (const path of paths) store.unhideDoc(path)
-        }
-        return
-      } else if (res.status === 'ack') {
-        console.log('Control ack OK', res)
-        control.close()
-        store.selected.clear()
-        return
-      } else console.log('Unknown control response', msg, res)
+
+  try {
+    if (opName === 'rm') {
+      for (const path of paths) {
+        const res = await apiFetch(filesUrl(path), { method: 'DELETE' })
+        if (!res.ok) throw new Error(await parseErrorMessage(res))
+      }
+    } else if (opName === 'mv' || opName === 'cp') {
+      if (keys.length === 0) throw new Error('No selected files')
+      const dstUrl = dst ? filesUrl(dst) : '/files/'
+      const query = `${opName}=${keys.join('+')}`
+      const res = await apiFetch(`${dstUrl}?${query}`, { method: 'POST' })
+      if (!res.ok) throw new Error(await parseErrorMessage(res))
+    } else {
+      throw new Error(`Unsupported operation: ${opName}`)
     }
-  })
-  control.onopen = () => {
-    control.send(JSON.stringify(msg))
+
+    store.selected.clear()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('REST file operation failed', opName, err)
+    store.error = message
+    if (opName === 'rm' || opName === 'mv') {
+      for (const path of paths) store.unhideDoc(path)
+    }
   }
 }
 

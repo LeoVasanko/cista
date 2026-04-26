@@ -105,6 +105,10 @@ const settingsMenu = (e: Event) => {
     items.push({ label: '🔑 Change Password', onClick: () => { store.dialog = 'settings' }})
   }
 
+  if (store.user.isLoggedIn) {
+    items.push({ label: '🔑 API Tokens', onClick: () => { store.dialog = 'tokens' }})
+  }
+
   if (store.user.privileged) {
     items.push({ label: '⚙️ Admin Settings', onClick: () => { store.dialog = 'usermgmt' }})
   }

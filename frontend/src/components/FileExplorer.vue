@@ -76,7 +76,7 @@ import { ref, computed, watchEffect, shallowRef, onMounted, onUnmounted, nextTic
 import { useMainStore } from '@/stores/main'
 import { Doc } from '@/repositories/Document'
 import FileRenameInput from './FileRenameInput.vue'
-import { connect, controlUrl } from '@/repositories/WS'
+import { apiFetch } from '@/repositories/Client'
 import { formatSize } from '@/utils'
 import { useRouter } from 'vue-router'
 import ContextMenu from '@imengyu/vue3-context-menu'
@@ -87,31 +87,36 @@ const props = defineProps<{
 }>()
 const store = useMainStore()
 const router = useRouter()
+
+const filesUrl = (path: string) =>
+  '/files/' + path.split('/').map(part => encodeURIComponent(part)).join('/')
+
+const parseErrorMessage = async (res: Response) => {
+  try {
+    const data = await res.json()
+    return data.message || data.detail || `${res.status} ${res.statusText}`
+  } catch {
+    return `${res.status} ${res.statusText}`
+  }
+}
+
 // File rename
 const editing = shallowRef<Doc | null>(null)
-const rename = (doc: Doc, newName: string) => {
+const rename = async (doc: Doc, newName: string) => {
   const oldName = doc.name
-  const control = connect(controlUrl, {
-    message(ev: MessageEvent) {
-      const msg = JSON.parse(ev.data)
-      if ('error' in msg) {
-        console.error('Rename failed', msg.error.message, msg.error)
-        doc.name = oldName
-      } else {
-        console.log('Rename succeeded', msg)
-      }
-    }
-  })
-  control.onopen = () => {
-    control.send(
-      JSON.stringify({
-        op: 'rename',
-        path: `${doc.loc}/${oldName}`,
-        to: newName
-      })
-    )
-  }
   doc.name = newName // We should get an update from watch but this is quicker
+  try {
+    const dstUrl = doc.loc ? filesUrl(doc.loc) : '/files/'
+    const res = await apiFetch(
+      `${dstUrl}?mv=${doc.key}&to=${encodeURIComponent(newName)}`,
+      { method: 'POST' }
+    )
+    if (!res.ok) throw new Error(await parseErrorMessage(res))
+  } catch (err) {
+    console.error('Rename failed', err)
+    doc.name = oldName
+    store.showToast(err instanceof Error ? err.message : 'Rename failed')
+  }
 }
 defineExpose({
   newFolder() {
@@ -253,31 +258,20 @@ onMounted(() => {
   }
 })
 onUnmounted(() => { clearInterval(modifiedTimer) })
-const mkdir = (doc: Doc, name: string) => {
-  const control = connect(controlUrl, {
-    open() {
-      control.send(
-        JSON.stringify({
-          op: 'mkdir',
-          path: `${doc.loc}/${name}`
-        })
-      )
-    },
-    message(ev: MessageEvent) {
-      const msg = JSON.parse(ev.data)
-      if ('error' in msg) {
-        console.error('Mkdir failed', msg.error.message, msg.error)
-        editing.value = null
-      } else {
-        console.log('mkdir', msg)
-        router.push(doc.urlrouter)
-      }
-    }
-  })
+const mkdir = async (doc: Doc, name: string) => {
   doc.name = name
   doc.key = crypto.randomUUID()
   store.addGhost(doc)
   editing.value = null
+  const path = doc.loc ? `${doc.loc}/${name}` : name
+  try {
+    const res = await apiFetch(filesUrl(path), { method: 'MKCOL' })
+    if (!res.ok) throw new Error(await parseErrorMessage(res))
+    router.push(doc.urlrouter)
+  } catch (err) {
+    console.error('Mkdir failed', err)
+    store.showToast(err instanceof Error ? err.message : 'Mkdir failed')
+  }
 }
 const showFolderBreadcrumb = (i: number) => {
   const docs = props.documents
@@ -373,24 +367,17 @@ const copyImage = async (doc: Doc) => {
   }
 }
 
-const deleteFile = (doc: Doc) => {
+const deleteFile = async (doc: Doc) => {
   const path = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
   store.hideDoc(path)
-  const control = connect(controlUrl, {
-    message(ev: MessageEvent) {
-      const res = JSON.parse(ev.data)
-      if ('error' in res) {
-        console.error('Delete failed', res.error)
-        store.unhideDoc(path)
-        store.showToast(res.error.message || 'Delete failed')
-      } else if (res.status === 'ack') {
-        store.showToast(`🗑️ Deleted ${doc.name}`)
-        control.close()
-      }
-    }
-  })
-  control.onopen = () => {
-    control.send(JSON.stringify({ op: 'rm', sel: [path] }))
+  try {
+    const res = await apiFetch(filesUrl(path), { method: 'DELETE' })
+    if (!res.ok) throw new Error(await parseErrorMessage(res))
+    store.showToast(`🗑️ Deleted ${doc.name}`)
+  } catch (err) {
+    console.error('Delete failed', err)
+    store.unhideDoc(path)
+    store.showToast(err instanceof Error ? err.message : 'Delete failed')
   }
 }
 

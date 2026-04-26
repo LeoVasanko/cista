@@ -221,9 +221,7 @@ class _PreviewWorkerPool:
             logger.warning(
                 "Preview worker protocol failure for %s: %s", filepath.name, e
             )
-            raise PreviewError(
-                f"worker protocol failure for {filepath.name}: {e}"
-            )
+            raise PreviewError(f"worker protocol failure for {filepath.name}: {e}")
         finally:
             if replace:
                 await self._replace_worker(worker)
@@ -470,9 +468,7 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     img = pyvips.Image.new_from_memory(
         pix.samples_mv, pix.width, pix.height, pix.n, "uchar"
     )
-    ret = img.write_to_buffer(
-        ".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True
-    )
+    ret = img.write_to_buffer(".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True)
     backend = "pdf+pyvips"
     t_save_end = perf_counter()
 

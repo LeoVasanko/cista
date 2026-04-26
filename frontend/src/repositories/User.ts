@@ -65,3 +65,20 @@ export async function getServerConfig() {
   const data = await Client.get('/api/config')
   return data as { name: string, public: boolean }
 }
+
+export const url_tokens = '/api/tokens'
+
+export async function listTokens() {
+  const data = await Client.get(url_tokens)
+  return data
+}
+
+export async function createToken(name: string) {
+  const data = await Client.post(url_tokens, { name })
+  return data
+}
+
+export async function deleteToken(tokenId: string) {
+  const data = await Client.delete(`${url_tokens}/${tokenId}`)
+  return data
+}

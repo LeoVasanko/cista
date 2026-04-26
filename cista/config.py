@@ -22,6 +22,7 @@ class Config(msgspec.Struct):
     name: str = ""
     users: dict[str, User] = {}
     links: dict[str, Link] = {}
+    tokens: dict[str, Token] = {}
 
 
 # Typing: arguments for config-modifying functions
@@ -41,6 +42,14 @@ class Link(msgspec.Struct, omit_defaults=True):
     location: str
     creator: str = ""
     expires: int = 0
+
+
+class Token(msgspec.Struct, omit_defaults=True):
+    key: str = ""  # plain text secret (shown once on creation)
+    username: str = ""  # set in built-in mode
+    sso_user_id: str = ""  # set in SSO mode
+    name: str = ""
+    created: int = 0  # noqa: N815
 
 
 # Global variables - initialized during application startup
@@ -203,4 +212,30 @@ def del_user(conf: Config, name: str) -> Config:
     # Create a copy by converting to dict and back
     settings = msgspec.to_builtins(conf, enc_hook=enc_hook)
     settings["users"].pop(name)
+    return msgspec.convert(settings, Config, dec_hook=dec_hook)
+
+
+@modifies_config
+def update_token(conf: Config, token_id: str, changes: dict) -> Config:
+    """Create or update a token."""
+    try:
+        t = msgspec.convert(
+            msgspec.to_builtins(conf.tokens[token_id], enc_hook=enc_hook),
+            Token,
+            dec_hook=dec_hook,
+        )
+    except KeyError:
+        t = Token()
+    tdict = msgspec.to_builtins(t, enc_hook=enc_hook)
+    tdict.update(changes)
+    settings = msgspec.to_builtins(conf, enc_hook=enc_hook)
+    settings["tokens"][token_id] = msgspec.convert(tdict, Token, dec_hook=dec_hook)
+    return msgspec.convert(settings, Config, dec_hook=dec_hook)
+
+
+@modifies_config
+def del_token(conf: Config, token_id: str) -> Config:
+    """Delete a token by its stable id."""
+    settings = msgspec.to_builtins(conf, enc_hook=enc_hook)
+    settings["tokens"].pop(token_id, None)
     return msgspec.convert(settings, Config, dec_hook=dec_hook)

@@ -19,21 +19,21 @@ def get(request):
         return False if "s" in request.cookies else None
 
 
-def create(res, username, **kwargs):
+def create(res, username, *, secure: bool = True, **kwargs):
     data = {
         "exp": int(time()) + max_age,
         "username": username,
         **kwargs,
     }
     s = jwt.encode(data, session_secret())
-    res.cookies.add_cookie("s", s, httponly=True, max_age=max_age)
+    res.cookies.add_cookie("s", s, httponly=True, max_age=max_age, secure=secure)
 
 
-def update(res, s, **kwargs):
+def update(res, s, *, secure: bool = True, **kwargs):
     s.update(kwargs)
     s = jwt.encode(s, session_secret())
     max_age = max(1, s["exp"] - int(time()))  # type: ignore
-    res.cookies.add_cookie("s", s, httponly=True, max_age=max_age)
+    res.cookies.add_cookie("s", s, httponly=True, max_age=max_age, secure=secure)
 
 
 def delete(res):

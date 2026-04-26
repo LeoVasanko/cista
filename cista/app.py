@@ -1,19 +1,16 @@
 import asyncio
 import datetime
 import mimetypes
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from multiprocessing import cpu_count
 from pathlib import Path, PurePath, PurePosixPath
 from stat import S_IFDIR, S_IFREG
 from urllib.parse import unquote
 from wsgiref.handlers import format_date_time
 
-import sanic.helpers
 from blake3 import blake3
-from sanic import Blueprint, Sanic, empty, json, raw, redirect
-from sanic.exceptions import BadRequest, Forbidden, NotFound
+from sanic import Sanic, empty, raw, redirect
+from sanic.exceptions import Forbidden, NotFound
 from sanic.log import logger
 from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
@@ -21,18 +18,88 @@ from zstandard import ZstdCompressor
 
 from cista import auth, config, preview, session, sso, watching
 from cista.preview import shutdown_preview_workers, start_preview_workers
-from cista.api import bp, fileserver
-from cista.sanic_logging import configure_access_logging, configure_main_logging, format_access_log
+from cista.api import bp
+from cista import fileserver
+from cista.sanic_logging import (
+    configure_access_logging,
+    configure_main_logging,
+    format_access_log,
+)
 from cista.sanic_logging import logger as access_logger
 from cista.util.apphelpers import handle_sanic_exception
-
-# Workaround until Sanic PR #2824 is merged
-sanic.helpers._ENTITY_HEADERS = frozenset()
 
 configure_access_logging()
 
 app = Sanic("cista", strict_slashes=True)
+app.router.ALLOWED_METHODS = (
+    *app.router.ALLOWED_METHODS,
+    "MKCOL",
+    "MOVE",
+    "COPY",
+    "PROPFIND",
+)
+
 configure_main_logging()
+
+
+@app.on_request
+async def use_session(req):
+    req.ctx._log_start = time.perf_counter()
+    req.ctx._auth_flow = ["session: start"]
+    auth.hydrate_request_auth_context(req, source="app.on_request")
+    # CSRF protection
+    if req.method == "GET" and req.headers.upgrade != "websocket":
+        return  # Ordinary GET requests are fine
+    # Check that origin matches host, for browsers which should all send Origin.
+    # Curl doesn't send any Origin header, so we allow it anyway.
+    origin = req.headers.origin
+    if origin and origin.split("//", 1)[1] != req.host:
+        raise Forbidden("Invalid origin: Cross-Site requests not permitted")
+
+
+@app.on_response
+async def log_access(req, res):
+    """Log HTTP access in a clean single-line format."""
+    if req.headers.get("upgrade", "").lower() == "websocket":
+        return res
+    start = getattr(req.ctx, "_log_start", None)
+    duration_ms = (time.perf_counter() - start) * 1000 if start is not None else 0.0
+    client = req.client_ip or "-"
+    host = req.host or "-"
+    path = req.path
+    if req.query_string:
+        qs = req.query_string
+        if isinstance(qs, bytes):
+            qs = qs.decode(errors="replace")
+        path = f"{path}?{qs}"
+    extra = getattr(req.ctx, "_log_extra", None)
+    line = format_access_log(
+        client, res.status, req.method, host, path, duration_ms, extra=extra
+    )
+    access_logger.info(line)
+    return res
+
+
+@app.on_response
+async def forward_sso_cookies(req, res):
+    """Forward Set-Cookie headers from SSO validation to client."""
+    if cookies := getattr(req.ctx, "sso_cookies", None):
+        for cookie in cookies:
+            res.headers.add("set-cookie", cookie)
+
+
+@app.on_response
+async def persist_auth_session(req, res):
+    """Persist a session cookie after successful Authorization-based auth."""
+    username = getattr(req.ctx, "_create_session_username", None)
+    if not username or res.status >= 400:
+        return
+    existing = getattr(req.ctx, "session", None)
+    if isinstance(existing, dict) and existing.get("username") == username:
+        return
+    session.create(res, username, secure=req.scheme == "https")
+
+
 # Register either SSO proxy or built-in auth routes based on PASKIA_BACKEND_URL
 if sso.paskia_enabled():
     app.blueprint(sso.bp)  # SSO proxy for /auth/* routes
@@ -40,6 +107,7 @@ else:
     app.blueprint(auth.bp)  # Built-in auth routes
 app.blueprint(preview.bp)
 app.blueprint(bp)
+app.blueprint(fileserver.bp)
 app.exception(Exception)(handle_sanic_exception)
 
 
@@ -70,161 +138,7 @@ async def main_stop(app):
     logger.debug("Cista worker threads all finished")
 
 
-@app.on_request
-async def use_session(req):
-    req.ctx._log_start = time.perf_counter()
-    req.ctx.session = session.get(req)
-    try:
-        req.ctx.username = req.ctx.session["username"]  # type: ignore
-        req.ctx.user = config.config.users[req.ctx.username]
-    except (AttributeError, KeyError, TypeError):
-        req.ctx.username = None
-        req.ctx.user = None
-    # CSRF protection
-    if req.method == "GET" and req.headers.upgrade != "websocket":
-        return  # Ordinary GET requests are fine
-    # Check that origin matches host, for browsers which should all send Origin.
-    # Curl doesn't send any Origin header, so we allow it anyway.
-    origin = req.headers.origin
-    if origin and origin.split("//", 1)[1] != req.host:
-        raise Forbidden("Invalid origin: Cross-Site requests not permitted")
-
-
-@app.on_response
-async def log_access(req, res):
-    """Log HTTP access in a clean single-line format."""
-    if req.headers.get("upgrade", "").lower() == "websocket":
-        return res
-    start = getattr(req.ctx, "_log_start", None)
-    duration_ms = (time.perf_counter() - start) * 1000 if start is not None else 0.0
-    client = req.client_ip or "-"
-    host = req.host or "-"
-    path = req.path
-    if req.query_string:
-        qs = req.query_string
-        if isinstance(qs, bytes):
-            qs = qs.decode(errors="replace")
-        path = f"{path}?{qs}"
-    extra = getattr(req.ctx, "_log_extra", None)
-    line = format_access_log(client, res.status, req.method, host, path, duration_ms, extra=extra)
-    access_logger.info(line)
-    return res
-
-
-@app.on_response
-async def forward_sso_cookies(req, res):
-    """Forward Set-Cookie headers from SSO validation to client."""
-    if cookies := getattr(req.ctx, "sso_cookies", None):
-        for cookie in cookies:
-            res.headers.add("set-cookie", cookie)
-
-
-@app.before_server_start
-def http_fileserver(app):
-    bp = Blueprint("fileserver")
-
-    @bp.on_request
-    async def verify_fileserver(request):
-        """Verify access to file server routes."""
-        await auth.verify(request)
-
-    @bp.put("/files/<name:path>")
-    async def upload_file_chunk(request, *args, **kwargs):
-        body = request.body
-        header = request.headers.get("content-range")
-        if header:
-            start, end, total = _parse_content_range(header, len(body))
-        else:
-            start = 0
-            end = len(body)
-            total = end
-        raw_name = kwargs.get("name")
-        if raw_name is None and args:
-            raw_name = args[0]
-        if not isinstance(raw_name, str) or not raw_name:
-            prefix = "/files/"
-            if not request.path.startswith(prefix):
-                raise BadRequest("Invalid upload path")
-            raw_name = request.path[len(prefix) :]
-        rel_name = unquote(raw_name)
-        upload_info = await asyncio.to_thread(
-            fileserver.upload_info,
-            rel_name,
-            start,
-            body,
-            total,
-        )
-        extras = []
-        chunk_len = end - start
-        whole_file = start == 0 and end == total
-        if not whole_file:
-            start_mib = _to_mib_int(start)
-            chunk_mib = _to_mib_int(chunk_len)
-            # Keep range logs compact for fixed-size upload blocks.
-            if chunk_mib == 16:
-                extras.append(f"{start_mib}MiB")
-            else:
-                extras.append(f"{start_mib}+{chunk_mib}MiB")
-        if upload_info.get("created"):
-            extras.append(f"created {_to_mib_int(total)}MiB")
-        size_before = upload_info.get("size_before")
-        size_after = upload_info.get("size_after")
-        if (
-            size_before is not None
-            and size_after is not None
-            and size_before != size_after
-        ):
-            extras.append("resized")
-        request.ctx._log_extra = " ".join(extras) if extras else None
-        path = PurePosixPath(rel_name)
-        watching.notify_change(path, *path.parents)
-        return json(
-            {
-                "status": "ack",
-                "req": {
-                    "name": rel_name,
-                    "size": total,
-                    "start": start,
-                    "end": end,
-                },
-            }
-        )
-
-    bp.static(
-        "/files/",
-        config.config.path,
-        use_content_range=True,
-        stream_large_files=True,
-        directory_view=True,
-    )
-    app.blueprint(bp)
-
-
 www = {}
-_CONTENT_RANGE_RE = re.compile(r"^bytes (\d+)-(\d+)/(\d+)$")
-
-
-def _parse_content_range(header: str, body_len: int) -> tuple[int, int, int]:
-    m = _CONTENT_RANGE_RE.fullmatch(header.strip())
-    if m is None:
-        raise BadRequest("Invalid Content-Range format")
-    start, end_inclusive, total = (int(v) for v in m.groups())
-    if total <= 0:
-        raise BadRequest("Invalid Content-Range total size")
-    if start > end_inclusive:
-        raise BadRequest("Invalid Content-Range range")
-    if end_inclusive >= total:
-        raise BadRequest("Content-Range exceeds total size")
-    expected_len = end_inclusive - start + 1
-    if expected_len != body_len:
-        raise BadRequest(
-            f"Content length mismatch for range: expected {expected_len}, got {body_len}"
-        )
-    return start, end_inclusive + 1, total
-
-
-def _to_mib_int(value_bytes: int) -> int:
-    return round(value_bytes / (1 << 20))
 
 
 def _load_wwwroot(www):

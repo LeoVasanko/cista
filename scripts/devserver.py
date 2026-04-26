@@ -44,7 +44,9 @@ def setup_sanic_backend(
     port = opts.get("port", DEFAULT_BACKEND_PORT)
     host = opts.get("host", "localhost") or "localhost"
 
-    cmd = ["cista", "--dev", "-l", listen] + extra_args
+    # Use the current interpreter/module path so devserver always runs
+    # workspace source code instead of a potentially stale installed script.
+    cmd = [sys.executable, "-m", "cista", "--dev", "-l", listen] + extra_args
     return f"http://{host}:{port}", cmd
 
 

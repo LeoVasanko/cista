@@ -80,7 +80,7 @@ export const useMainStore = defineStore('main', {
     authInProgress: false,
     cursor: '' as string,
     server: {} as Record<string, any> & { public?: boolean, paskia?: boolean },
-    dialog: '' as '' | 'settings' | 'usermgmt' | 'accessdenied',
+    dialog: '' as '' | 'settings' | 'usermgmt' | 'accessdenied' | 'tokens',
     uprogress: {} as any,
     dprogress: {} as any,
     prefs: {

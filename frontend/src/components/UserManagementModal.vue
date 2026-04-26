@@ -188,14 +188,14 @@ const deleteUserAction = async (username: string) => {
 }
 
 const copySuccess = async (isButtonClick: boolean = false) => {
-  const passwordMatch = success.value.match(/(?:Password|New password): (.+)/)
+  const passwordMatch = success.value.match(/(?:Password|New password|Key): (.+)/)
   if (passwordMatch) {
     await navigator.clipboard.writeText(passwordMatch[1]!)
     if (isButtonClick) {
       // Show "Copied!" indication on button
       copyButtonText.value = '✅ Copied!'
-      // Hide password and button immediately after copying
-      const baseMessage = success.value.replace(/(?:Password|New password): .+/, 'Password copied to clipboard!')
+      // Hide password/key and button immediately after copying
+      const baseMessage = success.value.replace(/(?:Password|New password|Key): .+/, 'Copied to clipboard!')
       success.value = baseMessage
       // Hide the entire message after 3 seconds
       setTimeout(() => {

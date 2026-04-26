@@ -45,7 +45,7 @@ The server remembers its settings in the config folder (default `~/.local/share/
 
 ## Authentication
 
-Cista supports two authenticatioon mode, each of which supporting ordinary and privileged users. Either one can be combined with the public mode.
+Cista supports two authentication modes, each supporting ordinary and privileged users. Either one can be combined with the public mode.
 
 ### Public Mode
 
@@ -82,6 +82,30 @@ In Paskia mode:
 - Cista backend verifies access by `/auth/api/validate` endpoint and shows a login dialog if needed
 - Users with `cista:login` permission can access files
 - Users with `cista:admin` permission get privileged access (Admin Settings)
+
+## WebDAV Access
+
+Cista supports WebDAV, so you can mount it as a network drive or browse it directly from your operating system's file manager.
+
+Connect to `https://cista.example.com/files/`.
+
+### Authentication
+
+- **Standard users:** Use your username and password with Basic auth.
+- **API tokens:** For scripts, backup tools, or when your client requires NTLM (e.g. Windows File Explorer), create a token in the web interface via **🔑 API Tokens**. Authenticate with username `token` and the token secret as the password.
+
+### Supported clients
+
+| Client | Setup |
+|--------|-------|
+| **Windows File Explorer** | Map Network Drive → `https://cista.example.com/files/` (or Add a network location). Windows may try NTLM first; API tokens are recommended. |
+| **macOS Finder** | Go → Connect to Server (⌘K) → `https://cista.example.com/files/` |
+| **Linux (GNOME/KDE)** | Enter `davs://cista.example.com/files/` or `webdavs://cista.example.com/files/` in the location bar |
+| **Android — Solid Explorer** | Tap **+** → New Cloud Connection → **WebDAV** → enter `https://cista.example.com/files/` and your credentials. |
+| **Android — CX File Explorer** | Open the **Network** tab → **New location** → **WebDAV** → enter `https://cista.example.com/files/` and your credentials. |
+| **Cyberduck, WinSCP, rclone** | Standard WebDAV profile with Basic auth |
+
+**Note on Windows NTLM:** Windows WebDAV clients often require NTLM authentication, which is incompatible with Cista's Argon2 password hashes. API tokens solve this — Cista uses the token secret as the NTLM password.
 
 ### Internet Access
 

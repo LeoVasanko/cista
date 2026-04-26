@@ -7,9 +7,13 @@ from sanic import Blueprint, json
 from sanic.exceptions import BadRequest
 
 from cista import __version__, auth, config, sso, watching
+from cista.auth import (
+    create_token_handler,
+    delete_token_handler,
+    list_tokens_handler,
+)
 from cista.fileio import FileServer
-from cista.protocol import ControlTypes, StatusMsg
-from cista.util.apphelpers import asend, websocket_wrapper
+from cista.util.apphelpers import websocket_wrapper
 
 bp = Blueprint("api", url_prefix="/api")
 fileserver = FileServer()
@@ -23,17 +27,6 @@ async def start_fileserver(app):
 @bp.after_server_stop
 async def stop_fileserver(app):
     await fileserver.stop()
-
-
-@bp.websocket("control")
-@websocket_wrapper
-async def control(req, ws):
-    while True:
-        cmd = msgspec.json.decode(await ws.recv(), type=ControlTypes)
-        await asyncio.to_thread(cmd)
-        # Signal the watcher about affected paths
-        watching.notify_change(*cmd.affected_paths())
-        await asend(ws, StatusMsg(status="ack", req=cmd))
 
 
 @bp.websocket("watch")
@@ -144,3 +137,19 @@ async def update_name(request):
     # Return the effective name (fallback to path.name if empty)
     effective_name = name or config.config.path.name
     return json({"message": "Server name updated", "name": effective_name})
+
+
+# Token management endpoints (available in all modes; primary path in SSO mode)
+@bp.get("tokens")
+async def list_api_tokens(request):
+    return await list_tokens_handler(request)
+
+
+@bp.post("tokens")
+async def create_api_token(request):
+    return await create_token_handler(request)
+
+
+@bp.delete("tokens/<token_id>")
+async def delete_api_token(request, token_id):
+    return await delete_token_handler(request, token_id)

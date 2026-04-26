@@ -152,6 +152,61 @@ async def validate_sso_request(request, *, perm: str = "cista:login") -> dict | 
         )
 
 
+async def check_permissions(user_id: str, perm: str) -> dict:
+    """Check if a Paskia user has the given permission.
+
+    Args:
+        user_id: The Paskia user UUID
+        perm: Permission to check (e.g. cista:login or cista:admin)
+
+    Returns:
+        User info dict if permission is granted
+
+    Raises:
+        Forbidden: If permission is denied or check fails
+        SanicException: If the auth service is unreachable
+    """
+    if not paskia_enabled():
+        raise ValueError("Paskia not enabled")
+
+    client = await get_client()
+    url = f"{PASKIA_BACKEND_URL}/auth/api/check-permissions"
+
+    try:
+        response = await client.post(
+            url,
+            json={"user_id": user_id, "perm": perm},
+            headers={"accept": "application/json"},
+        )
+
+        if response.status_code == 200:
+            return response.json()
+
+        try:
+            error_data = response.json()
+        except Exception:
+            error_data = {"detail": response.text or "Permission check failed"}
+
+        if response.status_code == 403:
+            raise Forbidden(
+                error_data.get("detail", "Access denied"),
+                quiet=True,
+            )
+        else:
+            raise Forbidden(
+                error_data.get("detail", "Permission check failed"),
+                quiet=True,
+            )
+
+    except httpx.RequestError as e:
+        logger.error(f"Permission check {url} network error: {e}")
+        raise SanicException(
+            "Authentication service unavailable",
+            status_code=502,
+            quiet=True,
+        )
+
+
 async def proxy_auth_request(request):
     """Proxy a request to the auth backend.
 
