@@ -9,13 +9,12 @@ from sanic import Sanic
 
 from cista import config, watching
 from cista.fileserver import bp as fileserver_bp
-from cista.protocol import FileEntry
 
 _DAV_NS = "DAV:"
 _METHODS = ("MKCOL", "MOVE", "COPY", "PROPFIND")
 
 
-@pytest.fixture()
+@pytest.fixture
 def setup_storage(tmp_path: Path):
     config.config = config.Config(path=tmp_path, listen=":0", public=True)
     watching.state.root = []

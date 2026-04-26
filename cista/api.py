@@ -1,10 +1,10 @@
 import asyncio
-from pathlib import PurePosixPath
 from secrets import token_bytes
 
 import msgspec
 from sanic import Blueprint, json
 from sanic.exceptions import BadRequest
+from sanic.log import logger
 
 from cista import __version__, auth, config, sso, watching
 from cista.auth import (
@@ -38,8 +38,8 @@ async def watch(req, ws):
         # SSO auth: call validation to get user info (don't enforce auth in public mode)
         try:
             await sso.validate_sso_request(req)
-        except Exception:
-            pass  # Ignore auth errors, user_info stays None
+        except Exception as e:
+            logger.debug("watch SSO validation failed: %s", e)
         if sso_user := getattr(req.ctx, "sso_user", None):
             ctx = sso_user.get("ctx", {})
             perms = ctx.get("permissions", [])

@@ -1,12 +1,14 @@
 import asyncio
+import contextlib
 import mimetypes
 import os
 import re
 import shutil
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from urllib.parse import quote as url_quote, unquote, urlparse
+from urllib.parse import quote as url_quote
+from urllib.parse import unquote, urlparse
 from wsgiref.handlers import format_date_time
 
 from sanic import Blueprint, HTTPResponse, empty, json
@@ -155,7 +157,7 @@ async def copy_or_move(request, name=""):
         raise NotFound("Files not found", context={"missing": missing})
 
     # Validate target shape/type before mutating anything.
-    for op_name, op_keys in (("cp", cp_keys), ("mv", mv_keys)):
+    for _op_name, op_keys in (("cp", cp_keys), ("mv", mv_keys)):
         if len(op_keys) > 1 and not dst_is_dir:
             raise BadRequest("Destination must be an existing directory for multiple keys")
         if not op_keys:
@@ -175,7 +177,7 @@ async def copy_or_move(request, name=""):
     changed: set[PurePosixPath] = set()
     completed: list[dict[str, str]] = []
 
-    class _FileOpFailed(Exception):
+    class _FileOpError(Exception):
         def __init__(self, op_name: str, key: str, error: Exception):
             self.op_name = op_name
             self.key = key
@@ -236,11 +238,11 @@ async def copy_or_move(request, name=""):
                     changed.add(dst_item_rel.parent)
                     completed.append({"op": op_name, "key": key})
                 except Exception as e:
-                    raise _FileOpFailed(op_name, key, e) from e
+                    raise _FileOpError(op_name, key, e) from e
 
     try:
         await asyncio.to_thread(_apply)
-    except _FileOpFailed as e:
+    except _FileOpError as e:
         raise BadRequest(
             "File operation failed after partial progress",
             context={
@@ -310,7 +312,7 @@ async def dav_copy(request, name=""):
     if not dest_header:
         raise BadRequest("Missing Destination header")
     overwrite = request.headers.get("overwrite", "T").strip().upper() != "F"
-    src_rel, src_abs = _safe_relpath(name)
+    _src_rel, src_abs = _safe_relpath(name)
     dst_rel, dst_abs = _parse_webdav_destination(dest_header)
     request.ctx._log_extra = f"→ {dst_rel}"
     if not src_abs.exists():
@@ -537,7 +539,7 @@ def _parse_webdav_destination(dest_header: str) -> tuple[PurePosixPath, Path]:
     return _safe_relpath(rel_str)
 
 
-def _rel_to_href(rel: PurePosixPath, is_dir: bool) -> str:
+def _rel_to_href(rel: PurePosixPath, *, is_dir: bool) -> str:
     """Build a DAV href from a storage-relative path."""
     parts = rel.parts
     if not parts:
@@ -560,10 +562,8 @@ def _collect_propfind_entries(rel: PurePosixPath, path: Path, depth: str) -> lis
     if depth == "1" and path.is_dir():
         for child in sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name)):
             child_rel = rel / child.name if rel.parts else PurePosixPath(child.name)
-            try:
+            with contextlib.suppress(OSError):
                 entries.append(_propfind_entry(child_rel, child))
-            except OSError:
-                pass
     return entries
 
 
@@ -571,14 +571,14 @@ def _propfind_entry(rel: PurePosixPath, path: Path) -> dict:
     st = path.stat()
     is_dir = path.is_dir()
     return {
-        "href": _rel_to_href(rel, is_dir),
+        "href": _rel_to_href(rel, is_dir=is_dir),
         "name": rel.parts[-1] if rel.parts else "",
         "is_dir": is_dir,
         "size": st.st_size,
         "etag": f'"{st.st_mtime:.0f}-{st.st_size}"',
         "content_type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
         "last_modified": format_date_time(st.st_mtime),
-        "created": datetime.fromtimestamp(st.st_ctime, tz=timezone.utc).strftime(
+        "created": datetime.fromtimestamp(st.st_ctime, tz=UTC).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         ),
     }

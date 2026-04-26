@@ -1,7 +1,7 @@
 import base64
 import binascii
-import hmac
 import hashlib
+import hmac
 import re
 import secrets
 import struct
@@ -275,7 +275,6 @@ def _log_webdav_user_agent_once(request, user_agent: str):
         return
     _seen_webdav_uas.add(key)
     # Temporary stdout print so operators can quickly capture real client UAs.
-    print(f"WebDAV User-Agent observed: {key} path={request.path}")
 
 
 def _build_ua_auth_headers(request, *, include_hint=False) -> dict[str, str]:
@@ -285,8 +284,7 @@ def _build_ua_auth_headers(request, *, include_hint=False) -> dict[str, str]:
         challenge = f'Basic realm="{_AUTH_REALM}", Negotiate'
     else:
         challenge = f'Basic realm="{_AUTH_REALM}"'
-    headers = {"WWW-Authenticate": challenge}
-    return headers
+    return {"WWW-Authenticate": challenge}
 
 
 def _cleanup_ntlm_challenges():
@@ -399,14 +397,13 @@ def _spnego_wrap_ntlm_challenge(ntlm_type2: bytes) -> bytes:
     neg_state_accept_incomplete = _der_tlv(0xA0, _der_tlv(0x0A, b"\x01"))
     supported_mech = _der_tlv(0xA1, ntlm_oid)
     response_token = _der_tlv(0xA2, _der_tlv(0x04, ntlm_type2))
-    neg_token_resp = _der_tlv(
+    return _der_tlv(
         0xA1,
         _der_tlv(
             0x30,
             neg_state_accept_incomplete + supported_mech + response_token,
         ),
     )
-    return neg_token_resp
 
 
 def _ntlm_parse_type3(data: bytes) -> dict | None:
@@ -417,7 +414,7 @@ def _ntlm_parse_type3(data: bytes) -> dict | None:
         return None
 
     def read_buf(offset: int) -> bytes:
-        length, max_len, buf_offset = struct.unpack("<HHI", data[offset : offset + 8])
+        length, _max_len, buf_offset = struct.unpack("<HHI", data[offset : offset + 8])
         if length == 0:
             return b""
         if buf_offset + length > len(data):
@@ -460,7 +457,7 @@ def _ntlmv2_verify(
     blob = nt_response[16:]
 
     # NT hash = MD4(UTF-16LE(password))
-    nt_hash = MD4.new(token_secret.encode("utf-16le")).digest()
+    nt_hash = MD4.new(token_secret.encode("utf-16le")).digest()  # noqa: S303
 
     raw_username = username or ""
     raw_domain = domain or ""
@@ -629,7 +626,7 @@ def _basic_auth_login(request):
 
 
 
-async def _token_auth_login(request, privileged=False):
+async def _token_auth_login(request, *, privileged=False):
     """Authenticate via Basic token:<secret> in SSO mode.
 
     Returns True if authenticated, False if no token matched.
@@ -686,7 +683,7 @@ async def _token_auth_login(request, privileged=False):
     return False
 
 
-async def _ntlm_auth_login(request, privileged=False):
+async def _ntlm_auth_login(request, *, privileged=False):
     """Handle NTLM authentication for token-based login.
 
     Supports NTLMv2 responses where the token secret is used as the password.
@@ -706,9 +703,9 @@ async def _ntlm_auth_login(request, privileged=False):
 
     try:
         data = base64.b64decode(encoded)
-    except Exception:
+    except Exception as e:
         logger.warning("NTLM decode failed: client=%s", client_key)
-        raise Unauthorized("Invalid NTLM message", www_auth_scheme, quiet=True)
+        raise Unauthorized("Invalid NTLM message", www_auth_scheme, quiet=True) from e
 
     # Windows commonly sends SPNEGO-wrapped Negotiate tokens that embed NTLMSSP.
     # Extract the NTLMSSP blob when present so downstream parsing sees raw Type 1/3.
@@ -797,7 +794,6 @@ async def _ntlm_auth_login(request, privileged=False):
                 secret_candidates.append(("token-key", token.key))
 
             matched_by = None
-            matched_challenge = None
             for secret_kind, secret_value in secret_candidates:
                 for challenge in challenges:
                     if _ntlmv2_verify(
@@ -808,7 +804,6 @@ async def _ntlm_auth_login(request, privileged=False):
                         nt_response,
                     ):
                         matched_by = secret_kind
-                        matched_challenge = challenge
                         break
                 if matched_by:
                     break
@@ -919,14 +914,14 @@ async def verify(request, *, privileged=False):
                 perm = "cista:admin" if privileged else "cista:login"
                 await sso.validate_sso_request(request, perm=perm)
                 return
-            except Unauthorized:
+            except Unauthorized as e:
                 auth_flow.append(f"tried={','.join(tried)} result=failed")
                 _set_auth_failure_log(request, auth_flow)
                 raise Unauthorized(
                     "Invalid credentials",
                     headers=_build_ua_auth_headers(request),
                     quiet=True,
-                )
+                ) from e
         tried.append("sso")
         perm = "cista:admin" if privileged else "cista:login"
         await sso.validate_sso_request(request, perm=perm)
@@ -969,7 +964,7 @@ async def verify(request, *, privileged=False):
                 user = await _ntlm_auth_login(request, privileged=privileged)
             except Unauthorized as e:
                 auth_hdr = (e.headers or {}).get("WWW-Authenticate", "")
-                if (auth_hdr.startswith("NTLM ") or auth_hdr.startswith("Negotiate ")) and "realm=" not in auth_hdr:
+                if (auth_hdr.startswith(("NTLM ", "Negotiate "))) and "realm=" not in auth_hdr:
                     raise
                 ntlm_failed = True
                 user = None
@@ -1067,27 +1062,28 @@ async def login_page(request):
     doc.style(_LOGIN_PAGE_CSS)
     with doc.div(class_="login-card"):
         doc.h1("Authentication Required")
-        with doc.div(class_="content"):
-            with doc.form(method="POST", id="loginForm", autocomplete="on"):
-                doc.label("Username:", for_="username")
-                doc.input(
-                    type="text",
-                    id="username",
-                    name="username",
-                    autocomplete="username webauthn",
-                    required=True,
-                )
-                doc.label("Password:", for_="password")
-                doc.input(
-                    type="password",
-                    id="password",
-                    name="password",
-                    autocomplete="current-password webauthn",
-                    required=True,
-                )
-                with doc.div(class_="button-row"):
-                    doc.button("Log in", type="submit", id="submitBtn")
-                doc.p("", class_="error", id="error")
+        with doc.div(class_="content"), doc.form(
+            method="POST", id="loginForm", autocomplete="on"
+        ):
+            doc.label("Username:", for_="username")
+            doc.input(
+                type="text",
+                id="username",
+                name="username",
+                autocomplete="username webauthn",
+                required=True,
+            )
+            doc.label("Password:", for_="password")
+            doc.input(
+                type="password",
+                id="password",
+                name="password",
+                autocomplete="current-password webauthn",
+                required=True,
+            )
+            with doc.div(class_="button-row"):
+                doc.button("Log in", type="submit", id="submitBtn")
+            doc.p("", class_="error", id="error")
 
     # JavaScript for AJAX login and postMessage communication
     doc.script_(_LOGIN_PAGE_JS)
@@ -1289,9 +1285,7 @@ def _token_belongs_to_user(token, username, sso_user_id):
     """Check if a token belongs to the given user."""
     if username is not None and token.username == username:
         return True
-    if sso_user_id is not None and token.sso_user_id == sso_user_id:
-        return True
-    return False
+    return bool(sso_user_id is not None and token.sso_user_id == sso_user_id)
 
 
 # Token management handlers (shared between /auth and /api blueprints)

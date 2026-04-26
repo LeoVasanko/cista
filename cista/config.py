@@ -3,12 +3,13 @@ from __future__ import annotations
 import os
 import secrets
 import sys
+from collections.abc import Callable
 from contextlib import suppress
 from functools import wraps
 from hashlib import sha256
 from pathlib import Path, PurePath
 from time import sleep, time
-from typing import Callable, Concatenate, Literal, ParamSpec
+from typing import Concatenate, Literal, ParamSpec
 
 import msgspec
 import msgspec.toml
@@ -49,7 +50,7 @@ class Token(msgspec.Struct, omit_defaults=True):
     username: str = ""  # set in built-in mode
     sso_user_id: str = ""  # set in SSO mode
     name: str = ""
-    created: int = 0  # noqa: N815
+    created: int = 0
 
 
 # Global variables - initialized during application startup
@@ -72,7 +73,7 @@ def init_confdir() -> None:
     conffile = home / "db.toml"
 
 
-def derived_secret(*params, len=8) -> bytes:
+def derived_secret(*params, size=8) -> bytes:
     """Used to derive secret keys from the main secret"""
     # Each part is made the same length by hashing first
     combined = b"".join(
@@ -80,7 +81,7 @@ def derived_secret(*params, len=8) -> bytes:
         for p in [config.secret, *params]
     )
     # Output a bytes of the desired length
-    return sha256(combined).digest()[:len]
+    return sha256(combined).digest()[:size]
 
 
 def enc_hook(obj):

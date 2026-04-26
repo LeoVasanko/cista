@@ -12,7 +12,7 @@ def run(*, dev=False):
     """Run Sanic main process that spawns worker processes to serve HTTP requests."""
     from .app import app
 
-    url, opts = parse_listen(config.config.listen)
+    _url, opts = parse_listen(config.config.listen)
     # Silence Sanic's warning about running in production rather than debug
     os.environ["SANIC_IGNORE_PRODUCTION_WARNING"] = "1"
     confdir = config.conffile.parent
@@ -21,14 +21,14 @@ def run(*, dev=False):
         server80.app.prepare(port=80, motd=False)
         domain = opts["host"]
         check_cert(confdir / domain, domain)
-        opts["ssl"] = str(confdir / domain)  # type: ignore
+        opts["ssl"] = str(confdir / domain)  # type: ignore[assignment]
     app.prepare(
         **opts,
         motd=False,
         dev=dev,
         auto_reload=dev,
         access_log=False,
-    )  # type: ignore
+    )  # type: ignore[call-arg]
     if dev:
         Sanic.serve()
     else:
@@ -38,7 +38,7 @@ def run(*, dev=False):
 def check_cert(certdir, domain):
     if (certdir / "privkey.pem").exist() and (certdir / "fullchain.pem").exists():
         return
-    # TODO: Use certbot to fetch a cert
+    # Certificate provisioning is external; files must exist before startup.
     raise ValueError(
         f"TLS certificate files privkey.pem and fullchain.pem needed in {certdir}",
     )

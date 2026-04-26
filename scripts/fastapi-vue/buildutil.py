@@ -30,8 +30,11 @@ def _check_node_version(node_path: str) -> None:
     Raises RuntimeError if version is too old or cannot be determined.
     """
     try:
-        result = subprocess.run(
-            [node_path, "--version"], capture_output=True, text=True, check=True
+        result = subprocess.run(  # noqa: S603
+            [node_path, "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
         )
         version_str = result.stdout.strip()
         # Parse version like "v20.10.0" or "v18.17.1"
@@ -176,16 +179,16 @@ def build(folder: str = "frontend") -> None:
         install_cmd, build_cmd = find_build_tool()
     except RuntimeError as e:
         logger.warning(e)
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
     def run(cmd):
         display_cmd = [Path(cmd[0]).name, *cmd[1:]]
         logger.info("### %s", " ".join(display_cmd))
-        subprocess.run(cmd, check=True, cwd=folder)
+        subprocess.run(cmd, check=True, cwd=folder)  # noqa: S603
 
     try:
         run(install_cmd)
         logger.info("")
         run(build_cmd)
-    except subprocess.CalledProcessError:
-        raise SystemExit(1)
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(1) from e

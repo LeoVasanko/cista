@@ -3,7 +3,9 @@
 import sys
 from pathlib import Path
 
-from hatchling.builders.hooks.plugin.interface import BuildHookInterface  # type: ignore
+from hatchling.builders.hooks.plugin.interface import (
+    BuildHookInterface,  # type: ignore[import-not-found]
+)
 
 sys.path.insert(0, str(Path(__file__).parent))
 from buildutil import build

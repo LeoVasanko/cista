@@ -40,7 +40,7 @@ class AsyncLink:
     async def stop(self):
         """Stop worker and clean up."""
         while not self.queue.empty():
-            command, future = self.queue.get_nowait()
+            _command, future = self.queue.get_nowait()
             if not future.done():
                 future.set_exception(Exception("AsyncLink stopped"))
             self.queue.task_done()

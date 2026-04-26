@@ -34,10 +34,7 @@ def create_startup_box(
     location = f"{folder} @ {listen}"
     lines = [title, location]
     # Auth line: Paskia <url> or Password, with optional Public suffix
-    if paskia_url:
-        auth_line = f"Auth: Paskia {paskia_url}"
-    else:
-        auth_line = "Auth: Password"
+    auth_line = f"Auth: Paskia {paskia_url}" if paskia_url else "Auth: Password"
     if public:
         auth_line += ", Public"
     lines.append(auth_line)
@@ -49,8 +46,7 @@ def create_startup_box(
 
     # Build the box
     box = [f"╭{'─' * inner_width}╮"]
-    for line in lines:
-        box.append(f"│ {line:<{inner_width - 1}}│")
+    box.extend(f"│ {line:<{inner_width - 1}}│" for line in lines)
     box.append(f"╰{'─' * inner_width}╯")
     return "\n".join(box) + "\n"
 

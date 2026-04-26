@@ -232,7 +232,7 @@ def configure_access_logging() -> None:
 
 _LEVEL_EMOJI = {
     logging.DEBUG: "🔍",
-    logging.INFO: "ℹ️",
+    logging.INFO: "i",
     logging.WARNING: "⚠️",
     logging.ERROR: "🛑",
     logging.CRITICAL: "🛑",

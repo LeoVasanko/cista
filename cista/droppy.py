@@ -17,7 +17,7 @@ def _droppy_listeners(cf):
     for listener in cf["listeners"]:
         try:
             if listener["protocol"] == "https":
-                # TODO: Add support for TLS
+                # TLS listeners are currently ignored here.
                 continue
             socket = listener.get("socket")
             if socket:

@@ -141,8 +141,8 @@ def treeinspos(rootmod: list[FileEntry], relpath: PurePosixPath, relfile: int):
 
 
 state = State()
-rootpath: Path = None  # type: ignore
-quit = threading.Event()
+rootpath: Path | None = None
+stop_event = threading.Event()
 
 # Thread-safe queue for signaling path updates from websockets
 _update_queue: queue.Queue[PurePosixPath] = queue.Queue()
@@ -150,9 +150,8 @@ _update_queue: queue.Queue[PurePosixPath] = queue.Queue()
 
 def notify_change(*paths: PurePosixPath | str):
     """Signal that paths have changed. Called from control/upload websockets."""
-    for path in paths:
-        if isinstance(path, str):
-            path = PurePosixPath(path)
+    for raw_path in paths:
+        path = PurePosixPath(raw_path) if isinstance(raw_path, str) else raw_path
         # Convert absolute paths to relative (strip leading /)
         if path.is_absolute():
             path = (
@@ -192,10 +191,10 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
         if isfile:
             return [entry]
         # Walk all entries of the directory
-        ret: list[FileEntry] = [...]  # type: ignore
+        ret: list[FileEntry] = []
         li = []
         for f in path.iterdir():
-            if quit.is_set():
+            if stop_event.is_set():
                 raise SystemExit("quit")
             if f.name.startswith("."):
                 continue  # No dotfiles
@@ -508,7 +507,7 @@ class PathIndex:
 
         if lo < len(children):
             return children[lo]
-        elif children:
+        if children:
             # Insert after last child's subtree
             last_idx = children[-1]
             last_entry = self.root[last_idx]
@@ -656,7 +655,7 @@ def watcher(loop):
             )
         )
 
-    while not quit.is_set():
+    while not stop_event.is_set():
         if use_inotify:
             import inotify.adapters
 
@@ -674,7 +673,11 @@ def watcher(loop):
         first_event_time: float | None = None
         last_event_time: float | None = None
 
-        def add_dirty(path: PurePosixPath, source: str) -> bool:
+        def add_dirty(
+            path: PurePosixPath,
+            source: str,
+            dirty_paths=dirty_paths,
+        ) -> bool:
             """Add path to dirty set. Returns True if added, False if redundant."""
             nonlocal first_event_time, last_event_time
             # Check if already covered by an existing dirty path
@@ -708,7 +711,7 @@ def watcher(loop):
             last_event_time = now
             return True
 
-        while not quit.is_set():
+        while not stop_event.is_set():
             now = time.monotonic()
 
             # Full refresh every 300s
@@ -779,7 +782,7 @@ def watcher(loop):
             # Collect inotify events if available (short timeout for responsiveness)
             if inotify_tree:
                 for event in inotify_tree.event_gen(yield_nones=False, timeout_s=0.05):
-                    if quit.is_set():
+                    if stop_event.is_set():
                         return
                     if not (modified_flags & set(event[1])):
                         continue
@@ -823,5 +826,5 @@ def start(app):
 
 
 def stop(app):
-    quit.set()
+    stop_event.set()
     app.ctx.watcher.join()

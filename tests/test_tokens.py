@@ -1,8 +1,6 @@
-from pathlib import Path
-from time import time
-from uuid import uuid4
-
 import os
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -13,8 +11,9 @@ from cista.auth import bp as auth_bp
 
 
 def _persist_config():
-    import msgspec
     from pathlib import PurePath
+
+    import msgspec
 
     def enc_hook(obj):
         if isinstance(obj, PurePath):
@@ -25,7 +24,7 @@ def _persist_config():
     config.conffile.write_bytes(msgspec.toml.encode(raw))
 
 
-@pytest.fixture()
+@pytest.fixture
 def setup_storage(tmp_path: Path):
     os.environ["CISTA_HOME"] = str(tmp_path)
     config.init_confdir()

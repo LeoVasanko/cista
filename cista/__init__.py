@@ -1,3 +1,1 @@
-from cista._version import __version__
-
-__version__  # Public API
+from cista._version import __version__ as __version__

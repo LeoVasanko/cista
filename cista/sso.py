@@ -126,22 +126,21 @@ async def validate_sso_request(request, *, perm: str = "cista:login") -> dict | 
                 context=error_data,
                 quiet=True,
             )
-        elif response.status_code == 403:
+        if response.status_code == 403:
             raise Forbidden(
                 error_data.get("detail", "Access denied"),
                 context=error_data,
                 quiet=True,
             )
-        else:
-            detail = error_data.get("detail", "")
-            logger.warning(
-                f"SSO validation {url} returned {response.status_code}: {detail}"
-            )
-            raise Forbidden(
-                detail or "Authentication error",
-                context=error_data,
-                quiet=True,
-            )
+        detail = error_data.get("detail", "")
+        logger.warning(
+            f"SSO validation {url} returned {response.status_code}: {detail}"
+        )
+        raise Forbidden(
+            detail or "Authentication error",
+            context=error_data,
+            quiet=True,
+        )
 
     except httpx.RequestError as e:
         logger.error(f"SSO validation {url} network error: {e}")
@@ -149,7 +148,7 @@ async def validate_sso_request(request, *, perm: str = "cista:login") -> dict | 
             "Authentication service unavailable",
             status_code=502,
             quiet=True,
-        )
+        ) from e
 
 
 async def check_permissions(user_id: str, perm: str) -> dict:
@@ -194,11 +193,10 @@ async def check_permissions(user_id: str, perm: str) -> dict:
                 error_data.get("detail", "Access denied"),
                 quiet=True,
             )
-        else:
-            raise Forbidden(
-                error_data.get("detail", "Permission check failed"),
-                quiet=True,
-            )
+        raise Forbidden(
+            error_data.get("detail", "Permission check failed"),
+            quiet=True,
+        )
 
     except httpx.RequestError as e:
         logger.error(f"Permission check {url} network error: {e}")
@@ -206,7 +204,7 @@ async def check_permissions(user_id: str, perm: str) -> dict:
             "Authentication service unavailable",
             status_code=502,
             quiet=True,
-        )
+        ) from e
 
 
 async def proxy_auth_request(request):
@@ -324,15 +322,15 @@ async def proxy_auth_websocket(request, ws):
                 try:
                     async for message in ws:
                         await backend_ws.send(message)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("WebSocket forward_to_backend ended: %s", e)
 
             async def forward_to_client():
                 try:
                     async for message in backend_ws:
                         await ws.send(message)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("WebSocket forward_to_client ended: %s", e)
 
             await asyncio.gather(
                 forward_to_backend(),

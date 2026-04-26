@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from time import monotonic
-from typing import Callable
 
 
 class LRUCache:
@@ -7,22 +7,22 @@ class LRUCache:
     LRUCache is a least-recently-used (LRU) cache with expiry time.
 
     Attributes:
-        open (callable): Function to open a new handle.
+        opener (callable): Function to open a new handle.
         capacity (int): Max number of items in the cache.
         maxage (float): Max age for items in cache in seconds.
         cache (list): Internal list storing the cache items.
     """
 
-    def __init__(self, open: Callable, *, capacity: int, maxage: float):
+    def __init__(self, opener: Callable, *, capacity: int, maxage: float):
         """
         Initialize LRUCache.
 
         Args:
-            open (callable): Function to open a new handle.
+            opener (callable): Function to open a new handle.
             capacity (int): Maximum capacity of the cache.
             maxage (float): Max age for items in cache in seconds.
         """
-        self.open = open
+        self.opener = opener
         self.capacity = capacity
         self.maxage = maxage
         self.cache = []  # Each item is a tuple: (key, handle, timestamp), recent items first
@@ -47,7 +47,7 @@ class LRUCache:
                 self.cache.pop(i)
                 break
         else:
-            f = self.open(key)
+            f = self.opener(key)
         # Add/restore to end of cache
         self.cache.insert(0, (key, f, monotonic()))
         self.expire_items()
@@ -58,7 +58,7 @@ class LRUCache:
         Expire items that are either too old or exceed cache capacity.
         """
         ts = monotonic() - self.maxage
-        while len(self.cache) > self.capacity or self.cache and self.cache[-1][2] < ts:
+        while len(self.cache) > self.capacity or (self.cache and self.cache[-1][2] < ts):
             self.cache.pop()[1].close()
 
     def close(self):

@@ -1,5 +1,6 @@
 import os
 import threading
+from pathlib import Path
 
 from cista import config
 from cista.util import filename
@@ -31,20 +32,23 @@ class File:
         if not self.writable:
             # Create/open file
             self.open_rw()
-        assert self.fd is not None
+        if self.fd is None:
+            raise RuntimeError("file descriptor is not available for write")
         if file_size is not None:
-            assert pos + len(buffer) <= file_size
+            if pos + len(buffer) > file_size:
+                raise ValueError("write exceeds declared file size")
             os.ftruncate(self.fd, file_size)
         if buffer:
             os.lseek(self.fd, pos, os.SEEK_SET)
             os.write(self.fd, buffer)
 
-    def __getitem__(self, slice):
+    def __getitem__(self, slc):
         if self.fd is None:
             self.open_ro()
-        assert self.fd is not None
-        os.lseek(self.fd, slice.start, os.SEEK_SET)
-        size = slice.stop - slice.start
+        if self.fd is None:
+            raise RuntimeError("file descriptor is not available for read")
+        os.lseek(self.fd, slc.start, os.SEEK_SET)
+        size = slc.stop - slc.start
         data = os.read(self.fd, size)
         if len(data) < size:
             raise EOFError("Error reading requested range")
@@ -71,7 +75,7 @@ class FileServer:
     @staticmethod
     def _stat_size(path):
         try:
-            return os.stat(path).st_size
+            return Path(path).stat().st_size
         except FileNotFoundError:
             return None
 

@@ -1,7 +1,6 @@
 import base64
 import hashlib
 import hmac
-import re
 import struct
 from pathlib import Path
 from time import time
@@ -94,7 +93,7 @@ def _session_cookie_header(username: str) -> dict[str, str]:
     return {"Cookie": f"s={token}"}
 
 
-@pytest.fixture()
+@pytest.fixture
 def setup_storage(tmp_path: Path):
     user = config.User()
     auth.set_password(user, "secret")

@@ -1,6 +1,7 @@
 """Utilities meant for devserver script, used only in source repository with dev deps."""
 
 import asyncio
+import contextlib
 from pathlib import Path
 
 import httpx
@@ -58,10 +59,8 @@ class ProcessGroup:
         # Terminate remaining processes
         for p in self._procs:
             if p.returncode is None:
-                try:
+                with contextlib.suppress(ProcessLookupError):
                     p.terminate()
-                except ProcessLookupError:
-                    pass
 
         # Wait for all to finish (with overall timeout)
         still_running = [p for p in self._procs if p.returncode is None]
@@ -74,10 +73,8 @@ class ProcessGroup:
             except TimeoutError:
                 for p in self._procs:
                     if p.returncode is None:
-                        try:
+                        with contextlib.suppress(ProcessLookupError):
                             p.kill()
-                        except ProcessLookupError:
-                            pass
                         await p.wait()
 
 
@@ -95,10 +92,10 @@ async def ready(url: str, path: str = "") -> None:
                 await client.get(full_url, timeout=1.0)
                 logger.info("✓ Backend ready!")
                 return
-            except httpx.RequestError:
+            except httpx.RequestError as e:
                 if attempt == max_attempts - 1:
                     logger.warning("Backend didn't start in time")
-                    raise SystemExit(1)
+                    raise SystemExit(1) from e
                 await asyncio.sleep(0.1)
 
 

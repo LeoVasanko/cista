@@ -9,7 +9,7 @@ from cista import config, watching
 from cista.fileserver import bp as fileserver_bp
 
 
-@pytest.fixture()
+@pytest.fixture
 def setup_storage(tmp_path: Path):
     config.config = config.Config(path=tmp_path, listen=":0", public=True)
     watching.state.root = []

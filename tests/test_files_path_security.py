@@ -10,7 +10,7 @@ from cista import config, watching
 from cista.fileserver import bp as fileserver_bp
 
 
-@pytest.fixture()
+@pytest.fixture
 def setup_storage(tmp_path: Path):
     config.config = config.Config(path=tmp_path, listen=":0", public=True)
     watching.state.root = []
@@ -33,7 +33,7 @@ async def client(setup_storage: Path):
 
 
 @pytest.mark.asyncio
-async def test_get_percent2F_decoded_as_path_separator(client, setup_storage: Path):
+async def test_get_percent2f_decoded_as_path_separator(client, setup_storage: Path):
     """%2F in the URL path is decoded to '/' and treated as a path separator."""
     (setup_storage / "sub").mkdir()
     (setup_storage / "sub" / "file.txt").write_text("hello", encoding="utf-8")
@@ -45,7 +45,7 @@ async def test_get_percent2F_decoded_as_path_separator(client, setup_storage: Pa
 
 
 @pytest.mark.asyncio
-async def test_mkcol_percent2F_creates_nested_directory(client, setup_storage: Path):
+async def test_mkcol_percent2f_creates_nested_directory(client, setup_storage: Path):
     """%2F in MKCOL path is decoded as a separator, creating nested dirs."""
     _, res = await client.request("MKCOL", "/files/parent%2Fchild")
 

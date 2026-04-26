@@ -4,8 +4,6 @@ from typing import Any
 
 import msgspec
 
-from cista import config
-
 
 class ErrorMsg(msgspec.Struct):
     error: dict[str, Any]

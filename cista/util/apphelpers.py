@@ -30,7 +30,7 @@ async def handle_sanic_exception(request, e):
         context = e.context or {}
         code = e.status_code
         headers = getattr(e, "headers", None)
-    if not message or not request.app.debug and code == 500:
+    if not message or (not request.app.debug and code == 500):
         message = "Internal Server Error"
     message = f"⚠️ {message}" if code < 500 else f"🛑 {message}"
     if code == 500:

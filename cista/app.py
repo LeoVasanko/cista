@@ -16,10 +16,9 @@ from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
 from zstandard import ZstdCompressor
 
-from cista import auth, config, preview, session, sso, watching
-from cista.preview import shutdown_preview_workers, start_preview_workers
+from cista import auth, config, fileserver, preview, session, sso, watching
 from cista.api import bp
-from cista import fileserver
+from cista.preview import shutdown_preview_workers, start_preview_workers
 from cista.sanic_logging import (
     configure_access_logging,
     configure_main_logging,
@@ -295,7 +294,8 @@ async def zip_download(req, keys, zipfile, ext):
             while size > 0 and (chunk := f.read(min(size, 1 << 20))):
                 size -= len(chunk)
                 yield chunk
-        assert size == 0
+        if size != 0:
+            raise OSError(f"stream ended early while zipping {name}")
 
     pending_put = None  # Current queue.put future, can be cancelled
 

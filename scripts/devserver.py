@@ -23,7 +23,12 @@ from pathlib import Path
 
 # Import devutil from scripts/fastapi-vue (not a package, so we adjust sys.path)
 sys.path.insert(0, str(Path(__file__).with_name("fastapi-vue")))
-from devutil import ProcessGroup, logger, ready, setup_vite  # type: ignore
+from devutil import (  # type: ignore[import-not-found]
+    ProcessGroup,
+    logger,
+    ready,
+    setup_vite,
+)
 
 from cista import config
 from cista.serve import parse_listen
@@ -40,13 +45,13 @@ def setup_sanic_backend(
     """
     config.load_config()
     listen = listen or config.config.listen or f":{DEFAULT_BACKEND_PORT}"
-    url, opts = parse_listen(listen)
+    _url, opts = parse_listen(listen)
     port = opts.get("port", DEFAULT_BACKEND_PORT)
     host = opts.get("host", "localhost") or "localhost"
 
     # Use the current interpreter/module path so devserver always runs
     # workspace source code instead of a potentially stale installed script.
-    cmd = [sys.executable, "-m", "cista", "--dev", "-l", listen] + extra_args
+    cmd = [sys.executable, "-m", "cista", "--dev", "-l", listen, *extra_args]
     return f"http://{host}:{port}", cmd
 
 
@@ -59,7 +64,7 @@ async def run_devserver(
         logger.warning("Frontend source not found at %s", front)
         raise SystemExit(1)
 
-    frontend_url, npm_install, vite = setup_vite(frontend or "")
+    _frontend_url, npm_install, vite = setup_vite(frontend or "")
     backend_url, sanic_cmd = setup_sanic_backend(backend, extra_args)
 
     # Tell vite where to proxy API requests
