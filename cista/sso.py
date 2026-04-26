@@ -155,6 +155,8 @@ async def validate_sso_request(request, *, perm: str = "cista:login") -> dict | 
 async def check_permissions(user_id: str, perm: str) -> dict:
     """Check if a Paskia user has the given permission.
 
+    Calls /auth/api/check?user=<UUID>&perm=<perm> — no session or cookies needed.
+
     Args:
         user_id: The Paskia user UUID
         perm: Permission to check (e.g. cista:login or cista:admin)
@@ -170,12 +172,12 @@ async def check_permissions(user_id: str, perm: str) -> dict:
         raise ValueError("Paskia not enabled")
 
     client = await get_client()
-    url = f"{PASKIA_BACKEND_URL}/auth/api/check-permissions"
+    url = f"{PASKIA_BACKEND_URL}/auth/api/check"
 
     try:
-        response = await client.post(
+        response = await client.get(
             url,
-            json={"user_id": user_id, "perm": perm},
+            params={"user": user_id, "perm": perm},
             headers={"accept": "application/json"},
         )
 
