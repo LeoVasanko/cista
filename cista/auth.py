@@ -1107,7 +1107,7 @@ async def login_page(request):
 
     res = html(doc)
     if s is False:
-        session.delete(res)
+        session.delete(request, res)
     return res
 
 
@@ -1144,7 +1144,7 @@ async def login_post(request):
         session.flash(res, "Logged in")
     else:
         res = json({"data": {"username": username, "privileged": user.privileged}})
-    session.create(res, username, secure=request.scheme == "https")
+    session.create(request, res, username)
     return res
 
 
@@ -1157,7 +1157,7 @@ async def logout_post(request):
         res.cookies.add_cookie("flash", msg, max_age=5)
     else:
         res = json({"message": msg})
-    session.delete(res)
+    session.delete(request, res)
     return res
 
 
@@ -1189,7 +1189,7 @@ async def change_password(request):
         session.flash(res, "Password updated")
     else:
         res = json({"message": "Password updated"})
-    session.create(res, username, secure=request.scheme == "https")
+    session.create(request, res, username)
     return res
 
 

@@ -4,6 +4,8 @@ from time import time
 # In-memory session store: token -> {"username": str, "exp": int}
 _sessions: dict[str, dict] = {}
 
+SESSION_COOKIE_NAME = "cista"
+
 max_age = 365 * 86400  # Seconds since last login
 
 
@@ -19,7 +21,7 @@ def _purge_expired() -> None:
 
 
 def get(request):
-    token = request.cookies.get("s")
+    token = request.cookies.get(SESSION_COOKIE_NAME)
     if token is None:
         return None
     s = _sessions.get(token)
@@ -31,15 +33,24 @@ def get(request):
     return s
 
 
-def create(res, username, *, secure: bool = True, **kwargs):
+def create(request, res, username, **kwargs):
     _purge_expired()
     token = _token()
     _sessions[token] = {"exp": int(time()) + max_age, "username": username, **kwargs}
-    res.cookies.add_cookie("s", token, httponly=True, max_age=max_age, secure=secure)
+    secure = request.scheme == "https"
+    res.cookies.add_cookie(
+        SESSION_COOKIE_NAME,
+        token,
+        httponly=True,
+        max_age=max_age,
+        secure=secure,
+        host_prefix=secure,
+    )
 
 
-def delete(res):
-    res.cookies.delete_cookie("s")
+def delete(request, res):
+    secure = request.scheme == "https"
+    res.cookies.delete_cookie(SESSION_COOKIE_NAME, host_prefix=secure)
 
 
 def flash(res, message: str | None):

@@ -98,7 +98,7 @@ def _session_cookie_header(username: str) -> dict[str, str]:
         "exp": int(time()) + session.max_age,
         "username": username,
     }
-    return {"Cookie": f"s={token}"}
+    return {"Cookie": f"cista={token}"}
 
 
 @pytest.fixture

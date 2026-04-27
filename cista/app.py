@@ -96,7 +96,7 @@ async def persist_auth_session(req, res):
     existing = getattr(req.ctx, "session", None)
     if isinstance(existing, dict) and existing.get("username") == username:
         return
-    session.create(res, username, secure=req.scheme == "https")
+    session.create(req, res, username)
 
 
 # Register either SSO proxy or built-in auth routes based on PASKIA_BACKEND_URL
