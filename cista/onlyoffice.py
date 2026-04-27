@@ -145,6 +145,8 @@ def convert_to_png(file_path: Path, timeout: float = 30.0) -> bytes:
         headers = {"Content-Type": "application/json"}
         token = _build_jwt_token(payload)
         if token:
+            # Conversion API expects JWT in request body when token checks are enabled.
+            payload["token"] = token
             headers["Authorization"] = token
 
         req = urllib.request.Request(  # noqa: S310
