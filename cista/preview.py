@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import gc
 import io
-import json
 import mimetypes
 import struct
 import subprocess
@@ -706,37 +705,13 @@ def _get_image_dimensions(path: Path) -> tuple[int, int] | None:
     """Probe image dimensions.
 
     pyvips can read the header of most formats (including HEIC) without
-    fully decoding the image.  ffprobe is used as a fallback.
+    fully decoding the image.
     """
     try:
         img = pyvips.Image.new_from_file(str(path))
         return img.width, img.height
     except pyvips.error.Error:
-        pass
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=width,height",
-                "-of",
-                "csv=s=x:p=0",
-                str(path),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        parts = result.stdout.strip().split("x")
-        if len(parts) == 2:
-            return int(parts[0]), int(parts[1])
-    except Exception:
-        pass
-    return None
+        return None
 
 
 def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
