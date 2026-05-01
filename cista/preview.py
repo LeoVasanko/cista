@@ -625,7 +625,7 @@ async def preview(req, path):
         logger.warning("Preview worker timeout for %s", filepath)
         return empty(503)
     except OnlyOfficeUnavailableError:
-        logger.warning("OnlyOffice unavailable for %s", filepath)
+        req.ctx._log_extra = "onlyoffice N/A"
         return empty(503)
     except PreviewError as e:
         if e.backend:
