@@ -1,4 +1,5 @@
-import { formatSize, formatUnixDate } from '@/utils'
+import { useMainStore } from '@/stores/main'
+import { FILE_TYPES, formatSize, formatUnixDate } from '@/utils'
 
 export type FUID = string
 
@@ -63,101 +64,53 @@ export class Doc {
     return this.url.replace(/^\/#/, '')
   }
   get img(): boolean {
-    // Folders cannot be images
-    if (this.dir) return false
-    return [
-      'jpg',
-      'jpeg',
-      'png',
-      'gif',
-      'webp',
-      'avif',
-      'heic',
-      'heif',
-      'svg'
-    ].includes(this.ext)
+    return (
+      !this.dir && (FILE_TYPES.imageBrowser as readonly string[]).includes(this.ext)
+    )
+  }
+  get video(): boolean {
+    return (FILE_TYPES.video as readonly string[]).includes(this.ext)
+  }
+  get audio(): boolean {
+    return (FILE_TYPES.audio as readonly string[]).includes(this.ext)
+  }
+  get archive(): boolean {
+    return (FILE_TYPES.archive as readonly string[]).includes(this.ext)
+  }
+  get document(): boolean {
+    return (FILE_TYPES.document as readonly string[]).includes(this.ext)
+  }
+  // Images that require server-side preview (browsers cannot display them natively)
+  get image(): boolean {
+    return (FILE_TYPES.image as readonly string[]).includes(this.ext)
+  }
+  get print(): boolean {
+    return (FILE_TYPES.print as readonly string[]).includes(this.ext)
   }
   get complete(): boolean {
     return !this.ghost && (this.dir || this.size <= this.allocated)
   }
   get previewable(): boolean {
-    // Folders cannot be previewable
     if (this.dir) return false
-    if (this.img) return true
-    const store = useMainStore()
-    const ext = this.ext
-    // Office document previews may be optionally disabled server-side
-    if (store.server.office_previews === false) {
-      const officeExts = [
-        'doc', 'dot', 'docx', 'docm', 'dotx', 'dotm', 'rtf',
-        'odt', 'ott', 'txt', 'md', 'mhtml', 'mht', 'html',
-        'htm', 'xml', 'wps', 'wri',
-        'xls', 'xlsx', 'xlsm', 'xlsb', 'xltx', 'xltm',
-        'ods', 'ots', 'csv',
-        'ppt', 'pptx', 'pptm', 'pps', 'ppsx',
-        'pot', 'potx', 'odp', 'otp'
-      ]
-      if (officeExts.includes(ext)) return false
-    }
-    // Not a comprehensive list, but good enough for now
-    return [
-      'mp4',
-      'mkv',
-      'webm',
-      'ogg',
-      'mp3',
-      'flac',
-      'aac',
-      'pdf',
-      // Documents
-      'doc',
-      'dot',
-      'docx',
-      'docm',
-      'dotx',
-      'dotm',
-      'rtf',
-      'odt',
-      'ott',
-      'txt',
-      'md',
-      'mhtml',
-      'mht',
-      'html',
-      'htm',
-      'xml',
-      'wps',
-      'wri',
-      // Spreadsheets
-      'xls',
-      'xlsx',
-      'xlsm',
-      'xlsb',
-      'xltx',
-      'xltm',
-      'ods',
-      'ots',
-      'csv',
-      // Presentations
-      'ppt',
-      'pptx',
-      'pptm',
-      'pps',
-      'ppsx',
-      'pot',
-      'potx',
-      'odp',
-      'otp'
-    ].includes(ext)
+    return (
+      this.img ||
+      this.video ||
+      this.audio ||
+      this.image ||
+      this.print ||
+      (this.document && useMainStore().server.office_previews !== false)
+    )
   }
   get previewurl(): string {
-    if (!this.complete || !this.previewable) return ''
-    return this.url.replace(/^\/files/, '/preview')
+    return !this.complete || !this.previewable
+      ? ''
+      : this.url.replace(/^\/files/, '/preview')
   }
   get ext(): string {
     const dotIndex = this.name.lastIndexOf('.')
-    if (dotIndex === -1 || dotIndex === this.name.length - 1) return ''
-    return this.name.slice(dotIndex + 1).toLowerCase()
+    return dotIndex === -1 || dotIndex === this.name.length - 1
+      ? ''
+      : this.name.slice(dotIndex + 1).toLowerCase()
   }
 }
 export type errorEvent = {

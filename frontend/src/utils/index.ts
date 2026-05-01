@@ -69,23 +69,29 @@ export function getFileExtension(filename: string) {
   }
   return filename.slice(dotIndex + 1)
 }
-interface FileTypes {
-  [key: string]: string[]
-}
-
-const filetypes: FileTypes = {
+export const FILE_TYPES = {
   video: ['avi', 'mkv', 'mov', 'mp4', 'webm'],
-  image: ['avif', 'gif', 'jpg', 'jpeg', 'png', 'webp', 'svg'],
-  pdf: ['pdf']
-}
+  audio: ['mp3', 'flac', 'ogg', 'aac'],
+  archive: ['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar'],
+  document: ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf'],
+  imageBrowser: ['avif', 'gif', 'jpg', 'jpeg', 'png', 'webp', 'svg'],
+  // Images that require server-side preview (browsers cannot display them natively)
+  image: ['bmp', 'heic', 'heif', 'ico', 'tif', 'tiff'],
+  print: ['epub', 'mobi', 'pdf']
+} as const
 
-export function getFileType(name: string): string {
+export type FileCategory = keyof typeof FILE_TYPES
+
+export function getFileType(name: string): FileCategory | 'unknown' {
   const dotIndex = name.lastIndexOf('.')
   if (dotIndex === -1 || dotIndex === name.length - 1) return 'unknown'
   const ext = name.slice(dotIndex + 1).toLowerCase()
-  return (
-    Object.keys(filetypes).find(type => filetypes[type]!.includes(ext)) || 'unknown'
-  )
+  for (const category of Object.keys(FILE_TYPES) as FileCategory[]) {
+    if ((FILE_TYPES[category] as readonly string[]).includes(ext)) {
+      return category
+    }
+  }
+  return 'unknown'
 }
 
 // Prebuilt for fast & consistent sorting

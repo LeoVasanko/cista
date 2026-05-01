@@ -126,80 +126,20 @@ defineExpose({
   media
 })
 
-const video = () => ['mkv', 'mp4', 'webm', 'mov', 'avi'].includes(props.doc.ext)
-const audio = () => ['mp3', 'flac', 'ogg', 'aac'].includes(props.doc.ext)
-const archive = () =>
-  ['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar'].includes(props.doc.ext)
+const video = () => props.doc.video
+const audio = () => props.doc.audio
+const archive = () => props.doc.archive
+const docs = () => props.doc.document
+// image = requires server-side preview (browsers cannot display it natively)
+// img   = browser-viewable image that can be used directly in an <img> tag
+const image = () => props.doc.image
+const print = () => props.doc.print
 const showProgress = () => !props.doc.complete && (preview() || props.doc.img)
 const preview = () => {
   const store = useMainStore()
-  const ext = props.doc.ext
-  // Office document previews may be optionally disabled server-side
-  if (store.server.office_previews === false) {
-    const officeExts = [
-      'doc', 'dot', 'docx', 'docm', 'dotx', 'dotm', 'rtf',
-      'odt', 'ott', 'txt', 'md', 'mhtml', 'mht', 'html',
-      'htm', 'xml', 'wps', 'wri',
-      'xls', 'xlsx', 'xlsm', 'xlsb', 'xltx', 'xltm',
-      'ods', 'ots', 'csv',
-      'ppt', 'pptx', 'pptm', 'pps', 'ppsx',
-      'pot', 'potx', 'odp', 'otp'
-    ]
-    if (officeExts.includes(ext)) return false
-  }
   return (
-    [
-      'bmp',
-      'ico',
-      'tif',
-      'tiff',
-      'heic',
-      'heif',
-      'pdf',
-      'epub',
-      'mobi',
-      // Documents
-      'doc',
-      'dot',
-      'docx',
-      'docm',
-      'dotx',
-      'dotm',
-      'rtf',
-      'odt',
-      'ott',
-      'txt',
-      'md',
-      'mhtml',
-      'mht',
-      'html',
-      'htm',
-      'xml',
-      'wps',
-      'wri',
-      // Spreadsheets
-      'xls',
-      'xlsx',
-      'xlsm',
-      'xlsb',
-      'xltx',
-      'xltm',
-      'ods',
-      'ots',
-      'csv',
-      // Presentations
-      'ppt',
-      'pptx',
-      'pptm',
-      'pps',
-      'ppsx',
-      'pot',
-      'potx',
-      'odp',
-      'otp'
-    ].includes(ext) ||
-    (props.doc.size > 500000 &&
-      ['avif', 'webp', 'png', 'jpg', 'jpeg'].includes(ext))
+    !(store.server.office_previews === false && docs()) &&
+    (image() || print() || (props.doc.img && props.doc.size > 500000))
   )
 }
 </script>
