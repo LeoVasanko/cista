@@ -2,9 +2,12 @@ import asyncio
 import contextlib
 import gc
 import io
+import json
 import mimetypes
 import struct
+import subprocess
 import sys
+import tempfile
 import threading
 import urllib.parse
 from collections import OrderedDict
@@ -25,24 +28,9 @@ from sanic import Blueprint, empty, raw, redirect
 from sanic.exceptions import NotFound
 from sanic.log import logger
 
-from cista import auth, config, sharefs
+from cista import auth, config, onlyoffice, sharefs
 from cista.preview_worker import PreviewRequest, PreviewResponse
 from cista.util.filename import sanitize
-
-# OnlyOffice integration is loaded lazily; availability is checked at runtime.
-_onlyoffice = None
-
-
-def _get_onlyoffice():
-    global _onlyoffice
-    if _onlyoffice is None:
-        try:
-            from cista import onlyoffice as oo
-
-            _onlyoffice = oo
-        except Exception:
-            _onlyoffice = False
-    return _onlyoffice
 
 
 bp = Blueprint("preview", url_prefix="/preview")
@@ -184,6 +172,22 @@ class _PreviewWorkerPool:
             start_new_session=True,
         )
         _active_procs.add(proc)
+        try:
+            ready = await asyncio.wait_for(
+                proc.stdout.readexactly(1), timeout=30.0
+            )
+        except asyncio.TimeoutError:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            raise WorkerProtocolError("preview worker failed to become ready")
+        except asyncio.IncompleteReadError:
+            raise WorkerProtocolError(
+                "preview worker exited before signalling readiness"
+            )
+        if ready != b"\x01":
+            raise WorkerProtocolError(
+                f"preview worker ready signal invalid: {ready!r}"
+            )
         return _PreviewWorker(proc)
 
     async def _add_worker(self) -> None:
@@ -211,7 +215,20 @@ class _PreviewWorkerPool:
             if future.cancelled():
                 continue
 
-            worker = await self._idle.get()
+            try:
+                worker = await asyncio.wait_for(
+                    self._idle.get(), timeout=PREVIEW_TIMEOUT
+                )
+            except TimeoutError:
+                logger.warning(
+                    "Preview worker unavailable (%ds) for %s",
+                    int(PREVIEW_TIMEOUT),
+                    args[0].name,
+                )
+                if not future.done():
+                    future.set_exception(PreviewTimeoutError(args[0].name))
+                continue
+
             filepath = args[0]
             replace = False
             try:
@@ -257,6 +274,17 @@ class _PreviewWorkerPool:
                             f"worker protocol failure for {filepath.name}: {e}"
                         )
                     )
+            except Exception:
+                replace = True
+                logger.exception(
+                    "Unexpected preview worker error for %s", filepath.name
+                )
+                if not future.done():
+                    future.set_exception(
+                        PreviewError(
+                            f"unexpected worker error for {filepath.name}"
+                        )
+                    )
             finally:
                 if replace:
                     await self._replace_worker(worker)
@@ -266,8 +294,12 @@ class _PreviewWorkerPool:
                     await self._replace_worker(worker)
 
     async def start(self) -> None:
-        for _ in range(self.size):
-            await self._add_worker()
+        workers = await asyncio.gather(
+            *(self._spawn_worker() for _ in range(self.size))
+        )
+        for worker in workers:
+            self._workers.add(worker)
+            await self._idle.put(worker)
         for _ in range(self.size):
             self._dispatchers.append(asyncio.create_task(self._dispatch_loop()))
 
@@ -410,10 +442,7 @@ class OOConversionManager:
     ) -> None:
         try:
             async with self._semaphore:
-                oo = _get_onlyoffice()
-                if oo is False:
-                    raise OnlyOfficeUnavailableError("OnlyOffice is not installed")
-                png_bytes = await oo.convert_to_png_async(filepath, timeout=5.0)
+                png_bytes = await onlyoffice.convert_to_png_async(filepath, timeout=5.0)
         except Exception as e:
             future.set_exception(e)
             async with self._lock:
@@ -439,10 +468,7 @@ async def _generate_office_preview(
     filepath: Path, quality: int, maxsize: int, maxzoom: float
 ) -> tuple[bytes | None, PreviewResponse | None]:
     """Generate a preview for an office file using OnlyOffice + worker AVIF conversion."""
-    oo = _get_onlyoffice()
-    if oo is False:
-        raise OnlyOfficeUnavailableError("OnlyOffice is not installed")
-    if not await oo.is_available_async():
+    if not await onlyoffice.is_available_async():
         raise OnlyOfficeUnavailableError("OnlyOffice Document Server is not reachable")
 
     manager = get_oo_manager()
@@ -589,15 +615,19 @@ async def preview(req, path):
                 timeout=PREVIEW_TIMEOUT,
             )
         else:
-            img, preview_resp = await _run_preview_process(
-                filepath, quality, maxsize, maxzoom
+            img, preview_resp = await asyncio.wait_for(
+                _run_preview_process(filepath, quality, maxsize, maxzoom),
+                timeout=PREVIEW_TIMEOUT,
             )
     except asyncio.TimeoutError:
-        return empty(504)
-    except OnlyOfficeUnavailableError:
+        logger.warning("Preview timeout for %s", filepath)
         return empty(503)
     except PreviewTimeoutError:
-        return empty(504)
+        logger.warning("Preview worker timeout for %s", filepath)
+        return empty(503)
+    except OnlyOfficeUnavailableError:
+        logger.warning("OnlyOffice unavailable for %s", filepath)
+        return empty(503)
     except PreviewError as e:
         if e.backend:
             req.ctx._log_extra = e.backend
@@ -608,6 +638,9 @@ async def preview(req, path):
                 detail = captured.splitlines()[0]
         logger.error("%s preview: %s", filepath, detail)
         return empty(422)
+    except Exception:
+        logger.exception("Unhandled preview error for %s", filepath)
+        return empty(500)
     if preview_resp and preview_resp.backend:
         if preview_resp.timings:
             timing_detail = "/".join(
@@ -643,7 +676,7 @@ async def preview(req, path):
 def dispatch(path, quality, maxsize, maxzoom, data=None):
     backend = "unknown"
     try:
-        if data is not None:
+        if data:
             backend = "pyvips"
             return process_image_buffer(data, quality=quality, maxsize=maxsize, maxzoom=maxzoom)
         suffix = path.suffix.lower()
@@ -660,6 +693,7 @@ def dispatch(path, quality, maxsize, maxzoom, data=None):
     except ValueError as e:
         return None, PreviewResponse(ok=False, backend=backend, error=str(e))
     except Exception as e:
+        logger.exception("Preview dispatch failed for %s", path)
         return None, PreviewResponse(ok=False, backend=backend, error=str(e))
     return None, PreviewResponse(ok=False, backend=backend, error="preview unsupported")
 
@@ -668,25 +702,125 @@ def process_image(path, *, maxsize, quality):
     return process_image_pyvips(path, maxsize=maxsize, quality=quality)
 
 
+def _get_image_dimensions(path: Path) -> tuple[int, int] | None:
+    """Probe image dimensions.
+
+    pyvips can read the header of most formats (including HEIC) without
+    fully decoding the image.  ffprobe is used as a fallback.
+    """
+    try:
+        img = pyvips.Image.new_from_file(str(path))
+        return img.width, img.height
+    except pyvips.error.Error:
+        pass
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=s=x:p=0",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        parts = result.stdout.strip().split("x")
+        if len(parts) == 2:
+            return int(parts[0]), int(parts[1])
+    except Exception:
+        pass
+    return None
+
+
+def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
+    """Convert any image to AVIF using ffmpeg CLI.
+
+    ffmpeg handles HEIC tile assembly, EXIF rotation, HDR metadata and
+    ICC profile embedding automatically.
+    """
+    dims = _get_image_dimensions(path)
+    crf = int(63 * (1 - quality / 100) ** 2)
+    with tempfile.NamedTemporaryFile(suffix=".avif", delete=False) as tmp_f:
+        tmp_path = tmp_f.name
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(path),
+        "-frames:v",
+        "1",
+        "-c:v",
+        "av1",
+        "-crf",
+        str(crf),
+        "-cpu-used",
+        "8",
+        tmp_path,
+    ]
+    if dims is not None:
+        w, h = dims
+        if max(w, h) > maxsize:
+            scale = min(maxsize / w, maxsize / h)
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            # insert -s <wxh> right after the input file
+            cmd.insert(4, "-s")
+            cmd.insert(5, f"{new_w}x{new_h}")
+    try:
+        subprocess.run(cmd, capture_output=True, check=True)
+        with open(tmp_path, "rb") as f:
+            return f.read()
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
 def process_image_pyvips(path, *, maxsize, quality):
     t_start = perf_counter()
-    img = pyvips.Image.new_from_file(str(path), access="sequential")
-    img = img.autorot()
-    scale = min(maxsize / img.width, maxsize / img.height, 1.0)
-    if scale < 1.0:
-        img = img.resize(scale)
-    ret = img.write_to_buffer(
-        ".avif",
-        Q=quality,
-        effort=AVIF_FAST_EFFORT,
-        strip=True,
-    )
+    suffix = path.suffix.lower()
+
+    # HEIC/HEIF: ffmpeg handles tile assembly and HDR correctly;
+    # skip pyvips entirely.
+    if suffix in (".heic", ".heif"):
+        ret = _image_via_ffmpeg(path, maxsize, quality)
+        t_end = perf_counter()
+        return ret, PreviewResponse(
+            ok=True,
+            mime="image/avif",
+            backend="ffmpeg",
+            timings=[round((t_end - t_start) * 1000, 1)],
+        )
+
+    # Other image formats: pyvips first, ffmpeg fallback.
+    load_opts = {"access": "sequential"}
+    try:
+        img = pyvips.Image.new_from_file(str(path), **load_opts)
+        img = img.autorot()
+        scale = min(maxsize / img.width, maxsize / img.height, 1.0)
+        if scale < 1.0:
+            img = img.resize(scale)
+        ret = img.write_to_buffer(
+            ".avif",
+            Q=quality,
+            effort=AVIF_FAST_EFFORT,
+            strip=True,
+        )
+        backend = "pyvips"
+    except pyvips.error.Error:
+        ret = _image_via_ffmpeg(path, maxsize, quality)
+        backend = "ffmpeg"
     t_end = perf_counter()
 
     return ret, PreviewResponse(
         ok=True,
         mime="image/avif",
-        backend="pyvips",
+        backend=backend,
         timings=[round((t_end - t_start) * 1000, 1)],
     )
 
@@ -745,12 +879,9 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
 
 def process_office(path, *, quality, maxsize, maxzoom):
     t_load_start = perf_counter()
-    oo = _get_onlyoffice()
-    if oo is False:
-        raise RuntimeError("OnlyOffice is not installed")
-    if not oo.is_available():
+    if not onlyoffice.is_available():
         raise RuntimeError("OnlyOffice Document Server is not reachable")
-    png_bytes = oo.convert_to_png(path)
+    png_bytes = onlyoffice.convert_to_png(path)
     t_load_end = perf_counter()
 
     t_save_start = perf_counter()

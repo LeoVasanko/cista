@@ -255,7 +255,15 @@ class _EmojiFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         emoji = _LEVEL_EMOJI.get(record.levelno, "▪️")
         sep = "  " if record.levelno in (logging.INFO, logging.WARNING) else " "
-        return f"{emoji}{sep}{record.getMessage()}"
+        msg = f"{emoji}{sep}{record.getMessage()}"
+        if record.exc_info:
+            if not record.exc_text:
+                record.exc_text = self.formatException(record.exc_info)
+            if record.exc_text:
+                msg = msg + "\n" + record.exc_text
+        if record.stack_info:
+            msg = msg + "\n" + record.stack_info
+        return msg
 
 
 def configure_main_logging() -> None:

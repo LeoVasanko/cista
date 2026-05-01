@@ -121,6 +121,7 @@ def _run_loop() -> None:
                     )
             _write_response(resp, result or b"")
         except Exception as e:
+            logging.exception("Preview worker error for %s", req.path)
             captured = stderr_capture.getvalue().strip()
             _write_response(
                 PreviewResponse(ok=False, error=str(e), stderr=captured or None), b""
@@ -136,6 +137,11 @@ def main() -> None:
     if len(sys.argv) > 1:
         _run_once()
         return
+    # Eagerly import heavy modules before signalling readiness so the parent
+    # does not hand us a request while we are still initialising.
+    from cista.preview import dispatch  # noqa: F401
+    sys.stdout.buffer.write(b"\x01")
+    sys.stdout.buffer.flush()
     _run_loop()
 
 
