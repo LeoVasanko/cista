@@ -16,7 +16,7 @@ from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
 from zstandard import ZstdCompressor
 
-from cista import auth, config, fileserver, preview, session, sharefs, sso, watching
+from cista import auth, config, fileserver, onlyoffice, preview, session, sharefs, sso, watching
 from cista.api import bp
 from cista.preview import shutdown_preview_workers, start_preview_workers
 from cista.sanic_logging import (
@@ -130,6 +130,7 @@ async def main_start(app):
 @app.before_server_stop
 async def main_stop(app):
     watching.stop(app)
+    await onlyoffice.close_oo_client()
     await shutdown_preview_workers()
     app.ctx.threadexec.shutdown()
     app.ctx.zipexec.shutdown(cancel_futures=True)

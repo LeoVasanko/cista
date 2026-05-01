@@ -55,6 +55,8 @@ async def watch(req, ws):
             "privileged": req.ctx.user.privileged,
         }
 
+    from cista import onlyoffice
+
     await ws.send(
         msgspec.json.encode(
             {
@@ -63,6 +65,7 @@ async def watch(req, ws):
                     "version": __version__,
                     "public": config.config.public,
                     "paskia": sso.paskia_enabled(),
+                    "office_previews": await onlyoffice.is_available_cached(),
                 },
                 "user": user_info,
             }

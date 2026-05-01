@@ -2,9 +2,12 @@
 
 Two modes are supported:
 1) Legacy one-shot mode: argv has path/quality/maxsize/maxzoom.
-2) Long-lived mode: read JSONL commands from stdin and write framed responses.
+2) Long-lived mode: read framed requests from stdin and write framed responses.
 
-Framed response format:
+Framed request format (stdin):
+    (uint32 json size)(uint32 data size)(json)(binary data)
+
+Framed response format (stdout):
     (blake3(packet))(uint32 json size)(uint32 payload size)(json)(binary payload)
 where packet = (uint32 json size)(uint32 payload size)(json)(binary payload).
 """
@@ -40,6 +43,30 @@ _enc = msgspec.json.Encoder()
 _dec_req = msgspec.json.Decoder(PreviewRequest)
 
 
+def _read_exactly(f, n: int) -> bytes:
+    buf = b""
+    while len(buf) < n:
+        chunk = f.read(n - len(buf))
+        if not chunk:
+            raise EOFError
+        buf += chunk
+    return buf
+
+
+def _read_request() -> tuple[PreviewRequest, bytes] | None:
+    try:
+        header = _read_exactly(sys.stdin.buffer, 8)
+    except EOFError:
+        return None
+    json_size, data_size = struct.unpack("<II", header)
+    meta_raw = _read_exactly(sys.stdin.buffer, json_size)
+    data = b""
+    if data_size:
+        data = _read_exactly(sys.stdin.buffer, data_size)
+    req = _dec_req.decode(meta_raw)
+    return req, data
+
+
 def _write_response(resp: PreviewResponse, payload: bytes) -> None:
     meta_bytes = _enc.encode(resp)
     packet = struct.pack("<II", len(meta_bytes), len(payload)) + meta_bytes + payload
@@ -70,18 +97,18 @@ def _run_loop() -> None:
     from cista.preview import dispatch
 
     while True:
-        line = sys.stdin.buffer.readline()
-        if not line:
+        result = _read_request()
+        if result is None:
             return
+        req, data = result
         stderr_capture = io.StringIO()
         handler = logging.StreamHandler(stderr_capture)
         root_logger = logging.getLogger()
         root_logger.addHandler(handler)
         try:
             with contextlib.redirect_stderr(stderr_capture):
-                req = _dec_req.decode(line)
                 result, resp = dispatch(
-                    Path(req.path), req.quality, req.maxsize, req.maxzoom
+                    Path(req.path), req.quality, req.maxsize, req.maxzoom, data
                 )
             if not resp.ok:
                 captured = stderr_capture.getvalue().strip()

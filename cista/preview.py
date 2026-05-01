@@ -10,7 +10,7 @@ import urllib.parse
 from collections import OrderedDict
 from dataclasses import dataclass
 from multiprocessing import cpu_count
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from time import perf_counter
 from urllib.parse import unquote
 from wsgiref.handlers import format_date_time
@@ -112,24 +112,25 @@ class _PreviewWorker:
     def __init__(self, proc: asyncio.subprocess.Process):
         self.proc = proc
 
-    async def request(self, filepath, quality: int, maxsize: int, maxzoom: float):
+    async def request(
+        self, filepath, quality: int, maxsize: int, maxzoom: float, data: bytes | None = None
+    ):
         if self.proc.returncode is not None:
             raise WorkerProtocolError("worker already exited")
         if self.proc.stdin is None or self.proc.stdout is None:
             raise WorkerProtocolError("worker streams not available")
 
-        line = (
-            msgspec.json.encode(
-                PreviewRequest(
-                    path=str(filepath),
-                    quality=quality,
-                    maxsize=maxsize,
-                    maxzoom=maxzoom,
-                )
+        meta = msgspec.json.encode(
+            PreviewRequest(
+                path=str(filepath),
+                quality=quality,
+                maxsize=maxsize,
+                maxzoom=maxzoom,
             )
-            + b"\n"
         )
-        self.proc.stdin.write(line)
+        payload = data or b""
+        packet = struct.pack("<II", len(meta), len(payload)) + meta + payload
+        self.proc.stdin.write(packet)
         await self.proc.stdin.drain()
 
         checksum = await self.proc.stdout.readexactly(WORKER_CHECKSUM_BYTES)
@@ -270,7 +271,9 @@ class _PreviewWorkerPool:
         for _ in range(self.size):
             self._dispatchers.append(asyncio.create_task(self._dispatch_loop()))
 
-    async def run(self, filepath, quality: int, maxsize: int, maxzoom: float):
+    async def run(
+        self, filepath, quality: int, maxsize: int, maxzoom: float, data: bytes | None = None
+    ):
         if self._closed:
             raise PreviewError("preview worker pool closed")
         loop = asyncio.get_running_loop()
@@ -281,7 +284,7 @@ class _PreviewWorkerPool:
                 _preview_job_priority(filepath),
                 self._seq,
                 future,
-                (filepath, quality, maxsize, maxzoom),
+                (filepath, quality, maxsize, maxzoom, data),
             )
         )
         return await future
@@ -355,6 +358,10 @@ class PreviewTimeoutError(Exception):
     """Raised when the preview subprocess exceeds PREVIEW_TIMEOUT."""
 
 
+class OnlyOfficeUnavailableError(Exception):
+    """Raised when the OnlyOffice Document Server is not reachable."""
+
+
 class PreviewError(Exception):
     """Raised when the preview subprocess exits with a non-zero status."""
 
@@ -370,14 +377,98 @@ class PreviewError(Exception):
         self.backend = backend
 
 
+# Max concurrent OnlyOffice conversion requests. OO has its own queue;
+# we must not flood it. This is intentionally small.
+OO_MAX_CONCURRENT = 2
+
+
+class OOConversionManager:
+    """Manages async OnlyOffice conversions with deduplication and concurrency limits."""
+
+    def __init__(self, max_concurrent: int = OO_MAX_CONCURRENT):
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._in_flight: dict[str, asyncio.Future[bytes]] = {}
+        self._lock = asyncio.Lock()
+
+    async def convert(self, filepath: Path) -> bytes:
+        """Return PNG bytes for *filepath*, deduplicating concurrent requests."""
+        stat = filepath.stat()
+        key = f"{filepath}:{stat.st_mtime_ns}"
+
+        async with self._lock:
+            if key in self._in_flight:
+                future = self._in_flight[key]
+            else:
+                future = asyncio.get_running_loop().create_future()
+                self._in_flight[key] = future
+                asyncio.create_task(self._do_convert(filepath, key, future))
+
+        return await future
+
+    async def _do_convert(
+        self, filepath: Path, key: str, future: asyncio.Future[bytes]
+    ) -> None:
+        try:
+            async with self._semaphore:
+                oo = _get_onlyoffice()
+                if oo is False:
+                    raise OnlyOfficeUnavailableError("OnlyOffice is not installed")
+                png_bytes = await oo.convert_to_png_async(filepath, timeout=5.0)
+        except Exception as e:
+            future.set_exception(e)
+            async with self._lock:
+                self._in_flight.pop(key, None)
+        else:
+            future.set_result(png_bytes)
+            async with self._lock:
+                self._in_flight.pop(key, None)
+
+
+_oo_manager: OOConversionManager | None = None
+
+
+def get_oo_manager() -> OOConversionManager:
+    """Return the singleton OOConversionManager."""
+    global _oo_manager
+    if _oo_manager is None:
+        _oo_manager = OOConversionManager(max_concurrent=OO_MAX_CONCURRENT)
+    return _oo_manager
+
+
+async def _generate_office_preview(
+    filepath: Path, quality: int, maxsize: int, maxzoom: float
+) -> tuple[bytes | None, PreviewResponse | None]:
+    """Generate a preview for an office file using OnlyOffice + worker AVIF conversion."""
+    oo = _get_onlyoffice()
+    if oo is False:
+        raise OnlyOfficeUnavailableError("OnlyOffice is not installed")
+    if not await oo.is_available_async():
+        raise OnlyOfficeUnavailableError("OnlyOffice Document Server is not reachable")
+
+    manager = get_oo_manager()
+    t_oo_start = perf_counter()
+    png_bytes = await manager.convert(filepath)
+    t_oo_end = perf_counter()
+
+    img, resp = await _run_preview_process(
+        filepath, quality, maxsize, maxzoom, data=png_bytes
+    )
+
+    if resp is not None:
+        resp.backend = "onlyoffice+" + (resp.backend or "pyvips")
+        if resp.timings:
+            resp.timings = [round((t_oo_end - t_oo_start) * 1000, 1), *resp.timings]
+    return img, resp
+
+
 async def _run_preview_process(
-    filepath, quality: int, maxsize: int, maxzoom: float
+    filepath, quality: int, maxsize: int, maxzoom: float, data: bytes | None = None
 ) -> tuple[bytes | None, PreviewResponse | None]:
     """Run preview request in a persistent worker process."""
     await start_preview_workers()
     if _preview_pool is None:
         raise PreviewError(f"preview worker pool unavailable for {filepath.name}")
-    return await _preview_pool.run(filepath, quality, maxsize, maxzoom)
+    return await _preview_pool.run(filepath, quality, maxsize, maxzoom, data)
 
 
 DOC_PREVIEW_SUFFIXES = {".pdf", ".xps", ".epub", ".mobi"}
@@ -492,9 +583,19 @@ async def preview(req, path):
 
     # Generate preview
     try:
-        img, preview_resp = await _run_preview_process(
-            filepath, quality, maxsize, maxzoom
-        )
+        if filepath.suffix.lower() in OFFICE_PREVIEW_SUFFIXES:
+            img, preview_resp = await asyncio.wait_for(
+                _generate_office_preview(filepath, quality, maxsize, maxzoom),
+                timeout=PREVIEW_TIMEOUT,
+            )
+        else:
+            img, preview_resp = await _run_preview_process(
+                filepath, quality, maxsize, maxzoom
+            )
+    except asyncio.TimeoutError:
+        return empty(504)
+    except OnlyOfficeUnavailableError:
+        return empty(503)
     except PreviewTimeoutError:
         return empty(504)
     except PreviewError as e:
@@ -539,18 +640,16 @@ async def preview(req, path):
     return raw(img, headers=headers)
 
 
-def dispatch(path, quality, maxsize, maxzoom):
+def dispatch(path, quality, maxsize, maxzoom, data=None):
     backend = "unknown"
     try:
+        if data is not None:
+            backend = "pyvips"
+            return process_image_buffer(data, quality=quality, maxsize=maxsize, maxzoom=maxzoom)
         suffix = path.suffix.lower()
         if suffix in DOC_PREVIEW_SUFFIXES:
             backend = "pdf"
             return process_pdf(path, quality=quality, maxsize=maxsize, maxzoom=maxzoom)
-        if suffix in OFFICE_PREVIEW_SUFFIXES:
-            backend = "onlyoffice"
-            return process_office(
-                path, quality=quality, maxsize=maxsize, maxzoom=maxzoom
-            )
         mime_type, _ = mimetypes.guess_type(path.name)
         if mime_type and mime_type.startswith("video/"):
             backend = "video"
@@ -572,6 +671,29 @@ def process_image(path, *, maxsize, quality):
 def process_image_pyvips(path, *, maxsize, quality):
     t_start = perf_counter()
     img = pyvips.Image.new_from_file(str(path), access="sequential")
+    img = img.autorot()
+    scale = min(maxsize / img.width, maxsize / img.height, 1.0)
+    if scale < 1.0:
+        img = img.resize(scale)
+    ret = img.write_to_buffer(
+        ".avif",
+        Q=quality,
+        effort=AVIF_FAST_EFFORT,
+        strip=True,
+    )
+    t_end = perf_counter()
+
+    return ret, PreviewResponse(
+        ok=True,
+        mime="image/avif",
+        backend="pyvips",
+        timings=[round((t_end - t_start) * 1000, 1)],
+    )
+
+
+def process_image_buffer(data: bytes, *, quality, maxsize, maxzoom):
+    t_start = perf_counter()
+    img = pyvips.Image.new_from_buffer(data, "")
     img = img.autorot()
     scale = min(maxsize / img.width, maxsize / img.height, 1.0)
     if scale < 1.0:

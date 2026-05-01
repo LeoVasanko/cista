@@ -10,6 +10,7 @@ Environment requirements:
       reachable from the container (usually the docker bridge IP).
 """
 
+import asyncio
 import json
 import os
 import socket
@@ -23,6 +24,7 @@ from pathlib import Path
 from time import perf_counter
 from urllib.parse import quote
 
+import httpx
 import jwt
 from sanic.log import logger
 
@@ -31,8 +33,11 @@ from sanic.log import logger
 # ---------------------------------------------------------------------------
 
 
+_httpx_client: httpx.AsyncClient | None = None
+
+
 def _get_onlyoffice_url() -> str:
-    return os.environ.get("ONLYOFFICE_URL", "http://localhost:8080")
+    return os.environ.get("ONLYOFFICE_URL", "http://localhost:8988")
 
 
 def _get_jwt_secret() -> str | None:
@@ -63,18 +68,67 @@ def _get_callback_host() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Async HTTP client
+# ---------------------------------------------------------------------------
+
+
+def get_httpx_client() -> httpx.AsyncClient:
+    """Return the shared async HTTP client for OnlyOffice requests."""
+    global _httpx_client
+    if _httpx_client is None:
+        _httpx_client = httpx.AsyncClient()
+    return _httpx_client
+
+
+async def close_oo_client() -> None:
+    """Close the shared async HTTP client."""
+    global _httpx_client
+    if _httpx_client is not None:
+        await _httpx_client.aclose()
+        _httpx_client = None
+
+
+# ---------------------------------------------------------------------------
 # Availability check
 # ---------------------------------------------------------------------------
 
 
 def is_available() -> bool:
     """Return True if the configured OnlyOffice Document Server is reachable."""
-    url = _get_onlyoffice_url()
+    url = _get_onlyoffice_url().rstrip("/") + "/ConvertService.ashx"
     try:
         with urllib.request.urlopen(url, timeout=3) as resp:  # noqa: S310
-            return resp.status == 200
+            return resp.status in (200, 405)  # 405 Method Not Allowed is fine, means endpoint exists
     except Exception:
         return False
+
+
+async def is_available_async(timeout: float = 2.0) -> bool:
+    """Return True if the configured OnlyOffice Document Server is reachable."""
+    url = _get_onlyoffice_url().rstrip("/") + "/ConvertService.ashx"
+    client = get_httpx_client()
+    try:
+        response = await client.get(url, timeout=timeout)
+        return response.status_code in (200, 405)
+    except Exception:
+        return False
+
+
+_oo_available_cache: tuple[bool, float] | None = None
+OO_AVAILABILITY_CACHE_TTL = 30.0
+
+
+async def is_available_cached() -> bool:
+    """Return cached OnlyOffice availability, refreshed every 30 seconds."""
+    global _oo_available_cache
+    now = perf_counter()
+    if _oo_available_cache is not None:
+        result, timestamp = _oo_available_cache
+        if now - timestamp < OO_AVAILABILITY_CACHE_TTL:
+            return result
+    result = await is_available_async()
+    _oo_available_cache = (result, now)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +175,7 @@ def _build_jwt_token(payload: dict) -> str | None:
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
-def convert_to_png(file_path: Path, timeout: float = 30.0) -> bytes:
+def convert_to_png(file_path: Path, timeout: float = 5.0) -> bytes:
     """Convert *file_path* to PNG using OnlyOffice Document Server.
 
     Returns the PNG bytes. Raises RuntimeError on failure.
@@ -182,3 +236,67 @@ def convert_to_png(file_path: Path, timeout: float = 30.0) -> bytes:
             return png_resp.read()
     finally:
         httpd.shutdown()
+
+
+async def convert_to_png_async(file_path: Path, timeout: float = 5.0) -> bytes:
+    """Convert *file_path* to PNG using OnlyOffice Document Server (async).
+
+    Returns the PNG bytes. Raises RuntimeError on failure.
+    """
+    oo_url = _get_onlyoffice_url().rstrip("/")
+    convert_url = f"{oo_url}/ConvertService.ashx"
+    client = get_httpx_client()
+
+    # Start temporary HTTP server so OnlyOffice can fetch the file
+    doc_url, httpd = await asyncio.to_thread(_serve_file_temporarily, file_path)
+    try:
+        suffix = file_path.suffix.lstrip(".").lower()
+        payload = {
+            "async": False,
+            "filetype": suffix,
+            "key": f"cista_{file_path.stat().st_mtime_ns}",
+            "outputtype": "png",
+            "title": file_path.name,
+            "url": doc_url,
+        }
+
+        headers = {"Content-Type": "application/json"}
+        token = _build_jwt_token(payload)
+        if token:
+            # Conversion API expects JWT in request body when token checks are enabled.
+            payload["token"] = token
+            headers["Authorization"] = token
+
+        t_start = perf_counter()
+        response = await client.post(
+            convert_url,
+            content=json.dumps(payload).encode(),
+            headers=headers,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        body = response.content
+        t_end = perf_counter()
+
+        # Parse XML response
+        text = body.decode("utf-8", errors="replace")
+        if "<Error>" in text:
+            code = "unknown"
+            if "<Error>" in text and "</Error>" in text:
+                code = text.split("<Error>")[1].split("</Error>")[0]
+            raise RuntimeError(f"OnlyOffice conversion error: {code}")
+
+        if "<FileUrl>" not in text:
+            raise RuntimeError("OnlyOffice response did not contain FileUrl")
+
+        file_url = text.split("<FileUrl>")[1].split("</FileUrl>")[0]
+        file_url = file_url.replace("&amp;", "&")
+
+        logger.debug("OnlyOffice converted in %.2fs: %s", t_end - t_start, file_url)
+
+        # Download converted PNG
+        png_response = await client.get(file_url, timeout=timeout)
+        png_response.raise_for_status()
+        return png_response.content
+    finally:
+        await asyncio.to_thread(httpd.shutdown)

@@ -84,6 +84,21 @@ export class Doc {
     // Folders cannot be previewable
     if (this.dir) return false
     if (this.img) return true
+    const store = useMainStore()
+    const ext = this.ext
+    // Office document previews may be optionally disabled server-side
+    if (store.server.office_previews === false) {
+      const officeExts = [
+        'doc', 'dot', 'docx', 'docm', 'dotx', 'dotm', 'rtf',
+        'odt', 'ott', 'txt', 'md', 'mhtml', 'mht', 'html',
+        'htm', 'xml', 'wps', 'wri',
+        'xls', 'xlsx', 'xlsm', 'xlsb', 'xltx', 'xltm',
+        'ods', 'ots', 'csv',
+        'ppt', 'pptx', 'pptm', 'pps', 'ppsx',
+        'pot', 'potx', 'odp', 'otp'
+      ]
+      if (officeExts.includes(ext)) return false
+    }
     // Not a comprehensive list, but good enough for now
     return [
       'mp4',
@@ -133,7 +148,7 @@ export class Doc {
       'potx',
       'odp',
       'otp'
-    ].includes(this.ext)
+    ].includes(ext)
   }
   get previewurl(): string {
     if (!this.complete || !this.previewable) return ''

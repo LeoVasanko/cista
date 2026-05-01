@@ -20,6 +20,7 @@
 <script setup lang="ts">
 import { Play as PlayIcon, Spinner as SpinnerIcon } from '@/assets/svg'
 import type { Doc } from '@/repositories/Document'
+import { useMainStore } from '@/stores/main'
 import { computed, ref } from 'vue'
 
 const aud = ref<HTMLAudioElement | null>(null)
@@ -130,59 +131,77 @@ const audio = () => ['mp3', 'flac', 'ogg', 'aac'].includes(props.doc.ext)
 const archive = () =>
   ['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar'].includes(props.doc.ext)
 const showProgress = () => !props.doc.complete && (preview() || props.doc.img)
-const preview = () =>
-  [
-    'bmp',
-    'ico',
-    'tif',
-    'tiff',
-    'heic',
-    'heif',
-    'pdf',
-    'epub',
-    'mobi',
-    // Documents
-    'doc',
-    'dot',
-    'docx',
-    'docm',
-    'dotx',
-    'dotm',
-    'rtf',
-    'odt',
-    'ott',
-    'txt',
-    'md',
-    'mhtml',
-    'mht',
-    'html',
-    'htm',
-    'xml',
-    'wps',
-    'wri',
-    // Spreadsheets
-    'xls',
-    'xlsx',
-    'xlsm',
-    'xlsb',
-    'xltx',
-    'xltm',
-    'ods',
-    'ots',
-    'csv',
-    // Presentations
-    'ppt',
-    'pptx',
-    'pptm',
-    'pps',
-    'ppsx',
-    'pot',
-    'potx',
-    'odp',
-    'otp'
-  ].includes(props.doc.ext) ||
-  (props.doc.size > 500000 &&
-    ['avif', 'webp', 'png', 'jpg', 'jpeg'].includes(props.doc.ext))
+const preview = () => {
+  const store = useMainStore()
+  const ext = props.doc.ext
+  // Office document previews may be optionally disabled server-side
+  if (store.server.office_previews === false) {
+    const officeExts = [
+      'doc', 'dot', 'docx', 'docm', 'dotx', 'dotm', 'rtf',
+      'odt', 'ott', 'txt', 'md', 'mhtml', 'mht', 'html',
+      'htm', 'xml', 'wps', 'wri',
+      'xls', 'xlsx', 'xlsm', 'xlsb', 'xltx', 'xltm',
+      'ods', 'ots', 'csv',
+      'ppt', 'pptx', 'pptm', 'pps', 'ppsx',
+      'pot', 'potx', 'odp', 'otp'
+    ]
+    if (officeExts.includes(ext)) return false
+  }
+  return (
+    [
+      'bmp',
+      'ico',
+      'tif',
+      'tiff',
+      'heic',
+      'heif',
+      'pdf',
+      'epub',
+      'mobi',
+      // Documents
+      'doc',
+      'dot',
+      'docx',
+      'docm',
+      'dotx',
+      'dotm',
+      'rtf',
+      'odt',
+      'ott',
+      'txt',
+      'md',
+      'mhtml',
+      'mht',
+      'html',
+      'htm',
+      'xml',
+      'wps',
+      'wri',
+      // Spreadsheets
+      'xls',
+      'xlsx',
+      'xlsm',
+      'xlsb',
+      'xltx',
+      'xltm',
+      'ods',
+      'ots',
+      'csv',
+      // Presentations
+      'ppt',
+      'pptx',
+      'pptm',
+      'pps',
+      'ppsx',
+      'pot',
+      'potx',
+      'odp',
+      'otp'
+    ].includes(ext) ||
+    (props.doc.size > 500000 &&
+      ['avif', 'webp', 'png', 'jpg', 'jpeg'].includes(ext))
+  )
+}
 </script>
 
 <style scoped>
