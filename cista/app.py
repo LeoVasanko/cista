@@ -8,6 +8,7 @@ from stat import S_IFDIR, S_IFREG
 from urllib.parse import unquote
 from wsgiref.handlers import format_date_time
 
+import tracerite
 from blake3 import blake3
 from sanic import Sanic, empty, raw, redirect
 from sanic.exceptions import Forbidden, NotFound
@@ -37,7 +38,9 @@ from cista.sanic_logging import (
 from cista.sanic_logging import logger as access_logger
 from cista.util.apphelpers import handle_sanic_exception
 
+tracerite.load()
 configure_access_logging()
+
 
 app = Sanic("cista", strict_slashes=True)
 app.router.ALLOWED_METHODS = (
