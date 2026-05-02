@@ -1,9 +1,35 @@
 <template>
-  <div v-if=showProgress() class="preview-progress" aria-label="Preview pending">
-    <SpinnerIcon />
+  <div v-if="showPreviewImage || showNativeImage" class="preview-image-shell">
+    <span
+      v-show="activeImageLoading"
+      class="file icon"
+      :class="[`ext-${doc.ext}`, 'loading-pulse']"
+      :style="loadingPulseStyle"
+    ></span>
+    <img
+      v-if="showPreviewImage"
+      :src="previewSrc"
+      alt=""
+      :class="{ ready: !previewImageLoading }"
+      @load="onPreviewImageLoad"
+      @error="onPreviewImageError"
+    >
+    <img
+      v-else
+      :src="doc.url"
+      alt=""
+      :class="{ ready: !nativeImageLoading }"
+      @load="onNativeImageLoad"
+      @error="onNativeImageError"
+    >
   </div>
-  <img v-else-if="previewSrc && !video() && !audio()" :src="previewSrc" alt="">
-  <img v-else-if=doc.img :src=doc.url alt="">
+  <div v-else-if=showProgress() class="preview-progress" aria-label="Preview pending">
+    <span
+      class="file icon"
+      :class="[`ext-${doc.ext}`, { 'loading-pulse': !previewLoadFailed }]"
+      :style="loadingPulseStyle"
+    ></span>
+  </div>
   <span v-else-if=doc.dir class="folder icon"></span>
   <div v-else-if=video() class="video-container" :class="{ pending: !doc.complete }">
     <video v-if=doc.complete ref=vid :src=doc.url :poster=previewSrc preload=none @play=onplay @pause=onpaused @ended=next @seeking=media!.play()></video>
@@ -18,10 +44,10 @@
 </template>
 
 <script setup lang="ts">
-import { Play as PlayIcon, Spinner as SpinnerIcon } from '@/assets/svg'
+import { Play as PlayIcon } from '@/assets/svg'
 import type { Doc } from '@/repositories/Document'
 import { useMainStore } from '@/stores/main'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const aud = ref<HTMLAudioElement | null>(null)
 const vid = ref<HTMLVideoElement | null>(null)
@@ -30,10 +56,57 @@ const props = defineProps<{
   doc: Doc
   quality: string
 }>()
+const previewImageFailed = ref(false)
+const nativeImageFailed = ref(false)
+const previewImageLoading = ref(true)
+const nativeImageLoading = ref(true)
 const previewSrc = computed(() =>
   props.doc.previewurl
     ? `${props.doc.previewurl}?${props.quality}&t=${props.doc.mtime}`
     : ''
+)
+const showPreviewImage = computed(
+  () => !!previewSrc.value && !video() && !audio() && !previewImageFailed.value
+)
+const showNativeImage = computed(() => props.doc.img && !nativeImageFailed.value)
+const activeImageLoading = computed(() =>
+  showPreviewImage.value ? previewImageLoading.value : nativeImageLoading.value
+)
+const previewLoadFailed = computed(
+  () => previewImageFailed.value || nativeImageFailed.value
+)
+const loadingPulseDelayMs = computed(() => {
+  let hash = 0
+  for (const ch of props.doc.key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  return hash % 1800
+})
+const loadingPulseStyle = computed(() => ({
+  animationDelay: `${-loadingPulseDelayMs.value}ms`
+}))
+
+const onPreviewImageLoad = () => {
+  previewImageLoading.value = false
+}
+const onPreviewImageError = () => {
+  previewImageLoading.value = false
+  previewImageFailed.value = true
+}
+const onNativeImageLoad = () => {
+  nativeImageLoading.value = false
+}
+const onNativeImageError = () => {
+  nativeImageLoading.value = false
+  nativeImageFailed.value = true
+}
+
+watch(
+  () => props.doc.key,
+  () => {
+    previewImageFailed.value = false
+    nativeImageFailed.value = false
+    previewImageLoading.value = true
+    nativeImageLoading.value = true
+  }
 )
 
 const onplay = () => {
@@ -154,6 +227,7 @@ img, embed, .icon, audio, video {
   border-radius: calc(.5em / 8);
 }
 .preview-progress {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -162,18 +236,47 @@ img, embed, .icon, audio, video {
   max-height: 100%;
   aspect-ratio: 1;
 }
-.preview-progress :deep(svg) {
-  width: 4.5em;
-  height: 4.5em;
-  opacity: 0.8;
-  animation: media-preview-spin 0.9s linear infinite;
+.preview-progress .icon {
+  opacity: 0.9;
 }
-@keyframes media-preview-spin {
-  from {
-    transform: rotate(0deg);
+.preview-image-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+}
+.preview-image-shell img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+.preview-image-shell img.ready {
+  opacity: 1;
+}
+.loading-pulse {
+  animation: media-preview-pulse 1.8s ease-in-out infinite;
+}
+@keyframes media-preview-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.86;
   }
-  to {
-    transform: rotate(360deg);
+  50% {
+    transform: scale(1.04);
+    opacity: 0.98;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.86;
   }
 }
 .folder::before {
@@ -218,12 +321,6 @@ img, embed, .icon, audio, video {
 }
 figure.cursor .icon {
   filter: brightness(1);
-}
-img::before {
-  /* broken image */
-  text-shadow: 0 0 .5rem #000;
-  filter: grayscale(1);
-  content: '❌';
 }
 .video-container {
   position: relative;
