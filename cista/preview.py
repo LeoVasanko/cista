@@ -245,7 +245,12 @@ class _PreviewWorkerPool:
                     args[0].name,
                 )
                 if not future.done():
-                    future.set_exception(PreviewTimeoutError(args[0].name))
+                    future.set_exception(
+                        PreviewTimeoutError(
+                            args[0].name,
+                            backend=_expected_preview_backend(args[0]),
+                        )
+                    )
                 continue
 
             filepath = args[0]
@@ -259,11 +264,13 @@ class _PreviewWorkerPool:
                     future.set_result((out, resp))
             except TimeoutError:
                 replace = True
-                logger.warning(
-                    "Preview timeout (%ds) for %s", int(PREVIEW_TIMEOUT), filepath.name
-                )
                 if not future.done():
-                    future.set_exception(PreviewTimeoutError(filepath.name))
+                    future.set_exception(
+                        PreviewTimeoutError(
+                            filepath.name,
+                            backend=_expected_preview_backend(filepath),
+                        )
+                    )
             except WorkerChecksumError:
                 replace = True
                 logger.error("Preview checksum mismatch for %s", filepath.name)
@@ -411,6 +418,10 @@ async def verify_preview(request):
 class PreviewTimeoutError(Exception):
     """Raised when the preview subprocess exceeds PREVIEW_TIMEOUT."""
 
+    def __init__(self, message: str, *, backend: str | None = None):
+        super().__init__(message)
+        self.backend = backend
+
 
 class PreviewError(Exception):
     """Raised when the preview subprocess exits with a non-zero status."""
@@ -551,6 +562,21 @@ def _preview_job_priority(path) -> int:
     return 4
 
 
+def _expected_preview_backend(path: Path) -> str:
+    """Best-effort backend label used for timeout/access logging."""
+    suffix = path.suffix.lower()
+    if suffix in OFFICE_PREVIEW_SUFFIXES:
+        return "onlyoffice"
+    if suffix in DOC_PREVIEW_SUFFIXES:
+        return "pdf"
+    mime_type, _ = mimetypes.guess_type(path.name)
+    if mime_type and mime_type.startswith("video/"):
+        return "video"
+    if mime_type and mime_type.startswith("image/"):
+        return "pyvips"
+    return "preview"
+
+
 def is_previewable_path(path) -> bool:
     suffix = path.suffix.lower()
     if suffix in DOC_PREVIEW_SUFFIXES or suffix in OFFICE_PREVIEW_SUFFIXES:
@@ -612,10 +638,12 @@ async def preview(req, path):
                 timeout=PREVIEW_TIMEOUT,
             )
     except TimeoutError:
-        logger.warning("Preview timeout for %s", filepath)
+        req.ctx.log_extra = f"{_expected_preview_backend(filepath)} timeout"
         return empty(503)
-    except PreviewTimeoutError:
-        logger.warning("Preview worker timeout for %s", filepath)
+    except PreviewTimeoutError as e:
+        req.ctx.log_extra = (
+            f"{(e.backend or _expected_preview_backend(filepath))} timeout"
+        )
         return empty(503)
     except httpx.HTTPStatusError:
         req.ctx.log_extra = "onlyoffice N/A"
