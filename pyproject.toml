@@ -155,7 +155,7 @@ ignore = [
     "PLR0912", # legacy complexity; keep other correctness rules enabled
     "PLR0913", # legacy complexity; keep other correctness rules enabled
     "PLR0915", # legacy complexity; keep other correctness rules enabled
-    "PLR2004", # legacy comparisons use inline constants
+    "PLR2004", # we like magic numbers (don't remove this suppression)
     "PLW0603", # module-level shared state exists in server runtime code
     "TRY003", # exception-message strictness too noisy on legacy handlers
 ]
