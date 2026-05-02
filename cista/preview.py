@@ -957,6 +957,11 @@ def process_video(path, *, maxsize, quality):
                     logger.exception(
                         f"Error rotating video frame by {frame.rotation}°: {e}"
                     )
+
+        # libsvtav1 rejects full-range JPEG-style YUV pixel formats such as
+        # yuvj420p, so normalize them before opening the encoder.
+        if frame.format.name.startswith("yuvj"):
+            frame = frame.reformat(format="yuv420p")
         t_load_end = perf_counter()
 
         t_save_start = perf_counter()
