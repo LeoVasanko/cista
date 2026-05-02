@@ -19,6 +19,7 @@ from wsgiref.handlers import format_date_time
 
 import av
 import fitz  # PyMuPDF
+import httpx
 import msgspec
 import numpy as np
 import pyvips
@@ -100,7 +101,12 @@ class _PreviewWorker:
         self.proc = proc
 
     async def request(
-        self, filepath, quality: int, maxsize: int, maxzoom: float, data: bytes | None = None
+        self,
+        filepath,
+        quality: int,
+        maxsize: int,
+        maxzoom: float,
+        data: bytes | None = None,
     ):
         if self.proc.returncode is not None:
             raise WorkerProtocolError("worker already exited")
@@ -172,9 +178,7 @@ class _PreviewWorkerPool:
         )
         _active_procs.add(proc)
         try:
-            ready = await asyncio.wait_for(
-                proc.stdout.readexactly(1), timeout=30.0
-            )
+            ready = await asyncio.wait_for(proc.stdout.readexactly(1), timeout=30.0)
         except asyncio.TimeoutError:
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
@@ -184,9 +188,7 @@ class _PreviewWorkerPool:
                 "preview worker exited before signalling readiness"
             )
         if ready != b"\x01":
-            raise WorkerProtocolError(
-                f"preview worker ready signal invalid: {ready!r}"
-            )
+            raise WorkerProtocolError(f"preview worker ready signal invalid: {ready!r}")
         return _PreviewWorker(proc)
 
     async def _add_worker(self) -> None:
@@ -280,9 +282,7 @@ class _PreviewWorkerPool:
                 )
                 if not future.done():
                     future.set_exception(
-                        PreviewError(
-                            f"unexpected worker error for {filepath.name}"
-                        )
+                        PreviewError(f"unexpected worker error for {filepath.name}")
                     )
             finally:
                 if replace:
@@ -303,7 +303,12 @@ class _PreviewWorkerPool:
             self._dispatchers.append(asyncio.create_task(self._dispatch_loop()))
 
     async def run(
-        self, filepath, quality: int, maxsize: int, maxzoom: float, data: bytes | None = None
+        self,
+        filepath,
+        quality: int,
+        maxsize: int,
+        maxzoom: float,
+        data: bytes | None = None,
     ):
         if self._closed:
             raise PreviewError("preview worker pool closed")
@@ -389,10 +394,6 @@ class PreviewTimeoutError(Exception):
     """Raised when the preview subprocess exceeds PREVIEW_TIMEOUT."""
 
 
-class OnlyOfficeUnavailableError(Exception):
-    """Raised when the OnlyOffice Document Server is not reachable."""
-
-
 class PreviewError(Exception):
     """Raised when the preview subprocess exits with a non-zero status."""
 
@@ -410,7 +411,7 @@ class PreviewError(Exception):
 
 # Max concurrent OnlyOffice conversion requests. OO has its own queue;
 # we must not flood it. This is intentionally small.
-OO_MAX_CONCURRENT = 2
+OO_MAX_CONCURRENT = PREVIEW_WORKERS
 
 
 class OOConversionManager:
@@ -467,9 +468,6 @@ async def _generate_office_preview(
     filepath: Path, quality: int, maxsize: int, maxzoom: float
 ) -> tuple[bytes | None, PreviewResponse | None]:
     """Generate a preview for an office file using OnlyOffice + worker AVIF conversion."""
-    if not await onlyoffice.is_available_async():
-        raise OnlyOfficeUnavailableError("OnlyOffice Document Server is not reachable")
-
     manager = get_oo_manager()
     t_oo_start = perf_counter()
     png_bytes = await manager.convert(filepath)
@@ -538,6 +536,20 @@ OFFICE_PREVIEW_SUFFIXES = {
     ".odp",
     ".otp",
 }
+
+
+def _onlyoffice_error_short_text(detail: str) -> str:
+    if detail.startswith("OnlyOffice conversion error:"):
+        code = detail.rsplit(":", 1)[-1].strip()
+        return {
+            "-8": "onlyoffice jwt error",
+            "-4": "onlyoffice input error",
+            "-2": "onlyoffice timeout error",
+            "-1": "onlyoffice unknown error",
+        }.get(code, f"onlyoffice {code} error")
+    if "OnlyOffice response did not contain FileUrl" in detail:
+        return "onlyoffice no-fileurl error"
+    return "onlyoffice error"
 
 
 def _preview_job_priority(path) -> int:
@@ -624,9 +636,18 @@ async def preview(req, path):
     except PreviewTimeoutError:
         logger.warning("Preview worker timeout for %s", filepath)
         return empty(503)
-    except OnlyOfficeUnavailableError:
+    except httpx.HTTPStatusError as e:
         req.ctx._log_extra = "onlyoffice N/A"
         return empty(503)
+    except httpx.RequestError:
+        req.ctx._log_extra = "onlyoffice N/A"
+        return empty(503)
+    except RuntimeError as e:
+        detail = str(e)
+        if detail.startswith("OnlyOffice"):
+            req.ctx._log_extra = _onlyoffice_error_short_text(detail)
+            return empty(503)
+        raise
     except PreviewError as e:
         if e.backend:
             req.ctx._log_extra = e.backend
@@ -637,6 +658,9 @@ async def preview(req, path):
                 detail = captured.splitlines()[0]
         logger.error("%s preview: %s", filepath, detail)
         return empty(422)
+    except asyncio.CancelledError:
+        req.ctx._log_extra = "preview cancelled"
+        return empty(503)
     except Exception:
         logger.exception("Unhandled preview error for %s", filepath)
         return empty(500)
@@ -677,7 +701,9 @@ def dispatch(path, quality, maxsize, maxzoom, data=None):
     try:
         if data:
             backend = "pyvips"
-            return process_image_buffer(data, quality=quality, maxsize=maxsize, maxzoom=maxzoom)
+            return process_image_buffer(
+                data, quality=quality, maxsize=maxsize, maxzoom=maxzoom
+            )
         suffix = path.suffix.lower()
         if suffix in DOC_PREVIEW_SUFFIXES:
             backend = "pdf"
@@ -839,33 +865,6 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     )
     ret = img.write_to_buffer(".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True)
     backend = "pdf+pyvips"
-    t_save_end = perf_counter()
-
-    return ret, PreviewResponse(
-        ok=True,
-        mime="image/avif",
-        backend=backend,
-        timings=[
-            round((t_load_end - t_load_start) * 1000, 1),
-            round((t_save_end - t_save_start) * 1000, 1),
-        ],
-    )
-
-
-def process_office(path, *, quality, maxsize, maxzoom):
-    t_load_start = perf_counter()
-    if not onlyoffice.is_available():
-        raise RuntimeError("OnlyOffice Document Server is not reachable")
-    png_bytes = onlyoffice.convert_to_png(path)
-    t_load_end = perf_counter()
-
-    t_save_start = perf_counter()
-    img = pyvips.Image.new_from_buffer(png_bytes, "")
-    scale = min(maxsize / img.width, maxsize / img.height, 1.0)
-    if scale < 1.0:
-        img = img.resize(scale)
-    ret = img.write_to_buffer(".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True)
-    backend = "onlyoffice+pyvips"
     t_save_end = perf_counter()
 
     return ret, PreviewResponse(

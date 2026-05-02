@@ -1,0 +1,28 @@
+services:
+  onlyoffice:
+    build:
+      context: ./docker/onlyoffice-converter-patch
+      args:
+        ONLYOFFICE_VERSION: "9.3.1"
+    container_name: onlyoffice
+    ports:
+      - "8080:80"
+    environment:
+      # Number of converter workers (default 8).
+      # Set to your CPU count or slightly below.
+      - WORKERS
+      # JWT secret shared with Cista.
+      # OnlyOffice reads it as JWT_SECRET; Cista reads it as ONLYOFFICE_JWT_SECRET.
+      # We use ONLYOFFICE_JWT_SECRET as the canonical name so you only set one variable.
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
+      - JWT_ENABLED=true
+      - JWT_HEADER=Authorization
+    volumes:
+      # Persist fonts and generated caches across restarts
+      - onlyoffice-data:/var/www/onlyoffice/Data
+      - onlyoffice-lib:/var/lib/onlyoffice
+    restart: unless-stopped
+
+volumes:
+  onlyoffice-data:
+  onlyoffice-lib:

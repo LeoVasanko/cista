@@ -134,12 +134,24 @@ def _run_loop() -> None:
 def main() -> None:
     # Configure all log output to stderr before any imports that may emit logs.
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+    try:
+        from cista import config
+
+        config.load_config()
+        logging.warning(
+            "preview-worker config=%s master_secret=%s",
+            config.conffile,
+            config.config.secret,
+        )
+    except Exception:
+        logging.exception("preview-worker failed to load config at startup")
     if len(sys.argv) > 1:
         _run_once()
         return
     # Eagerly import heavy modules before signalling readiness so the parent
     # does not hand us a request while we are still initialising.
     from cista.preview import dispatch  # noqa: F401
+
     sys.stdout.buffer.write(b"\x01")
     sys.stdout.buffer.flush()
     _run_loop()

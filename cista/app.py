@@ -16,7 +16,17 @@ from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
 from zstandard import ZstdCompressor
 
-from cista import auth, config, fileserver, onlyoffice, preview, session, sharefs, sso, watching
+from cista import (
+    auth,
+    config,
+    fileserver,
+    onlyoffice,
+    preview,
+    session,
+    sharefs,
+    sso,
+    watching,
+)
 from cista.api import bp
 from cista.preview import shutdown_preview_workers, start_preview_workers
 from cista.sanic_logging import (
@@ -124,6 +134,11 @@ async def main_start(app):
     app.ctx.zipexec = ThreadPoolExecutor(max_workers=32, thread_name_prefix="cista-zip")
     await start_preview_workers()
     watching.start(app)
+
+
+@app.after_server_start
+async def main_after_start(app):
+    onlyoffice.log_reachable_info()
 
 
 # Sanic sometimes fails to execute after_server_stop, so we do it before instead (potentially interrupting handlers)

@@ -61,10 +61,10 @@ config: Config
 conffile: Path
 
 
-def init_confdir() -> None:
+def init_confdir(confdir: Path | str | None = None) -> None:
     global conffile
-    if p := os.environ.get("CISTA_HOME"):
-        home = Path(p)
+    if confdir is not None:
+        home = Path(confdir).expanduser()
     else:
         xdg = os.environ.get("XDG_CONFIG_HOME")
         home = (

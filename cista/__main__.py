@@ -5,7 +5,7 @@ from pathlib import Path
 from docopt import docopt
 
 import cista
-from cista import app, config, droppy, serve, server80
+from cista import app, config, droppy, onlyoffice, serve, server80
 from cista.util import pwgen
 
 del app, server80.app  # Only import needed, for Sanic multiprocessing
@@ -53,40 +53,39 @@ def create_startup_box(
 
 banner = create_banner()
 
-doc = """\
+_default_confdir = (
+    (Path(os.environ["XDG_CONFIG_HOME"]) / "cista").as_posix()
+    if os.environ.get("XDG_CONFIG_HOME")
+    else (Path.home() / ".config/cista").as_posix()
+)
+
+doc = f"""\
 Usage:
   cista [-c <confdir>] [-l <host>] [--import-droppy] [--dev] [<path>]
   cista [-c <confdir>] --user <name> [--privileged] [--password]
+  cista [-c <confdir>] --oosetup
   cista --version
 
 Options:
-  -c CONFDIR        Custom config directory
-  -l, --listen LISTEN-ADDR
-                    Listen on
-                       :8989 (localhost port, plain http)
-                       <addr>:3000 (bind another address, port)
-                       /path/to/unix.sock (unix socket)
-                       example.com (run on 80 and 443 with LetsEncrypt)
-  --import-droppy   Import Droppy config from ~/.droppy/config
-  --dev             Developer mode (reloads, friendlier crashes, more logs)
-
-Listen address and path are preserved in config,
-and only config dir and dev mode need to be specified on subsequent runs.
-
-User management:
-  --user NAME       Create or modify user
-  --privileged      Give the user full admin rights
-  --password        Reset password
+  -c CONFDIR          Config directory [{_default_confdir}]
+  -l, --listen ADDR   Listen on address (port, :port, /socket or domain for https)
+  --import-droppy     Import Droppy config from ~/.droppy/config
+  --dev               Developer mode (reloads, friendlier crashes, more logs)
+  --user NAME         Create or modify a user account (when server is not running)
+    --privileged        Grant admin rights
+    --password          Reset password
+  --oosetup           Build and run OnlyOffice in Docker for document previews
 
 Environment:
-  PASKIA_BACKEND_URL   Paskia single sign-on (e.g. http://localhost:4401)
-                       https://git.zi.fi/leovasanko/paskia
+  PASKIA_BACKEND_URL  Paskia single sign-on (e.g. http://localhost:4401)
+                        https://git.zi.fi/leovasanko/paskia
+    ONLYOFFICE_CISTA_URL, ONLYOFFICE_JWT_SECRET, ONLYOFFICE_CALLBACK_HOST (if needed)
 """
 
 first_time_help = """\
 No config file found! Get started with:
-  cista --user yourname --privileged     # If you want user accounts
-  cista -l :8989 /path/to/files          # Run the server on localhost:8989
+  cista --user yourname --privileged   # If you want user accounts
+  cista -l :8989 /path/to/files        # Run the server on localhost:8989
 
 See cista --help for other options!
 """
@@ -115,6 +114,8 @@ def _main():
     args = docopt(doc)
     if args["--user"]:
         return _user(args)
+    if args["--oosetup"]:
+        return onlyoffice.setup_docker(_resolve_confdir(args))
     listen = args["--listen"]
     # Validate arguments first
     if args["<path>"]:
@@ -171,17 +172,22 @@ def _main():
     return 0
 
 
-def _confdir(args):
+def _resolve_confdir(args):
+    confdir = None
     if args["-c"]:
         # Custom config directory
         confdir = Path(args["-c"]).resolve()
         if confdir.exists() and not confdir.is_dir():
-            if confdir.name != config.conffile.name:
+            if confdir.name != "db.toml":
                 raise ValueError("Config path is not a directory")
             # Accidentally pointed to the db.toml, use parent
             confdir = confdir.parent
-        os.environ["CISTA_HOME"] = confdir.as_posix()
-    config.init_confdir()  # Uses environ if available
+    return confdir
+
+
+def _confdir(args):
+    confdir = _resolve_confdir(args)
+    config.init_confdir(confdir)
 
 
 def _user(args):

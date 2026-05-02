@@ -17,6 +17,7 @@ import socket
 import socketserver
 import subprocess
 import threading
+import urllib.error
 import urllib.request
 from functools import partial
 from http.server import SimpleHTTPRequestHandler
@@ -28,6 +29,8 @@ import httpx
 import jwt
 from sanic.log import logger
 
+from cista import config
+
 # ---------------------------------------------------------------------------
 # Configuration helpers
 # ---------------------------------------------------------------------------
@@ -37,11 +40,14 @@ _httpx_client: httpx.AsyncClient | None = None
 
 
 def _get_onlyoffice_url() -> str:
-    return os.environ.get("ONLYOFFICE_URL", "http://localhost:8988")
+    return os.environ.get("ONLYOFFICE_CISTA_URL", "http://localhost:8988")
 
 
-def _get_jwt_secret() -> str | None:
-    return os.environ.get("ONLYOFFICE_JWT_SECRET") or None
+def _get_jwt_secret() -> str:
+    return (
+        os.environ.get("ONLYOFFICE_JWT_SECRET")
+        or config.derived_secret("onlyoffice", size=16).hex()
+    )
 
 
 def _get_callback_host() -> str:
@@ -93,14 +99,85 @@ async def close_oo_client() -> None:
 # ---------------------------------------------------------------------------
 
 
-def is_available() -> bool:
-    """Return True if the configured OnlyOffice Document Server is reachable."""
+def _probe_status() -> tuple[bool, bool, str | None]:
+    """Return (ok, responded, detail) for a lightweight reachability probe."""
     url = _get_onlyoffice_url().rstrip("/") + "/ConvertService.ashx"
     try:
-        with urllib.request.urlopen(url, timeout=3) as resp:  # noqa: S310
-            return resp.status in (200, 405)  # 405 Method Not Allowed is fine, means endpoint exists
+        with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310
+            status = resp.status
+    except urllib.error.HTTPError as e:
+        status = e.code
     except Exception:
-        return False
+        return False, False, None
+
+    if status in (200, 405):
+        return True, True, None
+    if status >= 500:
+        return False, True, f"HTTP {status}"
+    return False, True, f"HTTP {status}"
+
+
+def log_reachable_info() -> None:
+    """Log info on success, warning on responded probe errors, silent on no-response."""
+    ok, responded, detail = _probe_status()
+    if ok:
+        logger.info("Using OnlyOffice document server at %s", _get_onlyoffice_url())
+    elif responded:
+        suffix = f": {detail}" if detail else ""
+        logger.warning("OnlyOffice probe failed%s", suffix)
+
+
+def setup_docker(confdir: Path | None = None) -> int:
+    """Build and run the patched OnlyOffice Docker image."""
+    config.init_confdir(confdir)
+    if config.conffile.exists():
+        config.load_config()
+    else:
+        config.update_config(
+            {
+                "listen": ":8989",
+                "path": Path.home() / "Downloads",
+                "public": False,
+            }
+        )
+
+    secret = config.derived_secret("onlyoffice", size=16).hex()
+    docker_dir = Path(__file__).parent / "docker"
+    if not docker_dir.is_dir():
+        raise FileNotFoundError(
+            f"Docker files not found at {docker_dir}. Is the package installed correctly?"
+        )
+
+    logger.info("Building OnlyOffice image")
+    build_cmd = ["docker", "build", "-t", "onlyoffice-cista", str(docker_dir)]
+    logger.info("%s", " ".join(build_cmd))
+    result = subprocess.run(build_cmd)
+    if result.returncode != 0:
+        raise RuntimeError("Failed to build OnlyOffice image")
+
+    logger.info("Starting OnlyOffice container")
+    run_cmd = [
+        "docker",
+        "run",
+        "-d",
+        "-p",
+        "8988:80",
+        "-e",
+        f"JWT_SECRET={secret}",
+        "-e",
+        "WORKERS=8",
+        "--name",
+        "onlyoffice-cista",
+        "--restart",
+        "unless-stopped",
+        "onlyoffice-cista",
+    ]
+    logger.info("%s", " ".join(run_cmd))
+    result = subprocess.run(run_cmd)
+    if result.returncode != 0:
+        raise RuntimeError("Failed to start OnlyOffice container")
+    logger.info("OnlyOffice is running on http://localhost:8988")
+    return 0
 
 
 async def is_available_async(timeout: float = 2.0) -> bool:
@@ -173,69 +250,6 @@ def _build_jwt_token(payload: dict) -> str | None:
     if not secret:
         return None
     return jwt.encode(payload, secret, algorithm="HS256")
-
-
-def convert_to_png(file_path: Path, timeout: float = 5.0) -> bytes:
-    """Convert *file_path* to PNG using OnlyOffice Document Server.
-
-    Returns the PNG bytes. Raises RuntimeError on failure.
-    """
-    oo_url = _get_onlyoffice_url().rstrip("/")
-    convert_url = f"{oo_url}/ConvertService.ashx"
-
-    # Start temporary HTTP server so OnlyOffice can fetch the file
-    doc_url, httpd = _serve_file_temporarily(file_path)
-    try:
-        suffix = file_path.suffix.lstrip(".").lower()
-        payload = {
-            "async": False,
-            "filetype": suffix,
-            "key": f"cista_{file_path.stat().st_mtime_ns}",
-            "outputtype": "png",
-            "title": file_path.name,
-            "url": doc_url,
-        }
-
-        headers = {"Content-Type": "application/json"}
-        token = _build_jwt_token(payload)
-        if token:
-            # Conversion API expects JWT in request body when token checks are enabled.
-            payload["token"] = token
-            headers["Authorization"] = token
-
-        req = urllib.request.Request(  # noqa: S310
-            convert_url,
-            data=json.dumps(payload).encode(),
-            headers=headers,
-            method="POST",
-        )
-
-        t_start = perf_counter()
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
-            body = resp.read()
-        t_end = perf_counter()
-
-        # Parse XML response
-        text = body.decode("utf-8", errors="replace")
-        if "<Error>" in text:
-            code = "unknown"
-            if "<Error>" in text and "</Error>" in text:
-                code = text.split("<Error>")[1].split("</Error>")[0]
-            raise RuntimeError(f"OnlyOffice conversion error: {code}")
-
-        if "<FileUrl>" not in text:
-            raise RuntimeError("OnlyOffice response did not contain FileUrl")
-
-        file_url = text.split("<FileUrl>")[1].split("</FileUrl>")[0]
-        file_url = file_url.replace("&amp;", "&")
-
-        logger.debug("OnlyOffice converted in %.2fs: %s", t_end - t_start, file_url)
-
-        # Download converted PNG
-        with urllib.request.urlopen(file_url, timeout=timeout) as png_resp:  # noqa: S310
-            return png_resp.read()
-    finally:
-        httpd.shutdown()
 
 
 async def convert_to_png_async(file_path: Path, timeout: float = 5.0) -> bytes:

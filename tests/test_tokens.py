@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -27,8 +26,7 @@ def _persist_config():
 
 @pytest.fixture
 def setup_storage(tmp_path: Path):
-    os.environ["CISTA_HOME"] = str(tmp_path)
-    config.init_confdir()
+    config.init_confdir(tmp_path)
     user = config.User()
     auth.set_password(user, "secret")
     admin = config.User(privileged=True)
