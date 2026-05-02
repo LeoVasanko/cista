@@ -17,6 +17,7 @@ import gc
 import io
 import logging
 import mimetypes
+import shlex
 import struct
 import subprocess
 import sys
@@ -217,7 +218,18 @@ def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
             cmd.insert(4, "-s")
             cmd.insert(5, f"{new_w}x{new_h}")
     try:
-        subprocess.run(cmd, capture_output=True, check=True, shell=False)  # noqa: S603
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, shell=False)  # noqa: S603
+        except subprocess.CalledProcessError as e:
+            shell_cmd = shlex.join(cmd)
+            stderr = (e.stderr or b"").decode(errors="replace").strip()
+            if stderr:
+                raise RuntimeError(
+                    f"ffmpeg failed (exit {e.returncode}): {shell_cmd}\n{stderr}"
+                ) from e
+            raise RuntimeError(
+                f"ffmpeg failed (exit {e.returncode}): {shell_cmd}"
+            ) from e
         with Path(tmp_path).open("rb") as f:
             return f.read()
     finally:
