@@ -56,8 +56,8 @@ configure_main_logging()
 
 @app.on_request
 async def use_session(req):
-    req.ctx._log_start = time.perf_counter()
-    req.ctx._auth_flow = ["session: start"]
+    req.ctx.log_start = time.perf_counter()
+    req.ctx.auth_flow = ["session: start"]
     auth.hydrate_request_auth_context(req, source="app.on_request")
     # CSRF protection
     if req.method == "GET" and req.headers.upgrade != "websocket":
@@ -74,7 +74,7 @@ async def log_access(req, res):
     """Log HTTP access in a clean single-line format."""
     if req.headers.get("upgrade", "").lower() == "websocket":
         return res
-    start = getattr(req.ctx, "_log_start", None)
+    start = getattr(req.ctx, "log_start", None)
     duration_ms = (time.perf_counter() - start) * 1000 if start is not None else 0.0
     client = req.client_ip or "-"
     host = req.host or "-"
@@ -84,7 +84,7 @@ async def log_access(req, res):
         if isinstance(qs, bytes):
             qs = qs.decode(errors="replace")
         path = f"{path}?{qs}"
-    extra = getattr(req.ctx, "_log_extra", None)
+    extra = getattr(req.ctx, "log_extra", None)
     line = format_access_log(
         client, res.status, req.method, host, path, duration_ms, extra=extra
     )
@@ -103,7 +103,7 @@ async def forward_sso_cookies(req, res):
 @app.on_response
 async def persist_auth_session(req, res):
     """Persist a session cookie after successful Authorization-based auth."""
-    username = getattr(req.ctx, "_create_session_username", None)
+    username = getattr(req.ctx, "create_session_username", None)
     if not username or res.status >= 400:
         return
     existing = getattr(req.ctx, "session", None)

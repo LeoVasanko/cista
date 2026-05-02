@@ -414,7 +414,7 @@ def process_video(path, *, maxsize, quality):
             },
         )
         if not isinstance(ostream, av.VideoStream):
-            raise RuntimeError("failed to initialize AV1 video stream")
+            raise TypeError("failed to initialize AV1 video stream")
         ostream.width = frame.width
         ostream.height = frame.height
         ostream.pix_fmt = frame.format.name

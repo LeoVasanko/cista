@@ -3,7 +3,6 @@ import hashlib
 import hmac
 import struct
 from pathlib import Path
-from time import time
 from uuid import uuid4
 
 import pytest
@@ -93,10 +92,7 @@ def _ntlm_type3(
 
 def _session_cookie_header(username: str) -> dict[str, str]:
     token = "test-" + username
-    session._sessions[token] = {
-        "exp": int(time()) + session.max_age,
-        "username": username,
-    }
+    session.put(token, username)
     return {"Cookie": f"cista={token}"}
 
 

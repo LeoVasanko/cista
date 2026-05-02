@@ -36,7 +36,7 @@ def get(request):
 def create(request, res, username, **kwargs):
     _purge_expired()
     token = _token()
-    _sessions[token] = {"exp": int(time()) + max_age, "username": username, **kwargs}
+    put(token, username, **kwargs)
     secure = request.scheme == "https"
     res.cookies.add_cookie(
         SESSION_COOKIE_NAME,
@@ -49,8 +49,15 @@ def create(request, res, username, **kwargs):
 
 
 def delete(request, res):
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if token is not None:
+        _sessions.pop(token, None)
     secure = request.scheme == "https"
     res.cookies.delete_cookie(SESSION_COOKIE_NAME, host_prefix=secure)
+
+
+def put(token: str, username: str, **kwargs) -> None:
+    _sessions[token] = {"exp": int(time()) + max_age, "username": username, **kwargs}
 
 
 def flash(res, message: str | None):

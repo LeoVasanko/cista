@@ -126,12 +126,10 @@ async def update_public(request):
     await auth.verify(request, privileged=True)
     try:
         public = request.json["public"]
-        if not isinstance(public, bool):
-            raise ValueError("public must be a boolean")
     except KeyError:
         raise BadRequest("Missing public field") from None
-    except ValueError as e:
-        raise BadRequest(str(e)) from None
+    if not isinstance(public, bool):
+        raise BadRequest("public must be a boolean")
     config.update_config({"public": public})
     return json({"message": "Public access setting updated", "public": public})
 
@@ -141,12 +139,10 @@ async def update_name(request):
     await auth.verify(request, privileged=True)
     try:
         name = request.json["name"]
-        if not isinstance(name, str):
-            raise ValueError("name must be a string")
     except KeyError:
         raise BadRequest("Missing name field") from None
-    except ValueError as e:
-        raise BadRequest(str(e)) from None
+    if not isinstance(name, str):
+        raise BadRequest("name must be a string")
     config.update_config({"name": name})
     # Return the effective name (fallback to path.name if empty)
     effective_name = name or config.config.path.name

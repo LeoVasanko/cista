@@ -615,20 +615,20 @@ async def preview(req, path):
         logger.warning("Preview worker timeout for %s", filepath)
         return empty(503)
     except httpx.HTTPStatusError:
-        req.ctx._log_extra = "onlyoffice N/A"
+        req.ctx.log_extra = "onlyoffice N/A"
         return empty(503)
     except httpx.RequestError:
-        req.ctx._log_extra = "onlyoffice N/A"
+        req.ctx.log_extra = "onlyoffice N/A"
         return empty(503)
     except RuntimeError as e:
         detail = str(e)
         if detail.startswith("OnlyOffice"):
-            req.ctx._log_extra = _onlyoffice_error_short_text(detail)
+            req.ctx.log_extra = _onlyoffice_error_short_text(detail)
             return empty(503)
         raise
     except PreviewError as e:
         if e.backend:
-            req.ctx._log_extra = e.backend
+            req.ctx.log_extra = e.backend
         detail = str(e)
         if detail == "preview worker error" and e.stderr:
             captured = e.stderr.strip()
@@ -637,7 +637,7 @@ async def preview(req, path):
         logger.error("%s preview: %s", filepath, detail)
         return empty(422)
     except asyncio.CancelledError:
-        req.ctx._log_extra = "preview cancelled"
+        req.ctx.log_extra = "preview cancelled"
         return empty(503)
     except Exception:
         logger.exception("Unhandled preview error for %s", filepath)
@@ -647,9 +647,9 @@ async def preview(req, path):
             timing_detail = "/".join(
                 str(round(value)) for value in preview_resp.timings
             )
-            req.ctx._log_extra = f"{preview_resp.backend} {timing_detail} ➛"
+            req.ctx.log_extra = f"{preview_resp.backend} {timing_detail} ➛"
         else:
-            req.ctx._log_extra = preview_resp.backend
+            req.ctx.log_extra = preview_resp.backend
     if not img:
         # Preview generation failed, redirect to the file itself
         return redirect(f"/files/{path}", status=303)

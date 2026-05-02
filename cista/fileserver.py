@@ -76,7 +76,7 @@ async def upload_file_chunk(request, name):
     size_after = upload_info.get("size_after")
     if size_before is not None and size_after is not None and size_before != size_after:
         extras.append("resized")
-    request.ctx._log_extra = " ".join(extras) if extras else None
+    request.ctx.log_extra = " ".join(extras) if extras else None
     real_rel = PurePosixPath(path.relative_to(config.config.path.resolve()).as_posix())
     watching.notify_change(real_rel, *real_rel.parents)
     return json(
@@ -197,38 +197,18 @@ async def copy_or_move(request, name=""):
 
     def _apply():
         for op_name, op_keys in (("cp", cp_keys), ("mv", mv_keys)):
-            op_multi = len(op_keys) > 1
             for key in op_keys:
                 try:
                     src_rel = key_paths[key]
                     src_abs = _resolve_from_relpath(src_rel, request=request)
 
-                    if op_multi:
-                        if not dst_is_dir:
-                            raise BadRequest(
-                                "Destination must be an existing directory for multiple keys"
-                            )
-                        dst_item_rel = (
-                            dst_rel / src_rel.name
-                            if dst_rel.parts
-                            else PurePosixPath(src_rel.name)
-                        )
-                    elif dst_is_dir:
+                    if dst_is_dir:
                         dst_item_rel = (
                             dst_rel / src_rel.name
                             if dst_rel.parts
                             else PurePosixPath(src_rel.name)
                         )
                     else:
-                        if not dst_rel.parts:
-                            raise BadRequest("Destination file path is required")
-                        parent_abs = dst_abs.parent
-                        if not parent_abs.is_dir():
-                            raise BadRequest("Destination parent folder does not exist")
-                        if src_abs.is_dir() and dst_exists and dst_abs.is_file():
-                            raise BadRequest(
-                                "Cannot move/copy a directory to an existing file"
-                            )
                         dst_item_rel = dst_rel
 
                     dst_item_abs = _resolve_from_relpath(dst_item_rel, request=request)
@@ -362,7 +342,7 @@ async def dav_copy(request, name=""):
     dst_rel, dst_abs = _parse_webdav_destination(dest_header, request=request)
     if auth.request_share_token(request) is not None and not dst_rel.parts:
         raise BadRequest("Destination cannot be virtual root")
-    request.ctx._log_extra = f"→ {dst_rel}"
+    request.ctx.log_extra = f"→ {dst_rel}"
     if not src_abs.exists():
         raise NotFound(f"Source not found: {name}")
     if src_abs == dst_abs:
@@ -401,7 +381,7 @@ async def dav_move(request, name=""):
     dst_rel, dst_abs = _parse_webdav_destination(dest_header, request=request)
     if auth.request_share_token(request) is not None and not dst_rel.parts:
         raise BadRequest("Destination cannot be virtual root")
-    request.ctx._log_extra = f"→ {dst_rel}"
+    request.ctx.log_extra = f"→ {dst_rel}"
     if not src_abs.exists():
         raise NotFound(f"Source not found: {name}")
     if src_abs == dst_abs:

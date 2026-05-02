@@ -193,13 +193,13 @@ def _set_auth_failure_log(request, auth_flow: list[str]) -> None:
         value = request.headers.get(header)
         if value:
             parts.append(f"{label}={value}")
-    request.ctx._log_extra = " | ".join(parts)
+    request.ctx.log_extra = " | ".join(parts)
 
 
 def hydrate_request_auth_context(request, *, source: str) -> None:
-    auth_flow = getattr(request.ctx, "_auth_flow", None)
+    auth_flow = getattr(request.ctx, "auth_flow", None)
     if auth_flow is None:
-        auth_flow = request.ctx._auth_flow = []
+        auth_flow = request.ctx.auth_flow = []
 
     if hasattr(request.ctx, "session"):
         # Already hydrated by an earlier caller (e.g., use_session middleware)
@@ -832,7 +832,7 @@ async def _ntlm_auth_login(request, *, privileged=False):
                         request.ctx.user = user
                         request.ctx.auth_token_id = tid
                         request.ctx.auth_token = token
-                        request.ctx._create_session_username = token.username
+                        request.ctx.create_session_username = token.username
                         logger.debug(
                             "NTLM auth success for local user %s (token=%s...)",
                             token.username,
@@ -881,7 +881,7 @@ async def verify(request, *, privileged=False):
     scheme = auth_header.split()[0].lower() if has_auth_header else None
 
     # Concise auth flow for diagnostics (populated by use_session + verify)
-    auth_flow = list(getattr(request.ctx, "_auth_flow", ["session:skipped"]))
+    auth_flow = list(getattr(request.ctx, "auth_flow", ["session:skipped"]))
     tried: list[str] = []
 
     sso = _get_sso()
@@ -954,10 +954,10 @@ async def verify(request, *, privileged=False):
                 user = None
             else:
                 if user is not None:
-                    if getattr(request.ctx, "_create_session_username", None) is None:
+                    if getattr(request.ctx, "create_session_username", None) is None:
                         username = getattr(request.ctx, "username", None)
                         if username:
-                            request.ctx._create_session_username = username
+                            request.ctx.create_session_username = username
                     return
         # Auth header present but invalid → try session fallback
         tried.append("session")
@@ -1095,13 +1095,16 @@ async def login_post(request):
         else:
             username = request.form["username"][0]
             password = request.form["password"][0]
-        if not username or not password:
-            raise KeyError
     except KeyError:
         raise BadRequest(
             "Missing username or password",
             context={"redirect": "/login"},
         ) from None
+    if not username or not password:
+        raise BadRequest(
+            "Missing username or password",
+            context={"redirect": "/login"},
+        )
     try:
         user = login(username, password)
     except ValueError as e:
@@ -1140,12 +1143,12 @@ async def change_password(request):
             username = request.form["username"][0]
             pwchange = request.form["passwordChange"][0]
             password = request.form["password"][0]
-        if not username or not password:
-            raise KeyError
     except KeyError:
         raise BadRequest(
             "Missing username, passwordChange or password",
         ) from None
+    if not username or not password:
+        raise BadRequest("Missing username, passwordChange or password")
     try:
         user = login(username, password)
         set_password(user, pwchange)
@@ -1188,10 +1191,10 @@ async def create_user(request):
             username = request.form["username"][0]
             password = request.form.get("password", [None])[0]
             privileged = request.form.get("privileged", ["false"])[0].lower() == "true"
-        if not username or not username.isidentifier():
-            raise ValueError("Invalid username")
-    except (KeyError, ValueError) as e:
-        raise BadRequest(str(e)) from e
+    except KeyError as e:
+        raise BadRequest("Missing fields") from e
+    if not username or not username.isidentifier():
+        raise BadRequest("Invalid username")
     if username in config.config.users:
         raise BadRequest("User already exists")
     if not password:

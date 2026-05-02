@@ -23,7 +23,7 @@ class AsyncLink:
     @property
     def to_sync(self):
         """Yield SyncRequests from async caller when called from worker thread."""
-        while (req := self._await(self._get())) is not None:
+        while (req := self.await_sync(self._get())) is not None:
             yield SyncRequest(self, req)
 
     async def _get(self):
@@ -33,7 +33,7 @@ class AsyncLink:
             self.queue.task_done()
             return ret
 
-    def _await(self, coro):
+    def await_sync(self, coro):
         """Run coroutine in main thread and return result; called from worker."""
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result()
 
@@ -87,9 +87,9 @@ class SyncRequest:
     def set_result(self, value):
         """Set result value; mark as done."""
         self.done = True
-        self.alink._await(set_result(self.future, value))
+        self.alink.await_sync(set_result(self.future, value))
 
     def set_exception(self, exc):
         """Set exception; mark as done."""
         self.done = True
-        self.alink._await(set_result(self.future, exception=exc))
+        self.alink.await_sync(set_result(self.future, exception=exc))

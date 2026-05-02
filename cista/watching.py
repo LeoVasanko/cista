@@ -49,6 +49,10 @@ pubsub = {}
 sortkey = natsort_keygen(alg=ns.LOCALE)
 
 
+class FormatUpdateLoopError(RuntimeError):
+    pass
+
+
 class State:
     def __init__(self):
         self.lock = threading.RLock()
@@ -301,7 +305,7 @@ def format_update(old, new):
             logger.error(
                 f"format_update potential infinite loop! iteration={iteration_count}, oidx={oidx}, nidx={nidx}"
             )
-            raise Exception(
+            raise FormatUpdateLoopError(
                 f"format_update infinite loop detected at iteration {iteration_count}"
             )
 
@@ -656,16 +660,7 @@ def watcher(loop):
 
     while not stop_event.is_set():
         if use_inotify:
-            try:
-                inotify_tree = inotify.adapters.InotifyTree(rootpath.as_posix())
-            except OSError as e:
-                inotify_tree = None
-                use_inotify = False
-                logger.warning(
-                    "Inotify watcher unavailable for %s; falling back to polling: %r",
-                    rootpath,
-                    e,
-                )
+            inotify_tree = inotify.adapters.InotifyTree(rootpath.as_posix())
 
         # Initialize the tree from filesystem
         update_root(loop)

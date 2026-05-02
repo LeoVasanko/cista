@@ -158,11 +158,7 @@ ignore = [
     "PLR0915", # legacy complexity; keep other correctness rules enabled
     "PLR2004", # legacy comparisons use inline constants
     "PLW0603", # module-level shared state exists in server runtime code
-    "SLF001", # cohesive modules occasionally need private-member access
-    "TRY002", # exception-class strictness too noisy on legacy handlers
     "TRY003", # exception-message strictness too noisy on legacy handlers
-    "TRY004", # type-check strictness too noisy on legacy handlers
-    "TRY301", # stylistic raise-in-try preference
 ]
 isort.known-first-party = ["cista"]
 per-file-ignores."tests/*" = ["S", "ANN", "D", "INP", "PLR2004"]

@@ -4,20 +4,9 @@ from pathlib import Path
 
 from fastapi_vue.hostutil import parse_endpoint
 from sanic import Sanic
-from sanic.worker.loader import AppLoader
 
 from cista import config, server80
 from cista.app import app
-
-
-def load_app() -> Sanic:
-    """Load the primary app in spawned worker processes.
-
-    Sanic's default multiprocess fallback looks up apps from the in-memory
-    registry, but that registry starts empty under the `spawn` start method.
-    Importing this module rebuilds the registry before returning the app.
-    """
-    return app
 
 
 def run(*, dev=False):
@@ -40,7 +29,7 @@ def run(*, dev=False):
         access_log=False,
     )  # type: ignore[call-arg]
     if dev:
-        Sanic.serve(app_loader=AppLoader(factory=load_app))
+        Sanic.serve()
     else:
         Sanic.serve_single()
 
