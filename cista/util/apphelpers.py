@@ -2,6 +2,7 @@ import time
 from functools import wraps
 
 import msgspec
+import websockets.exceptions
 from sanic import errorpages
 from sanic.exceptions import SanicException
 from sanic.log import logger
@@ -67,6 +68,12 @@ def websocket_wrapper(handler):
         try:
             await auth.verify(request)
             await handler(request, ws, *args, **kwargs)
+        except (
+            websockets.exceptions.ConnectionClosedOK,
+            websockets.exceptions.ConnectionClosedError,
+        ):
+            # Normal websocket closure - already logged in access log
+            pass
         except Exception as e:
             context, code, message = {}, 500, str(e) or "Internal Server Error"
             if isinstance(e, SanicException):
