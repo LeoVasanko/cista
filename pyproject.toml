@@ -130,7 +130,6 @@ ignore = [
     "ANN202", # legacy codebase: no full runtime annotation coverage yet
     "ANN204", # legacy codebase: no full runtime annotation coverage yet
     "ANN205", # legacy codebase: no full runtime annotation coverage yet
-    "ARG001", # framework and callback signatures commonly require unused args
     "BLE001", # broad catch remains in boundary/proxy/error-handling paths
     "C901", # legacy complexity; keep other correctness rules enabled
     "D100", # legacy docs not yet standardized
@@ -161,7 +160,7 @@ ignore = [
     "TRY003", # exception-message strictness too noisy on legacy handlers
 ]
 isort.known-first-party = ["cista"]
-per-file-ignores."tests/*" = ["S", "ANN", "D", "INP", "PLR2004"]
+per-file-ignores."tests/*" = ["S", "ANN", "D", "INP", "PLR2004", "ARG001"]
 per-file-ignores."scripts/*" = ["T20"]
 
 [dependency-groups]

@@ -268,6 +268,7 @@ def _log_webdav_user_agent_once(request, user_agent: str):
 
 
 def _build_ua_auth_headers(request, *, include_hint=False) -> dict[str, str]:
+    _ = include_hint
     user_agent = request.headers.get("user-agent", "")
     _log_webdav_user_agent_once(request, user_agent)
     if _is_windows_auth_client(user_agent):
@@ -1081,6 +1082,7 @@ async def login_page(request):
 
 def _login_success_page(username: str) -> str:
     """Minimal page that signals auth-success to parent iframe."""
+    _ = username
     return str(
         Document().script_("window.parent.postMessage({type:'auth-success'},'*')")
     )

@@ -349,6 +349,7 @@ bp = Blueprint("sso", url_prefix="/auth")
 @bp.websocket("/ws/<path:path>")
 async def auth_websocket_proxy(request, ws, path=""):
     """Proxy WebSocket connections to the auth backend."""
+    _ = path
     await proxy_auth_websocket(request, ws)
 
 
@@ -363,6 +364,7 @@ async def auth_websocket_proxy_root(request, ws):
 )
 async def auth_proxy(request, path=""):
     """Proxy all auth requests to the auth backend."""
+    _ = path
     return await proxy_auth_request(request)
 
 

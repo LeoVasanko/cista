@@ -266,6 +266,7 @@ def process_image_pyvips(path, *, maxsize, quality):
 
 
 def process_image_buffer(data: bytes, *, quality, maxsize, maxzoom):
+    _ = maxzoom
     t_start = perf_counter()
     img = pyvips.Image.new_from_buffer(data, "")
     img = img.autorot()

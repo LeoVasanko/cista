@@ -31,6 +31,7 @@ if sys.platform == "win32":
 
     def get_allocated_size(path: Path, st: stat_result) -> int:
         """Get actual disk allocation on Windows using GetCompressedFileSizeW."""
+        _ = st
         high = wintypes.DWORD()
         low = GetCompressedFileSizeW(str(path), ctypes.byref(high))
         if low == INVALID_FILE_SIZE and ctypes.get_last_error() != 0:
@@ -41,6 +42,7 @@ else:
 
     def get_allocated_size(path: Path, st: stat_result) -> int:
         """Get actual disk allocation on Unix using st_blocks."""
+        _ = path
         # st_blocks is in 512-byte units
         return st.st_blocks * 512
 
@@ -249,6 +251,7 @@ def update_root(loop):
 def update_path(rootmod: list[FileEntry], relpath: PurePosixPath, loop):
     """Called on FS updates, check the filesystem and broadcast any changes."""
     new = walk(relpath)
+    _ = loop
     obegin, old = treeget(rootmod, relpath)
 
     if old == new:

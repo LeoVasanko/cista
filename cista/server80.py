@@ -6,6 +6,7 @@ app = Sanic("server80")
 # Send all HTTP users to HTTPS
 @app.exception(exceptions.NotFound, exceptions.MethodNotSupported)
 def redirect_everything_else(request, exception):
+    _ = exception
     server, path = request.server_name, request.path
     if server and path.startswith("/"):
         return response.redirect(f"https://{server}{path}", status=308)
@@ -15,6 +16,7 @@ def redirect_everything_else(request, exception):
 # ACME challenge for LetsEncrypt
 @app.get("/.well-known/acme-challenge/<challenge>")
 async def letsencrypt(request, challenge):
+    _ = request
     try:
         return response.text(acme_challenges[challenge])
     except KeyError:

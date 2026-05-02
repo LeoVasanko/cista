@@ -281,6 +281,8 @@ async def head_file(request, name=""):
 @bp.route("/", methods=["OPTIONS"], name="options_root", strict_slashes=False)
 @bp.route("/<name:path>", methods=["OPTIONS"], name="options_path")
 async def dav_options(request, name=""):
+    _ = request
+    _ = name
     return HTTPResponse(
         status=200,
         headers={

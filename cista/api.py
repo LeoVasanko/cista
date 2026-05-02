@@ -22,11 +22,13 @@ fileserver = FileServer()
 
 @bp.before_server_start
 async def start_fileserver(app):
+    _ = app
     await fileserver.start()
 
 
 @bp.after_server_stop
 async def stop_fileserver(app):
+    _ = app
     await fileserver.stop()
 
 
@@ -100,6 +102,7 @@ async def watch(req, ws):
 
 
 def subscribe(uuid, ws):
+    _ = ws
     with watching.state.lock:
         q = watching.pubsub[uuid] = asyncio.Queue()
         # Init with disk usage and full tree

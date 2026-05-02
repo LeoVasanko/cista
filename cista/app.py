@@ -141,6 +141,7 @@ async def main_start(app):
 
 @app.after_server_start
 async def main_after_start(app):
+    _ = app
     onlyoffice.log_reachable_info()
 
 
@@ -255,6 +256,7 @@ async def wwwroot(req, path=""):
 
 @app.route("/favicon.ico", methods=["GET", "HEAD"])
 async def favicon(req):
+    _ = req
     # Browsers keep asking for it when viewing files (not HTML with icon link)
     return redirect("/assets/logo-ctv8tVwU.svg", status=308)
 

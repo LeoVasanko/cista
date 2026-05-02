@@ -35,6 +35,7 @@ def run(*, dev=False):
 
 
 def check_cert(certdir, domain):
+    _ = domain
     if (certdir / "privkey.pem").exist() and (certdir / "fullchain.pem").exists():
         return
     # Certificate provisioning is external; files must exist before startup.
