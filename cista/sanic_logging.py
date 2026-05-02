@@ -1,6 +1,7 @@
 """Custom access logging middleware for Sanic."""
 
 import logging
+import os
 import sys
 import unicodedata
 from ipaddress import IPv6Address
@@ -8,6 +9,40 @@ from ipaddress import IPv6Address
 from sanic.log import LOGGING_CONFIG_DEFAULTS
 
 logger = logging.getLogger("cista.access")
+
+
+class ReentrantSafeStreamHandler(logging.StreamHandler):
+    """Stream handler that degrades gracefully on signal-time reentrant writes.
+
+    Python's buffered text streams are not reentrant. If a signal handler logs
+    while another log write is in progress, StreamHandler.emit can raise:
+    RuntimeError("reentrant call inside <_io.BufferedWriter ...>")
+
+    Instead of letting logging emit a long "--- Logging error ---" traceback,
+    we fall back to a best-effort os.write to the same file descriptor.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        msg = ""
+        try:
+            msg = self.format(record)
+            stream = self.stream
+            stream.write(msg + self.terminator)
+            self.flush()
+        except RuntimeError as exc:
+            if "reentrant call inside" not in str(exc):
+                self.handleError(record)
+                return
+            stream = self.stream
+            fd = stream.fileno()
+            encoding = getattr(stream, "encoding", None) or "utf-8"
+            data = (msg + self.terminator).encode(encoding, errors="replace")
+            os.write(fd, data)
+        except RecursionError:
+            raise
+        except Exception:
+            self.handleError(record)
+
 
 _RESET = "\033[0m"
 _STATUS_INFO = "\033[32m"  # 1xx (green)
@@ -236,7 +271,7 @@ def log_ws_close(
 
 def configure_access_logging() -> None:
     """Configure the cista.access logger to output to stderr."""
-    handler = logging.StreamHandler(sys.stderr)
+    handler = ReentrantSafeStreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
@@ -271,6 +306,10 @@ def configure_main_logging() -> None:
     Patches LOGGING_CONFIG_DEFAULTS so the formatter survives every dictConfig
     call Sanic makes during serve_single() / serve().
     """
+    for handler_name in ("console", "error_console", "access_console"):
+        LOGGING_CONFIG_DEFAULTS["handlers"][handler_name]["class"] = (
+            "cista.sanic_logging.ReentrantSafeStreamHandler"
+        )
     LOGGING_CONFIG_DEFAULTS["formatters"]["generic"] = {
         "class": "cista.sanic_logging._EmojiFormatter",
     }

@@ -4,9 +4,15 @@ from pathlib import Path
 
 from fastapi_vue.hostutil import parse_endpoint
 from sanic import Sanic
+from sanic.worker.loader import AppLoader
 
 from cista import config, server80
 from cista.app import app
+
+
+def load_app() -> Sanic:
+    """Return the app instance for spawned Sanic worker/reloader processes."""
+    return app
 
 
 def run(*, dev=False):
@@ -29,7 +35,7 @@ def run(*, dev=False):
         access_log=False,
     )  # type: ignore[call-arg]
     if dev:
-        Sanic.serve()
+        Sanic.serve(app_loader=AppLoader(factory=load_app))
     else:
         Sanic.serve_single()
 

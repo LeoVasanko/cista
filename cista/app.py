@@ -148,12 +148,16 @@ async def main_after_start(app):
 # Sanic sometimes fails to execute after_server_stop, so we do it before instead (potentially interrupting handlers)
 @app.before_server_stop
 async def main_stop(app):
-    watching.stop(app)
-    await onlyoffice.close_oo_client()
-    await shutdown_preview_workers()
-    app.ctx.threadexec.shutdown()
-    app.ctx.zipexec.shutdown(cancel_futures=True)
-    await sso.close_client()
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(asyncio.to_thread(watching.stop, app))
+        tg.create_task(onlyoffice.close_oo_client())
+        tg.create_task(shutdown_preview_workers())
+        tg.create_task(sso.close_client())
+
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(asyncio.to_thread(app.ctx.threadexec.shutdown))
+        tg.create_task(asyncio.to_thread(app.ctx.zipexec.shutdown, cancel_futures=True))
+
     logger.debug("Cista worker threads all finished")
 
 

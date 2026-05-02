@@ -55,6 +55,10 @@ class FormatUpdateLoopError(RuntimeError):
     pass
 
 
+class _WatcherStoppingError(Exception):
+    """Internal control-flow exception for quick watcher shutdown."""
+
+
 class State:
     def __init__(self):
         self.lock = threading.RLock()
@@ -215,7 +219,7 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
         li = []
         for f in path.iterdir():
             if stop_event.is_set():
-                raise SystemExit("quit")
+                raise _WatcherStoppingError
             if f.name.startswith("."):
                 continue  # No dotfiles
             with suppress(FileNotFoundError):
@@ -227,7 +231,11 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
                 li.append((int(isfile), f.name, s))
         # Build the tree as a list of FileEntries
         for [_, name, s] in humansorted(li):
+            if stop_event.is_set():
+                raise _WatcherStoppingError
             sub = walk(rel / name, stat=s)
+            if not sub:
+                continue
             child = sub[0]
             entry = FileEntry(
                 level=entry.level,
@@ -679,7 +687,10 @@ def watcher(loop):
             inotify_tree = inotify.adapters.InotifyTree(rootpath.as_posix())
 
         # Initialize the tree from filesystem
-        update_root(loop)
+        try:
+            update_root(loop)
+        except _WatcherStoppingError:
+            return
         path_index = PathIndex(state.root[:])
 
         trefresh = time.monotonic() + 300.0
@@ -763,7 +774,10 @@ def watcher(loop):
                 # Process each collapsed path
                 new_root = path_index.root
                 for path in collapsed:
-                    new_entries = walk(path)
+                    try:
+                        new_entries = walk(path)
+                    except _WatcherStoppingError:
+                        return
                     new_root = path_index.apply_update(path, new_entries)
 
                 # Broadcast if changed
@@ -782,6 +796,8 @@ def watcher(loop):
                             with state.lock:
                                 broadcast(update_msg, loop)
                                 state.root = fresh
+                        except _WatcherStoppingError:
+                            return
                         except Exception:
                             logger.exception("Fallback failed; sending full root")
                             with state.lock:
@@ -870,6 +886,7 @@ def start(app):
     global rootpath
     config.load_config()
     rootpath = config.config.path
+    stop_event.clear()
     app.ctx.watcher = threading.Thread(
         target=watcher,
         args=[app.loop],
