@@ -82,6 +82,7 @@ const onclick = (ev: Event) => {
   margin-left: 0.3em;
 }
 figure {
+  height: 15em;
   max-height: 15em;
   position: relative;
   border-radius: .5em;
