@@ -82,8 +82,8 @@ const onclick = (ev: Event) => {
   margin-left: 0.3em;
 }
 figure {
-  height: 15em;
-  max-height: 15em;
+  height: var(--gallery-figure-height, 15em);
+  max-height: var(--gallery-figure-height, 15em);
   position: relative;
   border-radius: .5em;
   overflow: hidden;
@@ -93,12 +93,13 @@ figure {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  transition: height 0.4s ease, max-height 0.4s ease;
 }
 figure > article {
   flex: 0 0 auto;
 }
 figure :deep(.video-container) {
-  height: 15em;
+  height: var(--gallery-figure-height, 15em);
 }
 .titlespacer {
   flex-shrink: 100000;

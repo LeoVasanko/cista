@@ -20,7 +20,8 @@ from sanic import Blueprint, empty, raw, redirect
 from sanic.exceptions import NotFound
 from sanic.log import logger
 
-from cista import auth, config, onlyoffice, sharefs
+from cista import auth, config, onlyoffice, sharefs, watching
+from cista.fileio import fuid
 from cista.preview_worker import (
     DOC_PREVIEW_SUFFIXES,
     OFFICE_PREVIEW_SUFFIXES,
@@ -655,6 +656,12 @@ async def preview(req, path):
     if not img:
         # Preview generation failed, redirect to the file itself
         return redirect(f"/files/{path}", status=303)
+
+    # Store aspect ratio if the worker returned dimensions
+    if preview_resp and preview_resp.width and preview_resp.height:
+        ar = round(preview_resp.height / preview_resp.width, 2)
+        fuid_str = fuid(stat)
+        watching.notify_ar(fuid_str, ar)
 
     # Build headers and cache the full response
     preview_mime = (

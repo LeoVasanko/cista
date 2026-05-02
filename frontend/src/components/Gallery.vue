@@ -3,7 +3,13 @@
     <GalleryFigure v-if="editing?.key === 'new'" :doc="editing" :key=editing.key :editing="{rename: mkdir, exit}" />
     <template v-for="(doc, index) in documents" :key=doc.key>
       <BreadCrumb v-if="showFolderBreadcrumb(index)" :path="doc.loc ? doc.loc.split('/') : []" class="folder-indicator"/>
-      <GalleryFigure :doc=doc :editing="editing === doc ? {rename, exit} : null" @menu="contextMenu($event, doc)" :class="{ 'folder-start': showFolderBreadcrumb(index) }" />
+      <GalleryFigure
+        :doc=doc
+        :editing="editing === doc ? {rename, exit} : null"
+        :style="{ '--gallery-figure-height': rowHeightsByKey[doc.key] ?? '15em' }"
+        @menu="contextMenu($event, doc)"
+        :class="{ 'folder-start': showFolderBreadcrumb(index) }"
+      />
     </template>
   </div>
 </template>
@@ -21,6 +27,7 @@ import {
   onUnmounted,
   ref,
   shallowRef,
+  watch,
   watchEffect
 } from 'vue'
 import { useRouter } from 'vue-router'
@@ -71,11 +78,108 @@ const rename = async (doc: Doc, newName: string) => {
 }
 const gallery = ref<HTMLElement>()
 const columnCount = ref(1)
+const columnWidthPx = ref(240)
+const emPx = ref(16)
+const aspectByKey = ref<Record<string, number>>({})
+
+const optimalRowHeightPx = (ratios: number[]) => {
+  const w = Math.max(1, columnWidthPx.value)
+  const minH = Math.max(1, Math.round(7 * emPx.value))
+  const maxH = Math.max(minH, Math.round(25 * emPx.value))
+  const usable = ratios.filter(ar => Number.isFinite(ar) && ar > 0)
+  if (usable.length === 0) return Math.round(15 * emPx.value)
+
+  let bestH = Math.round(15 * emPx.value)
+  let bestScore = -1
+  for (let h = minH; h <= maxH; h++) {
+    let score = 0
+    for (const ar of usable) {
+      let shownW = w
+      let shownH = w * ar
+      if (shownH > h) {
+        shownH = h
+        shownW = h / ar
+      }
+      // Fill efficiency in the row cell (0..1)
+      score += (shownW * shownH) / (w * h)
+    }
+    if (score > bestScore) {
+      bestScore = score
+      bestH = h
+    }
+  }
+  return bestH
+}
+
+const setAspect = (key: string, ar: number) => {
+  if (!Number.isFinite(ar) || ar <= 0) return
+  if (aspectByKey.value[key] === ar) return
+  aspectByKey.value = {
+    ...aspectByKey.value,
+    [key]: ar
+  }
+}
+
+const rowHeightsByKey = computed<Record<string, string>>(() => {
+  const docs = props.documents
+  const cols = Math.max(1, columnCount.value)
+  const byKey = aspectByKey.value
+  const out: Record<string, string> = {}
+
+  const assignRows = (group: Doc[]) => {
+    for (let start = 0; start < group.length; start += cols) {
+      const row = group.slice(start, start + cols)
+      const ratios = row
+        .filter(doc => doc.previewable)
+        .map(doc => byKey[doc.key])
+        .filter((ar): ar is number => ar != null)
+      const height = `${optimalRowHeightPx(ratios)}px`
+      for (const doc of row) out[doc.key] = height
+    }
+  }
+
+  let group: Doc[] = []
+  for (let i = 0; i < docs.length; i++) {
+    if (i > 0 && docs[i]!.loc !== docs[i - 1]!.loc) {
+      assignRows(group)
+      group = []
+    }
+    group.push(docs[i]!)
+  }
+  assignRows(group)
+
+  return out
+})
+
+// Seed collected ratios from server-provided ar values on docs
+const seedFromDocs = () => {
+  for (const doc of props.documents)
+    if (doc.previewable && doc.ar != null) setAspect(doc.key, doc.ar)
+}
+
+const onImgLoad = (e: Event) => {
+  const img = e.target as HTMLImageElement
+  if (img.tagName !== 'IMG' || img.naturalWidth === 0) return
+  const anchor = img.closest('a[id^="file-"]') as HTMLAnchorElement | null
+  if (!anchor) return
+  const key = anchor.id.slice('file-'.length)
+  if (!key) return
+  setAspect(key, img.naturalHeight / img.naturalWidth)
+}
 const updateColumns = () => {
   if (!gallery.value) return
-  columnCount.value = getComputedStyle(gallery.value).gridTemplateColumns.split(
-    ' '
-  ).length
+  const style = getComputedStyle(gallery.value)
+  const templates = style.gridTemplateColumns
+    .split(' ')
+    .filter(part => !!part && part !== 'none')
+  columnCount.value = Math.max(1, templates.length)
+  const first = templates[0]
+  if (first && first.endsWith('px')) {
+    const parsed = Number.parseFloat(first)
+    if (Number.isFinite(parsed) && parsed > 0) columnWidthPx.value = parsed
+  }
+  const parsedEm = Number.parseFloat(style.fontSize)
+  if (Number.isFinite(parsedEm) && parsedEm > 0) emPx.value = parsedEm
 }
 const columns = computed(() => columnCount.value)
 defineExpose({
@@ -230,14 +334,20 @@ onMounted(() => {
     active.focus()
   }
   updateColumns()
+  seedFromDocs()
   if (gallery.value) {
     resizeObserver = new ResizeObserver(updateColumns)
     resizeObserver.observe(gallery.value)
+    gallery.value.addEventListener('load', onImgLoad, { capture: true })
   }
 })
 onUnmounted(() => {
   resizeObserver?.disconnect()
+  gallery.value?.removeEventListener('load', onImgLoad, { capture: true })
 })
+
+// Re-seed aspect ratios whenever docs update (e.g., ar patch from server)
+watch(() => props.documents, seedFromDocs)
 const mkdir = async (doc: Doc, name: string) => {
   doc.name = name
   doc.key = crypto.randomUUID()

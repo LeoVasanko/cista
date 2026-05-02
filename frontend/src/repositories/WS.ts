@@ -164,6 +164,11 @@ const handleWatchMessage = (event: MessageEvent) => {
     case !!msg.update:
       handleUpdateMessage(msg)
       break
+    case !!msg.ar: {
+      const store = useMainStore()
+      store.updateAr(msg.ar as Record<string, number>)
+      break
+    }
     case !!msg.space:
       const store = useMainStore()
       store.space = msg.space

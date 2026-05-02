@@ -5,7 +5,7 @@ import { collator } from '@/utils'
 import { type SortOrder, sorted } from '@/utils/docsort'
 import SearchWorker from '@/workers/searchWorker?worker'
 import { type StateTree, defineStore } from 'pinia'
-import { documentRef, getDocuments, setDocuments } from './documentStore'
+import { documentRef, getDocuments, setDocuments, triggerUpdate } from './documentStore'
 
 // Singleton search worker instance
 let searchWorker: Worker | null = null
@@ -124,7 +124,7 @@ export const useMainStore = defineStore('main', {
     updateRoot(root: FileEntry[]) {
       const docs = []
       let loc = [] as string[]
-      for (const [level, name, key, mtime, size, allocated, isfile] of root) {
+      for (const [level, name, key, mtime, size, allocated, isfile, ar] of root) {
         loc = loc.slice(0, level - 1)
         docs.push(
           new Doc({
@@ -134,7 +134,8 @@ export const useMainStore = defineStore('main', {
             size,
             allocated,
             mtime,
-            dir: !isfile
+            dir: !isfile,
+            ar
           })
         )
         loc.push(name)
@@ -156,6 +157,22 @@ export const useMainStore = defineStore('main', {
       this.docVersion++
       // Sync documents to search worker
       this.syncSearchWorker()
+    },
+    /** Patch aspect ratios on existing docs from a server ar update message */
+    updateAr(arMap: Record<string, number>) {
+      const docs = getDocuments()
+      let changed = false
+      for (const doc of docs) {
+        const ar = arMap[doc.key]
+        if (ar != null && doc.ar !== ar) {
+          doc.ar = ar
+          changed = true
+        }
+      }
+      if (changed) {
+        triggerUpdate()
+        this.docVersion++
+      }
     },
     /** Add a ghost file/folder for optimistic UI updates */
     addGhost(doc: Doc) {

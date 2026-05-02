@@ -154,6 +154,17 @@ stop_event = threading.Event()
 # Thread-safe queue for signaling path updates from websockets
 _update_queue: queue.Queue[PurePosixPath] = queue.Queue()
 
+# Thread-safe queue for AR updates from the preview worker
+_ar_queue: queue.Queue[tuple[str, float]] = queue.Queue()
+
+# AR map: fuid -> aspect ratio (height/width). Written only by the watcher thread.
+_ar_map: dict[str, float] = {}
+
+
+def notify_ar(fuid_key: str, ar: float) -> None:
+    """Called from preview handler to update the AR for a file."""
+    _ar_queue.put_nowait((fuid_key, ar))
+
 
 def notify_change(*paths: PurePosixPath | str):
     """Signal that paths have changed. Called from control/upload websockets."""
@@ -186,14 +197,16 @@ def walk(rel: PurePosixPath, stat: stat_result | None = None) -> list[FileEntry]
         except Exception:
             logger.exception(f"get_allocated_size failed for {path}")
             allocated = st.st_size if isfile else 0
+        key = fuid(st)
         entry = FileEntry(
             level=len(rel.parts),
             name=rel.name,
-            key=fuid(st),
+            key=key,
             mtime=int(st.st_mtime),
             size=st.st_size if isfile else 0,
             allocated=allocated,
             isfile=isfile,
+            ar=_ar_map.get(key) if isfile else None,
         )
         if isfile:
             return [entry]
@@ -774,6 +787,43 @@ def watcher(loop):
                             with state.lock:
                                 broadcast(format_root(fresh), loop)
                                 state.root = fresh
+
+            # Drain AR updates from preview worker (immediate, no debounce)
+            ar_new_root: list[FileEntry] | None = None
+            try:
+                while True:
+                    fuid_key, ar = _ar_queue.get_nowait()
+                    _ar_map[fuid_key] = ar
+                    # Patch the matching entry in the current root
+                    root_to_patch = (
+                        ar_new_root if ar_new_root is not None else path_index.root
+                    )
+                    for i, entry in enumerate(root_to_patch):
+                        if entry.key == fuid_key and entry.isfile and entry.ar != ar:
+                            if ar_new_root is None:
+                                ar_new_root = root_to_patch[:]
+                            ar_new_root[i] = FileEntry(
+                                level=entry.level,
+                                name=entry.name,
+                                key=entry.key,
+                                mtime=entry.mtime,
+                                size=entry.size,
+                                allocated=entry.allocated,
+                                isfile=entry.isfile,
+                                ar=ar,
+                            )
+                            break
+            except queue.Empty:
+                pass
+            if ar_new_root is not None:
+                try:
+                    update_msg = format_update(state.root, ar_new_root)
+                    with state.lock:
+                        broadcast(update_msg, loop)
+                        state.root = ar_new_root
+                    path_index = PathIndex(ar_new_root)
+                except Exception:
+                    logger.exception("AR update broadcast failed")
 
             # Collect events from websocket signals (non-blocking)
             try:

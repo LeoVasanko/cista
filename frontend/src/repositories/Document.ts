@@ -13,6 +13,7 @@ export type DocProps = {
   dir: boolean
   ghost?: boolean
   expires?: number // Unix timestamp for ghost expiry
+  ar?: number // Aspect ratio (height/width) from server, if known
 }
 
 export class Doc {
@@ -26,6 +27,7 @@ export class Doc {
   public expires: number = 0 // Unix timestamp for ghost expiry (0 = no expiry)
   /** @internal Use the name getter/setter instead */
   public _name: string = ''
+  public ar?: number // Aspect ratio (height/width), provided by server after first preview render
 
   constructor(props: Partial<DocProps> = {}) {
     const { name, ...rest } = props
@@ -130,7 +132,8 @@ export type FileEntry = [
   number, // mtime
   number, // size
   number, // allocated (actual disk usage)
-  number // isfile
+  number, // isfile
+  number? // ar: aspect ratio (height/width), present if known
 ]
 
 export type UpdateEntry = ['k', number] | ['d', number] | ['i', Array<FileEntry>]

@@ -95,6 +95,8 @@ class PreviewResponse(msgspec.Struct, omit_defaults=True):
     timings: list[float] | None = None
     error: str | None = None
     stderr: str | None = None
+    width: int | None = None
+    height: int | None = None
 
 
 _enc = msgspec.json.Encoder()
@@ -173,6 +175,7 @@ def _get_image_dimensions(path: Path) -> tuple[int, int] | None:
     """
     try:
         img = pyvips.Image.new_from_file(str(path))
+        img = img.autorot()
     except pyvips.error.Error:
         return None
     else:
@@ -228,6 +231,8 @@ def process_image_pyvips(path, *, maxsize, quality):
     # HEIC/HEIF: ffmpeg handles tile assembly and HDR correctly;
     # skip pyvips entirely.
     if suffix in (".heic", ".heif"):
+        heic_dims = _get_image_dimensions(path)
+        width, height = heic_dims or (None, None)
         ret = _image_via_ffmpeg(path, maxsize, quality)
         t_end = perf_counter()
         return ret, PreviewResponse(
@@ -235,13 +240,17 @@ def process_image_pyvips(path, *, maxsize, quality):
             mime="image/avif",
             backend="ffmpeg",
             timings=[round((t_end - t_start) * 1000, 1)],
+            width=width,
+            height=height,
         )
 
     # Other image formats: pyvips first, ffmpeg fallback.
     load_opts = {"access": "sequential"}
+    orig_w = orig_h = None
     try:
         img = pyvips.Image.new_from_file(str(path), **load_opts)
         img = img.autorot()
+        orig_w, orig_h = img.width, img.height
         scale = min(maxsize / img.width, maxsize / img.height, 1.0)
         if scale < 1.0:
             img = img.resize(scale)
@@ -253,6 +262,7 @@ def process_image_pyvips(path, *, maxsize, quality):
         )
         backend = "pyvips"
     except pyvips.error.Error:
+        orig_w, orig_h = None, None
         ret = _image_via_ffmpeg(path, maxsize, quality)
         backend = "ffmpeg"
     t_end = perf_counter()
@@ -262,6 +272,8 @@ def process_image_pyvips(path, *, maxsize, quality):
         mime="image/avif",
         backend=backend,
         timings=[round((t_end - t_start) * 1000, 1)],
+        width=orig_w,
+        height=orig_h,
     )
 
 
@@ -270,6 +282,7 @@ def process_image_buffer(data: bytes, *, quality, maxsize, maxzoom):
     t_start = perf_counter()
     img = pyvips.Image.new_from_buffer(data, "")
     img = img.autorot()
+    orig_w, orig_h = img.width, img.height
     scale = min(maxsize / img.width, maxsize / img.height, 1.0)
     if scale < 1.0:
         img = img.resize(scale)
@@ -286,6 +299,8 @@ def process_image_buffer(data: bytes, *, quality, maxsize, maxzoom):
         mime="image/avif",
         backend="pyvips",
         timings=[round((t_end - t_start) * 1000, 1)],
+        width=orig_w,
+        height=orig_h,
     )
 
 
@@ -315,6 +330,8 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
             round((t_load_end - t_load_start) * 1000, 1),
             round((t_save_end - t_save_start) * 1000, 1),
         ],
+        width=round(w),
+        height=round(h),
     )
 
 
@@ -347,6 +364,11 @@ def process_video(path, *, maxsize, quality):
             raise RuntimeError("No frames found in video")
 
         # Resize frame to thumbnail size
+        # Capture display dimensions before resize (accounting for rotation)
+        disp_w = frame.width
+        disp_h = frame.height
+        if frame.rotation in (90, 270):
+            disp_w, disp_h = disp_h, disp_w
         if frame.width > maxsize or frame.height > maxsize:
             scale_factor = min(maxsize / frame.width, maxsize / frame.height)
             new_width = int(frame.width * scale_factor)
@@ -442,6 +464,8 @@ def process_video(path, *, maxsize, quality):
             round((t_load_end - t_load_start) * 1000, 1),
             round((t_save_end - t_save_start) * 1000, 1),
         ],
+        width=disp_w,
+        height=disp_h,
     )
     del imgdata, istream, ostream, icc, occ, frame
     gc.collect()

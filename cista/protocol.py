@@ -12,7 +12,7 @@ class ErrorMsg(msgspec.Struct):
 ## Directory listings
 
 
-class FileEntry(msgspec.Struct, array_like=True, frozen=True):
+class FileEntry(msgspec.Struct, array_like=True, frozen=True, omit_defaults=True):
     level: int
     name: str
     key: str
@@ -20,6 +20,7 @@ class FileEntry(msgspec.Struct, array_like=True, frozen=True):
     size: int
     allocated: int
     isfile: int
+    ar: float | None = None
 
     def __str__(self):
         return self.key or "FileEntry()"
