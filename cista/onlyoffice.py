@@ -129,7 +129,9 @@ def log_reachable_info() -> None:
 
 def setup_docker(confdir: Path | None = None) -> int:
     """Build and run the patched OnlyOffice Docker image."""
-    config.init_confdir(confdir)
+    if confdir is not None:
+        os.environ["CISTA_HOME"] = confdir.as_posix()
+    config.init_confdir()
     if config.conffile.exists():
         config.load_config()
     else:

@@ -185,7 +185,9 @@ def _resolve_confdir(args):
 
 def _confdir(args):
     confdir = _resolve_confdir(args)
-    config.init_confdir(confdir)
+    if confdir is not None:
+        os.environ["CISTA_HOME"] = confdir.as_posix()
+    config.init_confdir()
 
 
 def _user(args):
