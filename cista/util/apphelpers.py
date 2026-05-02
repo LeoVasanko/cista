@@ -60,7 +60,7 @@ def websocket_wrapper(handler):
     @wraps(handler)
     async def wrapper(request, ws, *args, **kwargs):
         username = getattr(request.ctx, "username", None)
-        extra = username if username else None
+        extra = username or None
         start = time.perf_counter()
         ws_id = log_ws_open(request, extra=extra)
         close_extra = None

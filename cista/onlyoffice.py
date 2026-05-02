@@ -151,7 +151,7 @@ def setup_docker(confdir: Path | None = None) -> int:
     logger.info("Building OnlyOffice image")
     build_cmd = ["docker", "build", "-t", "onlyoffice-cista", str(docker_dir)]
     logger.info("%s", " ".join(build_cmd))
-    result = subprocess.run(build_cmd)
+    result = subprocess.run(build_cmd, check=False, shell=False)  # noqa: S603
     if result.returncode != 0:
         raise RuntimeError("Failed to build OnlyOffice image")
 
@@ -173,19 +173,19 @@ def setup_docker(confdir: Path | None = None) -> int:
         "onlyoffice-cista",
     ]
     logger.info("%s", " ".join(run_cmd))
-    result = subprocess.run(run_cmd)
+    result = subprocess.run(run_cmd, check=False, shell=False)  # noqa: S603
     if result.returncode != 0:
         raise RuntimeError("Failed to start OnlyOffice container")
     logger.info("OnlyOffice is running on http://localhost:8988")
     return 0
 
 
-async def is_available_async(timeout: float = 2.0) -> bool:
+async def is_available_async(request_timeout: float = 2.0) -> bool:
     """Return True if the configured OnlyOffice Document Server is reachable."""
     url = _get_onlyoffice_url().rstrip("/") + "/ConvertService.ashx"
     client = get_httpx_client()
     try:
-        response = await client.get(url, timeout=timeout)
+        response = await client.get(url, timeout=request_timeout)
         return response.status_code in (200, 405)
     except Exception:
         return False
@@ -252,7 +252,7 @@ def _build_jwt_token(payload: dict) -> str | None:
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
-async def convert_to_png_async(file_path: Path, timeout: float = 5.0) -> bytes:
+async def convert_to_png_async(file_path: Path, request_timeout: float = 5.0) -> bytes:
     """Convert *file_path* to PNG using OnlyOffice Document Server (async).
 
     Returns the PNG bytes. Raises RuntimeError on failure.
@@ -268,7 +268,7 @@ async def convert_to_png_async(file_path: Path, timeout: float = 5.0) -> bytes:
         payload = {
             "async": False,
             "filetype": suffix,
-            "key": f"cista_{file_path.stat().st_mtime_ns}",
+            "key": f"cista_{(await asyncio.to_thread(file_path.stat)).st_mtime_ns}",
             "outputtype": "png",
             "title": file_path.name,
             "url": doc_url,
@@ -286,7 +286,7 @@ async def convert_to_png_async(file_path: Path, timeout: float = 5.0) -> bytes:
             convert_url,
             content=json.dumps(payload).encode(),
             headers=headers,
-            timeout=timeout,
+            timeout=request_timeout,
         )
         response.raise_for_status()
         body = response.content
@@ -309,7 +309,7 @@ async def convert_to_png_async(file_path: Path, timeout: float = 5.0) -> bytes:
         logger.debug("OnlyOffice converted in %.2fs: %s", t_end - t_start, file_url)
 
         # Download converted PNG
-        png_response = await client.get(file_url, timeout=timeout)
+        png_response = await client.get(file_url, timeout=request_timeout)
         png_response.raise_for_status()
         return png_response.content
     finally:

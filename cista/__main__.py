@@ -30,7 +30,7 @@ def create_startup_box(
 ):
     """Create a framed startup box with server information."""
     title = f"Cista {cista.__version__}"
-    listen = unix if unix else url
+    listen = unix or url
     location = f"{folder} @ {listen}"
     lines = [title, location]
     # Auth line: Paskia <url> or Password, with optional Public suffix

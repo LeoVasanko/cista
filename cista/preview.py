@@ -32,7 +32,6 @@ from cista import auth, config, onlyoffice, sharefs
 from cista.preview_worker import PreviewRequest, PreviewResponse
 from cista.util.filename import sanitize
 
-
 bp = Blueprint("preview", url_prefix="/preview")
 
 
@@ -179,14 +178,14 @@ class _PreviewWorkerPool:
         _active_procs.add(proc)
         try:
             ready = await asyncio.wait_for(proc.stdout.readexactly(1), timeout=30.0)
-        except asyncio.TimeoutError:
+        except TimeoutError as err:
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
-            raise WorkerProtocolError("preview worker failed to become ready")
-        except asyncio.IncompleteReadError:
+            raise WorkerProtocolError("preview worker failed to become ready") from err
+        except asyncio.IncompleteReadError as err:
             raise WorkerProtocolError(
                 "preview worker exited before signalling readiness"
-            )
+            ) from err
         if ready != b"\x01":
             raise WorkerProtocolError(f"preview worker ready signal invalid: {ready!r}")
         return _PreviewWorker(proc)
@@ -420,11 +419,12 @@ class OOConversionManager:
     def __init__(self, max_concurrent: int = OO_MAX_CONCURRENT):
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._in_flight: dict[str, asyncio.Future[bytes]] = {}
+        self._tasks: set[asyncio.Task[None]] = set()
         self._lock = asyncio.Lock()
 
     async def convert(self, filepath: Path) -> bytes:
         """Return PNG bytes for *filepath*, deduplicating concurrent requests."""
-        stat = filepath.stat()
+        stat = await asyncio.to_thread(filepath.stat)
         key = f"{filepath}:{stat.st_mtime_ns}"
 
         async with self._lock:
@@ -433,7 +433,9 @@ class OOConversionManager:
             else:
                 future = asyncio.get_running_loop().create_future()
                 self._in_flight[key] = future
-                asyncio.create_task(self._do_convert(filepath, key, future))
+                task = asyncio.create_task(self._do_convert(filepath, key, future))
+                self._tasks.add(task)
+                task.add_done_callback(self._tasks.discard)
 
         return await future
 
@@ -442,7 +444,9 @@ class OOConversionManager:
     ) -> None:
         try:
             async with self._semaphore:
-                png_bytes = await onlyoffice.convert_to_png_async(filepath, timeout=5.0)
+                png_bytes = await onlyoffice.convert_to_png_async(
+                    filepath, request_timeout=5.0
+                )
         except Exception as e:
             future.set_exception(e)
             async with self._lock:
@@ -630,13 +634,13 @@ async def preview(req, path):
                 _run_preview_process(filepath, quality, maxsize, maxzoom),
                 timeout=PREVIEW_TIMEOUT,
             )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("Preview timeout for %s", filepath)
         return empty(503)
     except PreviewTimeoutError:
         logger.warning("Preview worker timeout for %s", filepath)
         return empty(503)
-    except httpx.HTTPStatusError as e:
+    except httpx.HTTPStatusError:
         req.ctx._log_extra = "onlyoffice N/A"
         return empty(503)
     except httpx.RequestError:
@@ -775,8 +779,8 @@ def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
             cmd.insert(4, "-s")
             cmd.insert(5, f"{new_w}x{new_h}")
     try:
-        subprocess.run(cmd, capture_output=True, check=True)
-        with open(tmp_path, "rb") as f:
+        subprocess.run(cmd, capture_output=True, check=True, shell=False)  # noqa: S603
+        with Path(tmp_path).open("rb") as f:
             return f.read()
     finally:
         Path(tmp_path).unlink(missing_ok=True)

@@ -257,7 +257,7 @@ async def proxy_auth_request(request):
             method=request.method,
             url=url,
             headers=headers,
-            content=request.body if request.body else None,
+            content=request.body or None,
         ) as response:
             raw_content = b"".join([chunk async for chunk in response.aiter_raw()])
 

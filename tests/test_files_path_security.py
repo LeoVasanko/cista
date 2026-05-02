@@ -160,7 +160,7 @@ async def test_mkcol_windows_drive_path_stays_within_root(client, setup_storage:
     # Either created inside the storage root (201) or sanitised away (400/404).
     # The important assertion: nothing was created outside the storage root.
     assert not (Path("/c:") / "secret").exists()
-    assert not (Path("c:/secret")).exists()
+    assert not (Path("c:/secret")).exists()  # noqa: ASYNC240
     if res.status_code == 201:
         # Created safely inside tmp storage
         assert (setup_storage / "c:" / "secret").is_dir()

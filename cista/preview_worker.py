@@ -22,6 +22,8 @@ from pathlib import Path
 import msgspec
 from blake3 import blake3
 
+logger = logging.getLogger(__name__)
+
 
 class PreviewRequest(msgspec.Struct, omit_defaults=True):
     path: str
@@ -121,7 +123,7 @@ def _run_loop() -> None:
                     )
             _write_response(resp, result or b"")
         except Exception as e:
-            logging.exception("Preview worker error for %s", req.path)
+            logger.exception("Preview worker error for %s", req.path)
             captured = stderr_capture.getvalue().strip()
             _write_response(
                 PreviewResponse(ok=False, error=str(e), stderr=captured or None), b""
@@ -138,13 +140,13 @@ def main() -> None:
         from cista import config
 
         config.load_config()
-        logging.warning(
+        logger.warning(
             "preview-worker config=%s master_secret=%s",
             config.conffile,
             config.config.secret,
         )
     except Exception:
-        logging.exception("preview-worker failed to load config at startup")
+        logger.exception("preview-worker failed to load config at startup")
     if len(sys.argv) > 1:
         _run_once()
         return
