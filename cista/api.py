@@ -6,7 +6,7 @@ from sanic import Blueprint, json
 from sanic.exceptions import BadRequest
 from sanic.log import logger
 
-from cista import __version__, auth, config, sharefs, sso, watching
+from cista import __version__, auth, config, onlyoffice, sharefs, sso, watching
 from cista.auth import (
     create_share_token_handler,
     create_token_handler,
@@ -54,8 +54,6 @@ async def watch(req, ws):
             "username": req.ctx.username,
             "privileged": req.ctx.user.privileged,
         }
-
-    from cista import onlyoffice
 
     await ws.send(
         msgspec.json.encode(

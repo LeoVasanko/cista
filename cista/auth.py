@@ -2,22 +2,21 @@ import base64
 import binascii
 import hashlib
 import hmac
-import re
 import secrets
 import struct
 from pathlib import PurePosixPath
 from time import time
-from unicodedata import normalize
 
-import argon2
 import msgspec
+from Crypto.Hash import MD4
 from html5tagger import Document
 from sanic import Blueprint, html, json, redirect
 from sanic.exceptions import BadRequest, Forbidden, Unauthorized
 from sanic.log import logger
 
 from cista import config, session, sharefs
-from cista.util import pwgen
+from cista import sso as _sso_module
+from cista.util import pwgen, pwhash
 from cista.util.filename import sanitize
 
 _LOGIN_PAGE_CSS = """\
@@ -175,16 +174,8 @@ form.onsubmit = async (e) => {
 };
 """
 
-# Import for SSO validation (lazily loaded to avoid circular imports)
-_sso_module = None
-
 
 def _get_sso():
-    global _sso_module
-    if _sso_module is None:
-        from cista import sso
-
-        _sso_module = sso
     return _sso_module
 
 
@@ -233,9 +224,6 @@ def hydrate_request_auth_context(request, *, source: str) -> None:
             request.ctx.user = None
             auth_flow.append(f"session:{source}(bad-jwt)")
 
-
-_argon = argon2.PasswordHasher()
-_droppyhash = re.compile(r"^([a-f0-9]{64})\$([a-f0-9]{8})$")
 
 _AUTH_REALM = "cista"
 _AUTH_CACHE_TTL = 10
@@ -448,12 +436,6 @@ def _ntlmv2_verify(
     nt_response: bytes,
 ) -> bool:
     """Verify an NTLMv2 response using the plaintext token secret as the password."""
-    try:
-        from Crypto.Hash import MD4
-    except ImportError:
-        logger.error("pycryptodome MD4 not available, cannot verify NTLM")
-        return False
-
     if len(nt_response) < 16:
         return False
 
@@ -517,47 +499,30 @@ def _ntlmv2_verify(
     return False
 
 
-def _pwnorm(password):
-    return normalize("NFC", password).strip().encode()
-
-
 def _cache_key(username: str, password: str) -> str:
     return hashlib.sha256(f"{username}\x00{password}".encode()).hexdigest()
 
 
 def login(username: str, password: str):
+    normalized_username = pwhash.normalize_secret(username).decode()
     cache_key = _cache_key(username, password)
     cached = _auth_cache.get(cache_key)
     if cached:
         ts, user = cached
         if time() - ts < _AUTH_CACHE_TTL:
-            return user
+            current = config.config.users.get(normalized_username)
+            if current and current.hash == user.hash:
+                return current
         del _auth_cache[cache_key]
 
-    un = _pwnorm(username)
-    pw = _pwnorm(password)
     try:
-        u = config.config.users[un.decode()]
+        u = config.config.users[normalized_username]
     except KeyError:
         raise ValueError("Invalid username") from None
     # Verify password
-    need_rehash = False
-    if not u.hash:
-        raise ValueError("Account disabled")
-    if (m := _droppyhash.match(u.hash)) is not None:
-        h, s = m.groups()
-        h2 = hmac.digest(pw + s.encode() + un, b"", "sha256").hex()
-        if not hmac.compare_digest(h, h2):
-            raise ValueError("Invalid password")
-        # Droppy hashes are weak, do a hash update
-        need_rehash = True
-    else:
-        try:
-            _argon.verify(u.hash, pw)
-        except Exception:
-            raise ValueError("Invalid password") from None
-        if _argon.check_needs_rehash(u.hash):
-            need_rehash = True
+    need_rehash = pwhash.verify_hash(
+        u.hash, username=normalized_username, password=password
+    )
     # Login successful
     if need_rehash:
         set_password(u, password)
@@ -568,7 +533,7 @@ def login(username: str, password: str):
 
 
 def set_password(user: config.User, password: str):
-    user.hash = _argon.hash(_pwnorm(password))
+    pwhash.set_password(user, password)
     _auth_cache.clear()
 
 
@@ -670,11 +635,12 @@ async def _token_auth_login(request, *, privileged=False):
             ctx = data.get("ctx", {}) if isinstance(data, dict) else {}
             user_info = ctx.get("user", {}) if isinstance(ctx, dict) else {}
             request.ctx.username = user_info.get("display_name", "")
-            return True
         except Forbidden:
             raise
         except Exception:
             return False
+        else:
+            return True
 
     if token.username:
         user = config.config.users.get(token.username)
@@ -840,12 +806,13 @@ async def _ntlm_auth_login(request, *, privileged=False):
                             token.sso_user_id,
                             tid[:8],
                         )
-                        return True
                     except Forbidden:
                         raise
                     except Exception as e:
                         logger.warning("NTLM SSO check failed: %s", e)
                         continue
+                    else:
+                        return True
 
                 if token.username:
                     user = config.config.users.get(token.username)
@@ -927,7 +894,6 @@ async def verify(request, *, privileged=False):
             try:
                 perm = "cista:admin" if privileged else "cista:login"
                 await sso.validate_sso_request(request, perm=perm)
-                return
             except Unauthorized as e:
                 auth_flow.append(f"tried={','.join(tried)} result=failed")
                 _set_auth_failure_log(request, auth_flow)
@@ -936,6 +902,8 @@ async def verify(request, *, privileged=False):
                     headers=_build_ua_auth_headers(request),
                     quiet=True,
                 ) from e
+            else:
+                return
         tried.append("sso")
         perm = "cista:admin" if privileged else "cista:login"
         await sso.validate_sso_request(request, perm=perm)
@@ -1228,8 +1196,7 @@ async def create_user(request):
         raise BadRequest("User already exists")
     if not password:
         password = pwgen.generate()
-    changes = {"privileged": privileged}
-    changes["hash"] = _argon.hash(_pwnorm(password))
+    changes = {"privileged": privileged, "password": password}
     try:
         config.update_user(username, changes)
     except Exception as e:
@@ -1256,8 +1223,6 @@ async def update_user(request, username):
         if changes["password"] == "":
             changes["password"] = pwgen.generate()
         password_response = changes["password"]
-        changes["hash"] = _argon.hash(_pwnorm(changes["password"]))
-        del changes["password"]
     if not changes:
         return json({"message": "No changes"})
     try:

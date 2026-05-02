@@ -9,6 +9,7 @@ from os import stat_result
 from pathlib import Path, PurePosixPath
 from stat import S_ISDIR, S_ISREG
 
+import inotify.adapters
 import msgspec
 from natsort import humansorted, natsort_keygen, ns
 from sanic.log import logger
@@ -641,8 +642,6 @@ def watcher(loop):
     modified_flags = frozenset()
 
     if use_inotify:
-        import inotify.adapters
-
         modified_flags = frozenset(
             (
                 "IN_CREATE",
@@ -657,8 +656,6 @@ def watcher(loop):
 
     while not stop_event.is_set():
         if use_inotify:
-            import inotify.adapters
-
             inotify_tree = inotify.adapters.InotifyTree(rootpath.as_posix())
 
         # Initialize the tree from filesystem

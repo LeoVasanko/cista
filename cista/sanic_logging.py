@@ -5,6 +5,8 @@ import sys
 import unicodedata
 from ipaddress import IPv6Address
 
+from sanic.log import LOGGING_CONFIG_DEFAULTS
+
 logger = logging.getLogger("cista.access")
 
 _RESET = "\033[0m"
@@ -269,8 +271,6 @@ def configure_main_logging() -> None:
     Patches LOGGING_CONFIG_DEFAULTS so the formatter survives every dictConfig
     call Sanic makes during serve_single() / serve().
     """
-    from sanic.log import LOGGING_CONFIG_DEFAULTS
-
     LOGGING_CONFIG_DEFAULTS["formatters"]["generic"] = {
         "class": "cista.sanic_logging._EmojiFormatter",
     }

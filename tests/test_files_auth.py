@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from Crypto.Hash import MD4
 from sanic import Sanic
 
 from cista import auth, config, session, watching
@@ -29,8 +30,6 @@ def _ntlm_type3(
     username: str, password: str, domain: str, challenge: bytes
 ) -> dict[str, str]:
     """Build an NTLMv2 Type 3 message for testing."""
-    from Crypto.Hash import MD4
-
     # NT hash
     nt_hash = MD4.new(password.encode("utf-16le")).digest()
     # NTLMv2 hash

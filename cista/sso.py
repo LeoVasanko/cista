@@ -107,10 +107,11 @@ async def validate_sso_request(request, *, perm: str = "cista:login") -> dict | 
                 request.ctx.sso_user = data
                 if "set-cookie" in response.headers:
                     request.ctx.sso_cookies = response.headers.get_list("set-cookie")
-                return data
             except Exception:
                 request.ctx.sso_user = {}
                 return {}
+            else:
+                return data
 
         try:
             error_data = response.json()

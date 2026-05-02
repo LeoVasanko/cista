@@ -14,6 +14,8 @@ from typing import Concatenate, Literal, ParamSpec
 import msgspec
 import msgspec.toml
 
+from .util import pwhash
+
 
 class Config(msgspec.Struct):
     path: Path
@@ -199,9 +201,7 @@ def update_user(conf: Config, name: str, changes: dict) -> Config:
     except KeyError:
         u = User()
     if "password" in changes:
-        from . import auth
-
-        auth.set_password(u, changes["password"])
+        pwhash.set_password(u, changes["password"])
         del changes["password"]
     udict = msgspec.to_builtins(u, enc_hook=enc_hook)
     udict.update(changes)

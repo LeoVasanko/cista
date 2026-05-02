@@ -186,9 +186,10 @@ async def is_available_async(request_timeout: float = 2.0) -> bool:
     client = get_httpx_client()
     try:
         response = await client.get(url, timeout=request_timeout)
-        return response.status_code in (200, 405)
     except Exception:
         return False
+    else:
+        return response.status_code in (200, 405)
 
 
 _oo_available_cache: tuple[bool, float] | None = None

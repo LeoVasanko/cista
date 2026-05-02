@@ -152,7 +152,6 @@ ignore = [
     "EM101", # exception-message style; low signal for this project
     "EM102", # exception-message style; low signal for this project
     "INP001", # scripts folder intentionally lacks package markers
-    "PLC0415", # lazy imports used to avoid startup/circular import issues
     "PLR0911", # legacy complexity; keep other correctness rules enabled
     "PLR0912", # legacy complexity; keep other correctness rules enabled
     "PLR0913", # legacy complexity; keep other correctness rules enabled
@@ -163,7 +162,6 @@ ignore = [
     "TRY002", # exception-class strictness too noisy on legacy handlers
     "TRY003", # exception-message strictness too noisy on legacy handlers
     "TRY004", # type-check strictness too noisy on legacy handlers
-    "TRY300", # stylistic try/else preference
     "TRY301", # stylistic raise-in-try preference
 ]
 isort.known-first-party = ["cista"]

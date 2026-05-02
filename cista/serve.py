@@ -6,12 +6,11 @@ from fastapi_vue.hostutil import parse_endpoint
 from sanic import Sanic
 
 from cista import config, server80
+from cista.app import app
 
 
 def run(*, dev=False):
     """Run Sanic main process that spawns worker processes to serve HTTP requests."""
-    from .app import app
-
     _url, opts = parse_listen(config.config.listen)
     # Silence Sanic's warning about running in production rather than debug
     os.environ["SANIC_IGNORE_PRODUCTION_WARNING"] = "1"

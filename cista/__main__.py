@@ -6,6 +6,7 @@ from docopt import docopt
 
 import cista
 from cista import app, config, droppy, onlyoffice, serve, server80
+from cista.sso import PASKIA_BACKEND_URL
 from cista.util import pwgen
 
 del app, server80.app  # Only import needed, for Sanic multiprocessing
@@ -154,9 +155,6 @@ def _main():
     if not config.config.path.is_dir():
         raise ValueError(f"No such directory: {config.config.path}")
     dev = args["--dev"]
-    # Check for Paskia SSO
-    from cista.sso import PASKIA_BACKEND_URL
-
     # Print startup box
     startup_box = create_startup_box(
         folder=config.config.path,

@@ -1,6 +1,7 @@
-from pathlib import Path
+from pathlib import Path, PurePath
 from uuid import uuid4
 
+import msgspec
 import pytest
 import pytest_asyncio
 from sanic import Sanic
@@ -11,10 +12,6 @@ from cista.auth import bp as auth_bp
 
 
 def _persist_config():
-    from pathlib import PurePath
-
-    import msgspec
-
     def enc_hook(obj):
         if isinstance(obj, PurePath):
             return obj.as_posix()
