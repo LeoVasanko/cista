@@ -466,11 +466,13 @@ class OOConversionManager:
                     filepath, request_timeout=5.0
                 )
         except Exception as e:
-            future.set_exception(e)
+            if not future.done():
+                future.set_exception(e)
             async with self._lock:
                 self._in_flight.pop(key, None)
         else:
-            future.set_result(png_bytes)
+            if not future.done():
+                future.set_result(png_bytes)
             async with self._lock:
                 self._in_flight.pop(key, None)
 
