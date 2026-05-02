@@ -96,10 +96,11 @@ def format_duration_ms(duration_ms: float) -> str:
 
 
 def _display_width(text: str) -> int:
-    width = 0
-    for char in text:
-        width += 2 if unicodedata.east_asian_width(char) in {"F", "W"} else 1
-    return width
+    return sum(
+        1 + (unicodedata.east_asian_width(c) in "FW")
+        for c in text
+        if unicodedata.category(c) != "Mn"
+    )
 
 
 def _format_left(label: str) -> str:
@@ -242,28 +243,24 @@ def configure_access_logging() -> None:
 
 _LEVEL_EMOJI = {
     logging.DEBUG: "🔍",
-    logging.INFO: "i",
+    logging.INFO: "ℹ️",  # noqa: RUF001
     logging.WARNING: "⚠️",
     logging.ERROR: "🛑",
     logging.CRITICAL: "🛑",
 }
 
 
+def _format_level_prefix(levelno: int) -> str:
+    emoji = _LEVEL_EMOJI.get(levelno, "▪️")
+    prefix = f"{emoji} "
+    return prefix + (" " * max(0, 3 - _display_width(prefix)))
+
+
 class _EmojiFormatter(logging.Formatter):
     """Compact formatter: emoji + message, no timestamp/level text/logger name."""
 
     def format(self, record: logging.LogRecord) -> str:
-        emoji = _LEVEL_EMOJI.get(record.levelno, "▪️")
-        sep = "  " if record.levelno in (logging.INFO, logging.WARNING) else " "
-        msg = f"{emoji}{sep}{record.getMessage()}"
-        if record.exc_info:
-            if not record.exc_text:
-                record.exc_text = self.formatException(record.exc_info)
-            if record.exc_text:
-                msg = msg + "\n" + record.exc_text
-        if record.stack_info:
-            msg = msg + "\n" + record.stack_info
-        return msg
+        return _format_level_prefix(record.levelno) + record.getMessage()
 
 
 def configure_main_logging() -> None:
