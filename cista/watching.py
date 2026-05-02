@@ -656,7 +656,16 @@ def watcher(loop):
 
     while not stop_event.is_set():
         if use_inotify:
-            inotify_tree = inotify.adapters.InotifyTree(rootpath.as_posix())
+            try:
+                inotify_tree = inotify.adapters.InotifyTree(rootpath.as_posix())
+            except OSError as e:
+                inotify_tree = None
+                use_inotify = False
+                logger.warning(
+                    "Inotify watcher unavailable for %s; falling back to polling: %r",
+                    rootpath,
+                    e,
+                )
 
         # Initialize the tree from filesystem
         update_root(loop)

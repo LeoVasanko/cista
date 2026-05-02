@@ -78,7 +78,7 @@ source = "vcs"
 
 [tool.hatch.build]
 artifacts = ["cista/frontend-build", "cista/docker"]
-targets.sdist.hooks.custom.path = "scripts/fastapi-vue/build-frontend.py"
+targets.sdist.hooks.custom.path = "scripts/fastapi-vue/buildhook.py"
 targets.sdist.include = [
     "/cista",
 ]

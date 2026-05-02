@@ -16,15 +16,16 @@ Environment:
 
 import argparse
 import asyncio
-import contextlib
 import os
 import sys
+from contextlib import suppress
 from pathlib import Path
 
 # Import devutil from scripts/fastapi-vue (not a package, so we adjust sys.path)
 sys.path.insert(0, str(Path(__file__).with_name("fastapi-vue")))
 from devutil import (  # type: ignore[import-not-found]
     ProcessGroup,
+    check_ports_free,
     logger,
     ready,
     setup_vite,
@@ -33,7 +34,9 @@ from devutil import (  # type: ignore[import-not-found]
 from cista import config
 from cista.serve import parse_listen
 
+DEFAULT_VITE_PORT = 8989
 DEFAULT_BACKEND_PORT = 8999
+HEALTH = "/api/health?from=devserver.py"
 
 
 def setup_sanic_backend(
@@ -64,7 +67,7 @@ async def run_devserver(
         logger.warning("Frontend source not found at %s", front)
         raise SystemExit(1)
 
-    _frontend_url, npm_install, vite = setup_vite(frontend or "")
+    frontend_url, npm_install, vite = setup_vite(frontend or "", DEFAULT_VITE_PORT)
     backend_url, sanic_cmd = setup_sanic_backend(backend, extra_args)
 
     # Tell vite where to proxy API requests
@@ -72,19 +75,17 @@ async def run_devserver(
 
     async with ProcessGroup() as pg:
         install_proc = await pg.spawn(*npm_install, cwd=str(front))
-        await asyncio.sleep(0.2)  # reduce message overlap
+        await check_ports_free(frontend_url, backend_url)
         await pg.spawn(*sanic_cmd, cwd=str(reporoot))
 
-        # Wait for both install and backend to be ready
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(pg.wait(install_proc))
-            tg.create_task(ready(backend_url, path="/api/health?from=devserver.py"))
+        # Wait for dependencies to be installed and backend to accept requests
+        await pg.wait(install_proc, ready(backend_url, path=HEALTH))
 
         # Start Vite dev server (ProcessGroup waits for any exit, then terminates others)
         await pg.spawn(*vite, cwd=str(front))
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run Vite and Cista (Sanic) development servers",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -102,7 +103,7 @@ def main():
         help="Cista backend endpoint (default: from config, or :8999)",
     )
     args, unknown = parser.parse_known_args()
-    with contextlib.suppress(KeyboardInterrupt):
+    with suppress(KeyboardInterrupt):
         asyncio.run(run_devserver(args.listen, args.backend, unknown))
 
 
