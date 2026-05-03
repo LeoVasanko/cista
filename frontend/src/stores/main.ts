@@ -84,7 +84,7 @@ export const useMainStore = defineStore('main', {
       paskia?: boolean
       office_previews?: boolean
     },
-    dialog: '' as '' | 'settings' | 'usermgmt' | 'accessdenied' | 'tokens',
+    dialog: '' as '' | 'settings' | 'usermgmt' | 'accessdenied' | 'tokens' | 'about',
     uprogress: {} as any,
     dprogress: {} as any,
     prefs: {

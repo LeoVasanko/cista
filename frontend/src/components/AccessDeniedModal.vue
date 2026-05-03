@@ -1,32 +1,19 @@
 <template>
-  <div v-if="store.dialog === 'accessdenied'" class="modal-overlay">
-    <div class="modal-dialog" id="accessdenied">
-      <div class="modal-content access-denied">
-        <p class="icon">⛔</p>
-        <p class="message">Access Denied</p>
-        <button @click="reload" class="button">Reload</button>
-      </div>
+  <ModalDialog name="accessdenied" title="">
+    <div class="access-denied">
+      <p class="icon">⛔</p>
+      <p class="message">Access Denied</p>
+      <button @click="reload" class="button">Reload</button>
     </div>
-  </div>
+  </ModalDialog>
 </template>
 
 <script setup lang="ts">
-import { useMainStore } from '@/stores/main'
-import { holdGlobalBackdrop } from 'paskia'
-import { watchEffect } from 'vue'
-
-const store = useMainStore()
+import ModalDialog from '@/components/ModalDialog.vue'
 
 const reload = () => {
   location.reload()
 }
-
-// Keep backdrop active when this dialog shows
-watchEffect(() => {
-  if (store.dialog === 'accessdenied') {
-    holdGlobalBackdrop()
-  }
-})
 </script>
 
 <style scoped>

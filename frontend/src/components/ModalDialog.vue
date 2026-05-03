@@ -15,15 +15,55 @@
 <script setup lang="ts">
 import { useMainStore } from '@/stores/main'
 import { holdGlobalBackdrop, releaseGlobalBackdrop } from 'paskia'
-import { nextTick, ref, watchEffect } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch, watchEffect } from 'vue'
 
 const overlay = ref<HTMLDivElement | null>(null)
 const dialog = ref<HTMLDivElement | null>(null)
 const store = useMainStore()
+let backdropHeld = false
+
+const ensureGlobalBackdropStyles = () => {
+  if (typeof document === 'undefined') return
+  if (document.getElementById('paskia-dialog')) return
+  const style = document.createElement('style')
+  style.id = 'paskia-dialog'
+  style.textContent = `body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1099;
+  background: transparent;
+  backdrop-filter: blur(0) brightness(1);
+  -webkit-backdrop-filter: blur(0) brightness(1);
+  pointer-events: none;
+  visibility: hidden;
+  transition: all 0.2s ease-out;
+}
+body.paskia-backdrop::before {
+  -webkit-backdrop-filter: blur(.2rem) brightness(0.5);
+  backdrop-filter: blur(.2rem) brightness(0.5);
+  visibility: visible;
+}
+body.paskia-backdrop {
+  overflow: auto;
+}
+#paskia-iframe {
+  border: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  color-scheme: auto;
+  background: transparent;
+}
+`
+  document.head.insertBefore(style, document.head.firstChild)
+}
 
 const close = () => {
   store.dialog = ''
-  releaseGlobalBackdrop()
 }
 
 const props = defineProps<{
@@ -33,7 +73,6 @@ const props = defineProps<{
 
 const show = () => {
   store.dialog = props.name
-  holdGlobalBackdrop()
   nextTick(() => {
     overlay.value?.focus()
     const input = dialog.value?.querySelector('input')
@@ -41,6 +80,29 @@ const show = () => {
   })
 }
 defineExpose({ show, close })
+
+watch(
+  () => store.dialog === props.name,
+  isOpen => {
+    if (isOpen && !backdropHeld) {
+      ensureGlobalBackdropStyles()
+      holdGlobalBackdrop()
+      backdropHeld = true
+    } else if (!isOpen && backdropHeld) {
+      releaseGlobalBackdrop()
+      backdropHeld = false
+    }
+  },
+  { immediate: true }
+)
+
+onBeforeUnmount(() => {
+  if (backdropHeld) {
+    releaseGlobalBackdrop()
+    backdropHeld = false
+  }
+})
+
 watchEffect(() => {
   if (overlay.value) {
     overlay.value.focus()

@@ -8,6 +8,7 @@
   <SettingsModal />
   <UserManagementModal />
   <UserTokensModal />
+  <AboutModal />
   <AccessDeniedModal />
   <header>
     <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query" />
@@ -28,11 +29,12 @@ import type HeaderMain from '@/components/HeaderMain.vue'
 import { loadSession, watchConnect, watchDisconnect } from '@/repositories/WS'
 import { useMainStore } from '@/stores/main'
 import type { ComputedRef } from 'vue'
-import { onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterView } from 'vue-router'
 
 import Router from '@/router/index'
 import { computed } from 'vue'
+import AboutModal from './components/AboutModal.vue'
 import AccessDeniedModal from './components/AccessDeniedModal.vue'
 import SelectionToolbar from './components/SelectionToolbar.vue'
 import type SettingsModalVue from './components/SettingsModal.vue'
@@ -56,12 +58,16 @@ const path: ComputedRef<Path> = computed(() => {
     query
   }
 })
-watchEffect(() => {
-  document.title =
-    path.value.path.replace(/\/$/, '').split('/').pop() ||
-    store.server.name ||
-    'Cista Storage'
-})
+watch(
+  () => path.value.path,
+  () => {
+    document.title =
+      path.value.path.replace(/\/$/, '').split('/').pop() ||
+      store.server.name ||
+      'Cista Storage'
+  },
+  { immediate: true }
+)
 onMounted(loadSession)
 onMounted(watchConnect)
 onUnmounted(watchDisconnect)

@@ -164,6 +164,14 @@ const settingsMenu = (e: Event) => {
       }
     })
   }
+
+  items.push({
+    label: 'ℹ️ About Cista...',
+    onClick: () => {
+      store.dialog = 'about'
+    }
+  })
+
   ContextMenu.showContextMenu({
     // @ts-ignore
     x: e.target.getBoundingClientRect().right,
