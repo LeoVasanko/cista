@@ -253,6 +253,12 @@ export const useMainStore = defineStore('main', {
       }))
       worker.postMessage({ type: 'update', documents: docData })
     },
+    /** Notify UI/search that existing document objects were mutated in-place */
+    documentsChanged() {
+      triggerUpdate()
+      this.docVersion++
+      this.syncSearchWorker()
+    },
     search(query: string, loc: string) {
       const worker = getSearchWorker()
       const id = ++searchId

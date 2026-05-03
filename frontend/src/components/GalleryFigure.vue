@@ -10,7 +10,7 @@
   >
     <figure>
       <slot></slot>
-      <MediaPreview ref=m :doc="doc" tabindex=-1 quality="sz=512" class="figcontent" />
+      <MediaPreview :key="snap.ext" ref=m :doc="doc" tabindex=-1 quality="sz=512" class="figcontent" />
       <div class="titlespacer"></div>
       <figcaption @click.prevent @contextmenu.prevent="$emit('menu', $event)">
         <template v-if="editing">
@@ -26,8 +26,8 @@
           <SelectBox :doc=doc @click="store.cursor = doc.key"/>
           <div class="filename-row">
             <span class="filename-group">
-              <span class="filename">{{ displayName }}<SparseIndicator :doc="doc" class="after-name" /></span>
-              <span v-if="doc.ext" class="file-ext">.{{ doc.ext }}</span>
+              <span class="filename">{{ snap.displayName }}<SparseIndicator :doc="doc" class="after-name" /></span>
+              <span v-if="snap.ext" class="file-ext">.{{ snap.ext }}</span>
             </span>
             <button class="rename-btn" @click="$emit('rename')" title="Rename">✏️</button>
           </div>
@@ -36,7 +36,7 @@
       </figcaption>
     </figure>
     <CursorTooltip ref="tooltip" :text="tooltipText">
-      <div class="tooltip-name">{{ doc.name }}</div>
+      <div class="tooltip-name">{{ snap.name }}</div>
       <div class="tooltip-details">{{ doc.modified }} — {{ doc.sizedisp }}</div>
       <div v-if="doc.sparseIndicator" class="tooltip-sparse">{{ sparseText }}</div>
     </CursorTooltip>
@@ -72,10 +72,18 @@ const sparseText = computed(() => {
   return `${formatSize(allocated)} allocated of ${formatSize(size)}`
 })
 
-const displayName = computed(() => {
+// Single subscription to docVersion; all doc-derived values come from here.
+// This is needed because Doc instances are non-reactive plain objects, so
+// mutating doc.name alone won't invalidate computed caches.
+const snap = computed(() => {
+  void store.docVersion
   const { name, ext } = props.doc
   const base = ext ? name.slice(0, name.length - ext.length - 1) : name
-  return base.replace(/[_.]+/g, ' ')
+  return {
+    name,
+    ext,
+    displayName: base.replace(/[_.]+/g, ' ')
+  }
 })
 
 const onclick = (ev: Event) => {

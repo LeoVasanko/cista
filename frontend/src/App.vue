@@ -95,6 +95,8 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
       event.key === 'ArrowDown' ||
       event.key === 'ArrowLeft' ||
       event.key === 'ArrowRight' ||
+      event.key === 'PageUp' ||
+      event.key === 'PageDown' ||
       (c && event.code === 'Space')
     ) {
       if (!input) event.preventDefault()
@@ -104,6 +106,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   //console.log("key pressed", event)
   /// Long if-else machina for all keys we handle here
   let arrow = ''
+  let paging = ''
   const inHeader = !!(event.target as HTMLElement).closest('.headermain')
   const inBreadcrumb = !!(event.target as HTMLElement).closest('.breadcrumb')
   // Handle arrows: in search input with text, only up/down; otherwise all arrows
@@ -118,9 +121,19 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
     // Don't intercept arrows for non-search inputs (e.g. rename input)
     if (input && !searchInput) return
     arrow = dir
+  } else if (
+    event.key === 'PageUp' ||
+    event.key === 'PageDown' ||
+    event.key === 'Home' ||
+    event.key === 'End'
+  ) {
+    if (input) return
+    paging = event.key
   }
   if (arrow) {
     // Arrow key handling - fall through to bottom
+  } else if (paging) {
+    // Paging/navigation key handling - fall through to bottom
   }
   // Find: process on keydown so that we can bypass the built-in search hotkey
   else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
@@ -239,12 +252,28 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
           break
       }
     }
+  } else if (paging && !keyup && !inHeader && !inBreadcrumb) {
+    switch (paging) {
+      case 'PageUp':
+        f = () => fileExplorer.pageUp?.(event)
+        break
+      case 'PageDown':
+        f = () => fileExplorer.pageDown?.(event)
+        break
+      case 'Home':
+        f = () => fileExplorer.home?.(event)
+        break
+      case 'End':
+        f = () => fileExplorer.end?.(event)
+        break
+    }
   }
   if (f) {
     // Initial move, then t0 delay until repeats at tr intervals
     const t0 = 200,
       tr = event.altKey ? 20 : 100
     f()
+    if (paging === 'Home' || paging === 'End') return
     timer = setTimeout(() => {
       timer = setInterval(f, tr)
     }, t0 - tr)

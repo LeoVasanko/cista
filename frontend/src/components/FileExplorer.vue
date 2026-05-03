@@ -76,6 +76,7 @@ import { apiFetch } from '@/repositories/Client'
 import { Doc } from '@/repositories/Document'
 import { useMainStore } from '@/stores/main'
 import { formatSize } from '@/utils'
+import { createKeyboardFollowScroll } from '@/utils/keyboardFollowScroll'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import {
   computed,
@@ -112,21 +113,95 @@ const parseErrorMessage = async (res: Response) => {
   }
 }
 
+const getCursorIndex = () =>
+  store.cursor
+    ? props.documents.findIndex(doc => doc.key === store.cursor)
+    : props.documents.length
+
+const getDocElement = (key: string) =>
+  document.getElementById(`file-${key}`) as HTMLElement | null
+
+const moveCursorTo = (moveto: number, ev: KeyboardEvent | null) => {
+  const select = !!ev?.shiftKey
+  const docs = props.documents
+  if (docs.length === 0) {
+    store.cursor = ''
+    return
+  }
+  const N = docs.length
+  const mod = (a: number, b: number) => ((a % b) + b) % b
+  const increment = (i: number, d: number) => mod(i + d, N + 1)
+  const index = getCursorIndex()
+
+  store.cursor = docs[moveto]?.key ?? ''
+  const tr = store.cursor ? getDocElement(store.cursor) : null
+  if (select) {
+    let [begin, end] = moveto >= index ? [index, moveto] : [moveto, index]
+    for (let p = begin; p !== end; p = increment(p, 1)) {
+      if (p === N) continue
+      const key = docs[p]!.key
+      if (store.selected.has(key)) store.selected.delete(key)
+      else store.selected.add(key)
+    }
+  }
+  keepCursorVisibleSmooth(tr)
+  if (moveto === N) {
+    if (index > moveto) focusBreadcrumb()
+    else focusHeader()
+  }
+}
+
+const pageMove = (direction: 1 | -1, ev: KeyboardEvent) => {
+  const docs = props.documents
+  if (docs.length === 0) return
+  const scroller =
+    (document.querySelector('main') as HTMLElement | null) ?? document.documentElement
+  const currentIndex = getCursorIndex()
+  const currentEl = store.cursor ? getDocElement(store.cursor) : null
+  const currentCenter = currentEl
+    ? currentEl.getBoundingClientRect().top +
+      currentEl.getBoundingClientRect().height / 2
+    : scroller.getBoundingClientRect().top + scroller.clientHeight / 2
+  const targetCenter =
+    currentCenter + direction * Math.max(120, scroller.clientHeight - 140)
+
+  let bestIndex = direction > 0 ? docs.length - 1 : 0
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (let i = 0; i < docs.length; i++) {
+    if (
+      currentIndex !== docs.length &&
+      ((direction > 0 && i <= currentIndex) || (direction < 0 && i >= currentIndex))
+    )
+      continue
+    const el = getDocElement(docs[i]!.key)
+    if (!el) continue
+    const center =
+      el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2
+    const distance = Math.abs(center - targetCenter)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      bestIndex = i
+    }
+  }
+  markKeyboardFollow()
+  moveCursorTo(bestIndex, ev)
+}
+
 // File rename
 const editing = shallowRef<Doc | null>(null)
 const rename = async (doc: Doc, newName: string) => {
   const oldName = doc.name
   doc.name = newName // We should get an update from watch but this is quicker
+  store.documentsChanged()
   try {
     const dstUrl = doc.loc ? filesUrl(doc.loc) : '/files/'
-    const res = await apiFetch(
-      `${dstUrl}?mv=${doc.key}&to=${encodeURIComponent(newName)}`,
-      { method: 'POST' }
-    )
+    const targetUrl = `${dstUrl}${dstUrl.endsWith('/') ? '' : '/'}${encodeURIComponent(newName)}`
+    const res = await apiFetch(`${targetUrl}?mv=${doc.key}`, { method: 'POST' })
     if (!res.ok) throw new Error(await parseErrorMessage(res))
   } catch (err) {
     console.error('Rename failed', err)
     doc.name = oldName
+    store.documentsChanged()
     store.showToast(err instanceof Error ? err.message : 'Rename failed')
   }
 }
@@ -176,13 +251,32 @@ defineExpose({
     } else {
       store.selected.add(key)
     }
+    markKeyboardFollow()
     this.cursorMove(1, null)
   },
   up(ev: KeyboardEvent) {
+    markKeyboardFollow()
     this.cursorMove(-1, ev)
   },
   down(ev: KeyboardEvent) {
+    markKeyboardFollow()
     this.cursorMove(1, ev)
+  },
+  pageUp(ev: KeyboardEvent) {
+    pageMove(-1, ev)
+  },
+  pageDown(ev: KeyboardEvent) {
+    pageMove(1, ev)
+  },
+  home(ev: KeyboardEvent) {
+    if (!props.documents.length) return
+    markKeyboardFollow()
+    moveCursorTo(0, ev)
+  },
+  end(ev: KeyboardEvent) {
+    if (!props.documents.length) return
+    markKeyboardFollow()
+    moveCursorTo(props.documents.length - 1, ev)
   },
   left(ev: KeyboardEvent) {
     // Only go back if we're in a subfolder (not at root)
@@ -197,8 +291,6 @@ defineExpose({
     if (a) a.click()
   },
   cursorMove(d: number, ev: KeyboardEvent | null) {
-    const select = !!ev?.shiftKey
-    // Move cursor up or down (keyboard navigation)
     const docs = props.documents
     if (docs.length === 0) {
       store.cursor = ''
@@ -207,35 +299,9 @@ defineExpose({
     const N = docs.length
     const mod = (a: number, b: number) => ((a % b) + b) % b
     const increment = (i: number, d: number) => mod(i + d, N + 1)
-    const index = store.cursor
-      ? docs.findIndex(doc => doc.key === store.cursor)
-      : docs.length
+    const index = getCursorIndex()
     const moveto = increment(index, d)
-    store.cursor = docs[moveto]?.key ?? ''
-    const tr = store.cursor ? document.getElementById(`file-${store.cursor}`) : ''
-    if (select) {
-      // Go forwards, possibly wrapping over the end; the last entry is not toggled
-      let [begin, end] = d > 0 ? [index, moveto] : [moveto, index]
-      for (let p = begin; p !== end; p = increment(p, 1)) {
-        if (p === N) continue
-        const key = docs[p]!.key
-        if (store.selected.has(key)) store.selected.delete(key)
-        else store.selected.add(key)
-      }
-    }
-    // @ts-ignore
-    scrolltr = tr
-    if (!scrolltimer) {
-      scrolltimer = setTimeout(() => {
-        if (scrolltr) scrolltr.scrollIntoView({ block: 'center', behavior: 'smooth' })
-        scrolltimer = null
-      }, 300)
-    }
-    // When leaving the file list: up goes to breadcrumbs, down goes to header
-    if (moveto === N) {
-      if (d < 0) focusBreadcrumb()
-      else focusHeader()
-    }
+    moveCursorTo(moveto, ev)
   }
 })
 const focusHeader = () => {
@@ -248,8 +314,9 @@ const focusBreadcrumb = () => {
   const el = document.querySelector('.breadcrumb') as HTMLElement | null
   if (el) el.focus()
 }
-let scrolltimer: any = null
-let scrolltr: any = null
+const keyboardFollowScroll = createKeyboardFollowScroll()
+const markKeyboardFollow = keyboardFollowScroll.markKeyboardFollow
+const keepCursorVisibleSmooth = keyboardFollowScroll.keepVisible
 watchEffect(() => {
   if (store.cursor && store.cursor !== editing.value?.key) editing.value = null
   if (editing.value) store.cursor = editing.value?.key
@@ -257,7 +324,7 @@ watchEffect(() => {
     const a = document.querySelector(
       `#file-${store.cursor} .name a`
     ) as HTMLAnchorElement | null
-    if (a) a.focus()
+    if (a) a.focus({ preventScroll: true })
   }
 })
 watchEffect(() => {
@@ -276,11 +343,11 @@ onMounted(() => {
   modifiedTimer = setInterval(updateModified, 1000)
   const active = document.querySelector('.cursor') as HTMLElement | null
   if (active) {
-    active.scrollIntoView({ block: 'center', behavior: 'instant' })
-    active.focus()
+    active.focus({ preventScroll: true })
   }
 })
 onUnmounted(() => {
+  keyboardFollowScroll.cancel()
   clearInterval(modifiedTimer)
 })
 const mkdir = async (doc: Doc, name: string) => {
