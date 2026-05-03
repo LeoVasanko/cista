@@ -86,7 +86,7 @@ const aspectByKey = ref<Record<string, number>>({})
 const optimalRowHeightPx = (ratios: number[]) => {
   const w = Math.max(1, columnWidthPx.value)
   const minH = Math.max(1, Math.round(7 * emPx.value))
-  const maxH = Math.max(minH, Math.round(25 * emPx.value))
+  const maxH = Math.max(minH, Math.round(30 * emPx.value))
   const usable = ratios.filter(ar => Number.isFinite(ar) && ar > 0)
   if (usable.length === 0) return Math.round(15 * emPx.value)
 
