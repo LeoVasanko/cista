@@ -11,14 +11,17 @@
     <figure>
       <slot></slot>
       <MediaPreview ref=m :doc="doc" tabindex=-1 quality="sz=512" class="figcontent" />
+      <div v-if="!doc.dir && doc.ext" class="ext-badge">{{ doc.ext }}</div>
       <div class="titlespacer"></div>
       <figcaption @click.prevent @contextmenu.prevent="$emit('menu', $event)">
         <template v-if="editing">
-          <FileRenameInput :doc=doc :rename=editing.rename :exit=editing.exit />
+          <div class="rename-wrap">
+            <FileRenameInput :doc=doc :rename=editing.rename :exit=editing.exit />
+          </div>
         </template>
         <template v-else>
           <SelectBox :doc=doc @click="store.cursor = doc.key"/>
-          <span>{{ doc.name }}<SparseIndicator :doc="doc" class="after-name" /></span>
+          <span>{{ displayName }}<SparseIndicator :doc="doc" class="after-name" /></span>
           <div class=namespacer></div>
         </template>
       </figcaption>
@@ -60,6 +63,12 @@ const sparseText = computed(() => {
   return `${formatSize(allocated)} allocated of ${formatSize(size)}`
 })
 
+const displayName = computed(() => {
+  const { name, ext } = props.doc
+  const base = ext ? name.slice(0, name.length - ext.length - 1) : name
+  return base.replace(/[_.]+/g, ' ')
+})
+
 const onclick = (ev: Event) => {
   if (m.value!.play()) ev.preventDefault()
   store.cursor = props.doc.key
@@ -80,6 +89,20 @@ const onclick = (ev: Event) => {
 }
 .after-name {
   margin-left: 0.3em;
+}
+.ext-badge {
+  position: absolute;
+  bottom: 2.5em;
+  right: 1em;
+  color: #fff;
+  font-size: 0.65em;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-shadow: 0 0 .2em #000, 0 0 .2em #000;
+  line-height: 1.4;
+  pointer-events: none;
+  user-select: none;
 }
 figure {
   height: var(--gallery-figure-height, 15em);
@@ -130,6 +153,7 @@ figcaption span {
   cursor: default;
   padding: .5em;
   color: #fff;
+  font-size: 0.8em;
   font-weight: 600;
   text-shadow: 0 0 .2em #000, 0 0 .2em #000;
   text-wrap: nowrap;
@@ -143,5 +167,9 @@ figcaption .namespacer {
   flex-shrink: 100000;
   height: 2em;
   width: 2em;
+}
+.rename-wrap {
+  font-size: 0.8em;
+  width: 100%;
 }
 </style>
