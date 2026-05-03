@@ -11,17 +11,26 @@
     <figure>
       <slot></slot>
       <MediaPreview ref=m :doc="doc" tabindex=-1 quality="sz=512" class="figcontent" />
-      <div v-if="!doc.dir && doc.ext" class="ext-badge">{{ doc.ext }}</div>
       <div class="titlespacer"></div>
       <figcaption @click.prevent @contextmenu.prevent="$emit('menu', $event)">
         <template v-if="editing">
-          <div class="rename-wrap">
-            <FileRenameInput :doc=doc :rename=editing.rename :exit=editing.exit />
+          <SelectBox :doc=doc @click="store.cursor = doc.key"/>
+          <div class="filename-row rename-row">
+            <div class="rename-wrap">
+              <FileRenameInput :doc=doc :rename=editing.rename :exit=editing.exit />
+            </div>
           </div>
+          <div class=namespacer></div>
         </template>
         <template v-else>
           <SelectBox :doc=doc @click="store.cursor = doc.key"/>
-          <span>{{ displayName }}<SparseIndicator :doc="doc" class="after-name" /></span>
+          <div class="filename-row">
+            <span class="filename-group">
+              <span class="filename">{{ displayName }}<SparseIndicator :doc="doc" class="after-name" /></span>
+              <span v-if="doc.ext" class="file-ext">.{{ doc.ext }}</span>
+            </span>
+            <button class="rename-btn" @click="$emit('rename')" title="Rename">✏️</button>
+          </div>
           <div class=namespacer></div>
         </template>
       </figcaption>
@@ -45,7 +54,7 @@ import SparseIndicator from './SparseIndicator.vue'
 
 const store = useMainStore()
 type EditingProp = {
-  rename: (name: string) => void
+  rename: (doc: Doc, newName: string) => void
   exit: () => void
 }
 
@@ -90,19 +99,74 @@ const onclick = (ev: Event) => {
 .after-name {
   margin-left: 0.3em;
 }
-.ext-badge {
+.filename-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  position: relative;
+  overflow: visible;
+  max-width: calc(100% - 4.5em);
+}
+.filename-row::after {
+  content: '';
   position: absolute;
-  bottom: 2.5em;
-  right: 1em;
+  left: 100%;
+  top: 0;
+  width: 1.4em;
+  height: 100%;
+}
+.filename-group {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  max-width: 100%;
+}
+.filename {
+  cursor: default;
+  padding: .5em 0;
   color: #fff;
-  font-size: 0.65em;
+  font-size: 0.8em;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
   text-shadow: 0 0 .2em #000, 0 0 .2em #000;
-  line-height: 1.4;
+  text-wrap: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.file-ext {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.8em;
+  font-weight: 600;
+  text-shadow: 0 0 .2em #000, 0 0 .2em #000;
+  padding: 0 .15em 0 0;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.rename-btn {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translate(0.2em, -50%);
+  z-index: 2;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.8em;
+  line-height: 1;
+  opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  user-select: none;
+  transition: opacity 0.12s ease;
+}
+.filename-row:hover .rename-btn {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 figure {
   height: var(--gallery-figure-height, 15em);
@@ -149,18 +213,10 @@ figcaption input[type='checkbox'] {
 figcaption input[type='checkbox']:checked, figcaption:hover input[type='checkbox'] {
   opacity: 1;
 }
-figcaption span {
-  cursor: default;
-  padding: .5em;
-  color: #fff;
-  font-size: 0.8em;
-  font-weight: 600;
-  text-shadow: 0 0 .2em #000, 0 0 .2em #000;
-  text-wrap: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
+.cursor .filename {
+  color: var(--accent-color);
 }
-.cursor figcaption span {
+.cursor .file-ext {
   color: var(--accent-color);
 }
 figcaption .namespacer {
@@ -170,6 +226,15 @@ figcaption .namespacer {
 }
 .rename-wrap {
   font-size: 0.8em;
-  width: 100%;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.rename-row {
+  max-width: calc(100% - 4.5em);
+}
+.rename-wrap :deep(#FileRenameInput) {
+  min-width: 0;
+  max-width: 100%;
 }
 </style>

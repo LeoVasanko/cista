@@ -8,6 +8,7 @@
         :editing="editing === doc ? {rename, exit} : null"
         :style="{ '--gallery-figure-height': rowHeightsByKey[doc.key] ?? '15em' }"
         @menu="contextMenu($event, doc)"
+        @rename="editing = doc; store.cursor = doc.key"
         :class="{ 'folder-start': showFolderBreadcrumb(index) }"
       />
     </template>
@@ -310,7 +311,7 @@ let scrolltr: any = null
 watchEffect(() => {
   if (store.cursor && store.cursor !== editing.value?.key) editing.value = null
   if (editing.value) store.cursor = editing.value.key
-  if (store.cursor) {
+  if (store.cursor && !editing.value) {
     const a = document.querySelector(
       `#file-${store.cursor}`
     ) as HTMLAnchorElement | null

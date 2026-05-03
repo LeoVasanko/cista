@@ -115,6 +115,8 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
     if (searchHasText && (dir === 'left' || dir === 'right')) {
       return // Let browser handle cursor movement
     }
+    // Don't intercept arrows for non-search inputs (e.g. rename input)
+    if (input && !searchInput) return
     arrow = dir
   }
   if (arrow) {
@@ -136,6 +138,8 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   else if (keyup && event.key === 'Escape') {
     store.error = ''
     store.clearToast()
+    // Keep rename and other non-search inputs isolated from search behavior.
+    if (input && !searchInput) return
     headerMain.value!.clearSearch(event)
     store.focusBreadcrumb()
   } else if (!input && keyup && event.key === 'Backspace') {
