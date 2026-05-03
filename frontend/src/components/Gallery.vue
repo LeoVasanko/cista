@@ -232,18 +232,23 @@ defineExpose({
     } else {
       store.selected.add(key)
     }
+    markKeyboardFollow()
     this.cursorMove(1, null)
   },
   up(ev: KeyboardEvent) {
+    markKeyboardFollow()
     this.cursorMove(-columns.value, ev)
   },
   down(ev: KeyboardEvent) {
+    markKeyboardFollow()
     this.cursorMove(columns.value, ev)
   },
   left(ev: KeyboardEvent) {
+    markKeyboardFollow()
     this.cursorMove(-1, ev)
   },
   right(ev: KeyboardEvent) {
+    markKeyboardFollow()
     this.cursorMove(1, ev)
   },
   cursorMove(d: number, ev: KeyboardEvent | null) {
@@ -270,7 +275,9 @@ defineExpose({
       if (Math.abs(d) >= N || Math.sign(d) !== Math.sign(moveto - index)) moveto = N
     }
     store.cursor = docs[moveto]?.key ?? ''
-    const tr = store.cursor ? document.getElementById(`file-${store.cursor}`) : ''
+    const tr = store.cursor
+      ? (document.getElementById(`file-${store.cursor}`) as HTMLElement | null)
+      : null
     if (select) {
       // Go forwards, possibly wrapping over the end; the last entry is not toggled
       let [begin, end] = d > 0 ? [index, moveto] : [moveto, index]
@@ -281,14 +288,7 @@ defineExpose({
         else store.selected.add(key)
       }
     }
-    // @ts-ignore
-    scrolltr = tr
-    if (!scrolltimer) {
-      scrolltimer = setTimeout(() => {
-        if (scrolltr) scrolltr.scrollIntoView({ block: 'center', behavior: 'smooth' })
-        scrolltimer = null
-      }, 300)
-    }
+    keepCursorVisibleSmooth(tr)
     // When leaving the file list: up goes to breadcrumbs, down goes to header
     if (moveto === N) {
       if (d < 0) focusBreadcrumb()
@@ -306,8 +306,109 @@ const focusBreadcrumb = () => {
   const el = document.querySelector('.breadcrumb') as HTMLElement | null
   if (el) el.focus()
 }
-let scrolltimer: any = null
-let scrolltr: any = null
+let scrollAnimationFrame: number | null = null
+let scrollTargetY: number | null = null
+let scrollVelocity = 0
+let keyboardFollowUntil = 0
+
+const markKeyboardFollow = () => {
+  keyboardFollowUntil = performance.now() + 260
+}
+const keyboardFollowActive = () => performance.now() < keyboardFollowUntil
+
+const getScrollContainer = () =>
+  (document.querySelector('main') as HTMLElement | null) ?? document.documentElement
+
+const clampScrollY = (y: number, scroller: HTMLElement) => {
+  const maxY = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+  return Math.min(maxY, Math.max(0, y))
+}
+
+const cursorScrollTarget = (el: HTMLElement): number | null => {
+  const scroller = getScrollContainer()
+  const rect = el.getBoundingClientRect()
+  const scrollerRect = scroller.getBoundingClientRect()
+  const topPad = 84
+  const bottomPad = 84
+  const visibleTop = scrollerRect.top + topPad
+  const visibleBottom = scrollerRect.bottom - bottomPad
+
+  if (rect.top >= visibleTop && rect.bottom <= visibleBottom) return null
+
+  // Keep the cursor within a comfortable viewport band instead of forcing center.
+  if (rect.top < visibleTop) {
+    return clampScrollY(scroller.scrollTop + (rect.top - visibleTop), scroller)
+  }
+
+  return clampScrollY(scroller.scrollTop + (rect.bottom - visibleBottom), scroller)
+}
+
+const runSmoothCursorScroll = () => {
+  if (scrollAnimationFrame != null) return
+
+  const step = () => {
+    if (scrollTargetY == null) {
+      scrollVelocity *= 0.78
+      if (Math.abs(scrollVelocity) > 0.05) {
+        const scroller = getScrollContainer()
+        const next = clampScrollY(scroller.scrollTop + scrollVelocity, scroller)
+        scroller.scrollTop = next
+        scrollAnimationFrame = requestAnimationFrame(step)
+        return
+      }
+      scrollVelocity = 0
+      scrollAnimationFrame = null
+      return
+    }
+
+    const scroller = getScrollContainer()
+    const current = scroller.scrollTop
+    const delta = scrollTargetY - current
+    const absDelta = Math.abs(delta)
+    if (absDelta < 0.6 && Math.abs(scrollVelocity) < 0.08) {
+      scroller.scrollTop = scrollTargetY
+      scrollVelocity = 0
+      scrollTargetY = null
+      scrollAnimationFrame = null
+      return
+    }
+
+    // Spring + damping momentum model for smoother retargeting during rapid selection changes.
+    const stiffness = Math.min(0.03, 0.012 + absDelta / 8000)
+    const damping = 0.84
+    scrollVelocity += delta * stiffness
+    scrollVelocity *= damping
+
+    const next = clampScrollY(current + scrollVelocity, scroller)
+    if (next === current) scrollVelocity = 0
+    scroller.scrollTop = next
+    scrollAnimationFrame = requestAnimationFrame(step)
+  }
+
+  scrollAnimationFrame = requestAnimationFrame(step)
+}
+
+const keepCursorVisibleSmooth = (el: HTMLElement | null) => {
+  if (!keyboardFollowActive()) {
+    scrollTargetY = null
+    scrollVelocity = 0
+    return
+  }
+
+  if (!el) {
+    scrollTargetY = null
+    return
+  }
+
+  const target = cursorScrollTarget(el)
+  if (target == null) {
+    scrollTargetY = null
+    return
+  }
+
+  scrollTargetY = target
+  runSmoothCursorScroll()
+}
 watchEffect(() => {
   if (store.cursor && store.cursor !== editing.value?.key) editing.value = null
   if (editing.value) store.cursor = editing.value.key
@@ -316,8 +417,7 @@ watchEffect(() => {
       `#file-${store.cursor}`
     ) as HTMLAnchorElement | null
     if (a) {
-      a.focus()
-      a.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      a.focus({ preventScroll: true })
     }
   }
 })
@@ -331,8 +431,7 @@ let resizeObserver: ResizeObserver | null = null
 onMounted(() => {
   const active = document.querySelector('.cursor') as HTMLElement | null
   if (active) {
-    active.scrollIntoView({ block: 'center', behavior: 'instant' })
-    active.focus()
+    active.focus({ preventScroll: true })
   }
   updateColumns()
   seedFromDocs()
@@ -343,6 +442,9 @@ onMounted(() => {
   }
 })
 onUnmounted(() => {
+  if (scrollAnimationFrame != null) cancelAnimationFrame(scrollAnimationFrame)
+  scrollAnimationFrame = null
+  scrollTargetY = null
   resizeObserver?.disconnect()
   gallery.value?.removeEventListener('load', onImgLoad, { capture: true })
 })
