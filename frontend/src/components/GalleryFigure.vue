@@ -211,9 +211,9 @@ figcaption {
   width: 100%;
 }
 figcaption input[type='checkbox'] {
-  width: 1.5em;
-  height: 1.5em;
-  margin: .25em 0 .25em .25em;
+  width: 1.1em;
+  height: 1.1em;
+  margin: .25em .4em .25em .35em;
   opacity: 0;
   flex-shrink: 0;
   transition: opacity var(--transition-time) ease-in-out;
