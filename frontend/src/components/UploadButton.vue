@@ -11,7 +11,7 @@
 import { Doc } from '@/repositories/Document'
 import { getDocuments } from '@/stores/documentStore'
 import { useMainStore } from '@/stores/main'
-import { collator } from '@/utils'
+import { collator, formatSize } from '@/utils'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -44,6 +44,7 @@ type InflightBlock = {
 }
 
 const UPLOAD_BLOCK_SIZE = 16 << 20 // 16 MiB
+const UPLOAD_MARGIN_BYTES = 512 * 1024 * 1024 // 512 MiB
 function pasteHandler(event: ClipboardEvent) {
   const items = Array.from(event.clipboardData?.items ?? [])
   const infiles = [] as File[]
@@ -116,6 +117,28 @@ const uploadCloudFiles = (files: CloudFile[]) => {
   }
   if (!files.length) return
   files.sort((a, b) => collator.compare(a.cloudName, b.cloudName))
+
+  // Space check: reject the whole batch if there isn't enough free space.
+  const batchTotal = files.reduce((sum, f) => sum + f.file.size, 0)
+  const allDocs = getDocuments()
+  const docByPath = new Map<string, Doc>()
+  for (const d of allDocs) {
+    const path = d.loc ? `${d.loc}/${d.name}` : d.name
+    docByPath.set(path, d)
+  }
+  let overwriteSize = 0
+  for (const f of files) {
+    const existing = docByPath.get(f.cloudName)
+    if (existing && !existing.dir) overwriteSize += existing.size
+  }
+  const netNeed = batchTotal - overwriteSize
+  if (store.space.free < netNeed + UPLOAD_MARGIN_BYTES) {
+    store.showToast(
+      `Not enough free space (need ${formatSize(netNeed + UPLOAD_MARGIN_BYTES)}, have ${formatSize(store.space.free)})`
+    )
+    return
+  }
+
   // Optimistic update: ghost folders and files
   const now = Math.floor(Date.now() / 1000)
   const docs = getDocuments()
