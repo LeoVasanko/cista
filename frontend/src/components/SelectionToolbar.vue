@@ -15,11 +15,11 @@
     </div>
     <span class="select-size">{{ selectionDisplay.size }}</span>
     <DownloadButton />
-    <button
-      class="action-button"
-      title="Copy share link (Alt-click for read/write)"
+    <SvgButton
+      name="link"
+      tooltip="Copy share link (Alt-click for read/write)"
       @click="copyShareLink"
-    >share</button>
+    />
     <SvgButton name="copy" tooltip="Copy here" @click="op('cp', dst)" />
     <SvgButton name="paste" tooltip="Move here" @click="op('mv', dst)" />
     <SvgButton name="trash" tooltip="Delete ⚠️" @click="op('rm')" />
