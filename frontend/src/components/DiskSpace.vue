@@ -26,7 +26,7 @@
       </defs>
 
       <g :filter="isExpanded ? 'url(#pieShadow)' : 'none'">
-        <circle :r="midRadius" :cx="pieCx" :cy="pieCy" fill="transparent" stroke="url(#otherGradient)" :stroke-width="ringWidth" />
+        <circle :r="midRadius" :cx="pieCx" :cy="pieCy" fill="transparent" :stroke="showOtherCategory ? 'url(#otherGradient)' : freeColor" :stroke-width="ringWidth" />
         <circle :r="midRadius" :cx="pieCx" :cy="pieCy" fill="transparent" :stroke="freeColor" :stroke-width="ringWidth" :stroke-dasharray="pieFreeDash" :stroke-dashoffset="pieFreeOffsetVal" :transform="`rotate(-90 ${pieCx} ${pieCy})`" />
         <circle :r="midRadius" :cx="pieCx" :cy="pieCy" fill="transparent" stroke="url(#storageGradient)" :stroke-width="ringWidth" :stroke-dasharray="pieStorageDash" :transform="`rotate(-90 ${pieCx} ${pieCy})`" />
         <circle :r="midRadius" :cx="pieCx" :cy="pieCy" fill="transparent" stroke="url(#highlightOverlay)" :stroke-width="ringWidth" />
@@ -38,12 +38,12 @@
       <g ref="labelsRef" class="pie-labels">
         <text :x="storageInnerPos.x" :y="storageInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.storage.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.storage.angle)} ${storageInnerPos.x} ${storageInnerPos.y})`">{{ fmtSize(store.space.allocated, sectorInfo.storage.angle) }}</text>
         <text :x="freeInnerPos.x" :y="freeInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.free.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.free.angle)} ${freeInnerPos.x} ${freeInnerPos.y})`">{{ fmtSize(store.space.free, sectorInfo.free.angle) }}</text>
-        <text :x="otherInnerPos.x" :y="otherInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.other.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.other.angle)} ${otherInnerPos.x} ${otherInnerPos.y})`">{{ fmtSize(store.space.used - store.space.allocated, sectorInfo.other.angle) }}</text>
+        <text v-if="showOtherCategory" :x="otherInnerPos.x" :y="otherInnerPos.y" class="pie-label-inner" :text-anchor="getSizeAnchor(sectorInfo.other.angle)" dominant-baseline="middle" :transform="`rotate(${getSizeRotation(sectorInfo.other.angle)} ${otherInnerPos.x} ${otherInnerPos.y})`">{{ fmtSize(store.space.used - store.space.allocated, sectorInfo.other.angle) }}</text>
 
         <defs>
           <path :id="storageLabelPath.id" :d="storageLabelPath.d" fill="none" />
           <path :id="freeLabelPath.id" :d="freeLabelPath.d" fill="none" />
-          <path :id="otherLabelPath.id" :d="otherLabelPath.d" fill="none" />
+          <path v-if="showOtherCategory" :id="otherLabelPath.id" :d="otherLabelPath.d" fill="none" />
         </defs>
 
         <text class="pie-label-sub" fill="#93e">
@@ -52,7 +52,7 @@
         <text class="pie-label-sub" :fill="freeColor">
           <textPath :href="'#' + freeLabelPath.id" startOffset="50%" text-anchor="middle" dominant-baseline="middle">free</textPath>
         </text>
-        <text class="pie-label-sub" fill="#d9f">
+        <text v-if="showOtherCategory" class="pie-label-sub" fill="#d9f">
           <textPath :href="'#' + otherLabelPath.id" startOffset="50%" text-anchor="middle" dominant-baseline="middle">other</textPath>
         </text>
       </g>
@@ -98,18 +98,28 @@ const truncateLabel = (name: string, maxLen = 10): string => {
   return name.slice(0, maxLen - 1) + '…'
 }
 
+const otherBytes = computed(() => Math.max(0, store.space.used - store.space.allocated))
+const showOtherCategory = computed(() => {
+  const s = store.space
+  return !!s.disk && otherBytes.value / s.disk >= 0.01
+})
+const freeSliceBytes = computed(() =>
+  showOtherCategory.value ? store.space.free : Math.max(0, store.space.disk - store.space.allocated)
+)
+
 // Calculate max label length based on angular gap to neighbor labels
 const storageMaxLen = computed(() => {
   const s = store.space
   if (!s.disk) return 10
   // Sector spans in degrees
   const storageSpan = (s.allocated / s.disk) * 360
-  const freeSpan = (s.free / s.disk) * 360
-  const otherSpan = ((s.used - s.allocated) / s.disk) * 360
+  const freeSpan = (freeSliceBytes.value / s.disk) * 360
+  const otherSpan = (otherBytes.value / s.disk) * 360
   // Angular gap from storage label midpoint to neighbor label midpoints
   const gapToFree = (storageSpan + freeSpan) / 2
-  const gapToOther = (storageSpan + otherSpan) / 2
-  const minGap = Math.min(gapToFree, gapToOther)
+  const minGap = showOtherCategory.value
+    ? Math.min(gapToFree, (storageSpan + otherSpan) / 2)
+    : gapToFree
   // Allow longer names when there's sufficient gap to both neighbors
   if (minGap > 70) return 18
   if (minGap > 55) return 14
@@ -143,7 +153,7 @@ const pieStorageDash = computed(() => {
 const pieFreeDash = computed(() => {
   const s = store.space
   if (!s.disk) return `0 ${CIRC}`
-  return `${(s.free / s.disk) * CIRC} ${CIRC}`
+  return `${(freeSliceBytes.value / s.disk) * CIRC} ${CIRC}`
 })
 
 const pieFreeOffsetVal = computed(() => {
@@ -179,8 +189,8 @@ const sectorInfo = computed(() => {
     }
 
   const storagePct = s.allocated / s.disk
-  const freePct = s.free / s.disk
-  const otherPct = (s.used - s.allocated) / s.disk
+  const freePct = freeSliceBytes.value / s.disk
+  const otherPct = showOtherCategory.value ? otherBytes.value / s.disk : 0
 
   const storageAngle = storagePct * 180 // midpoint of storage sector
   const freeStart = storagePct * 360
@@ -198,7 +208,7 @@ const sectorInfo = computed(() => {
 const rawAngles = computed(() => ({
   storage: sectorInfo.value.storage.angle,
   free: sectorInfo.value.free.angle,
-  other: sectorInfo.value.other.angle
+  ...(showOtherCategory.value ? { other: sectorInfo.value.other.angle } : {})
 }))
 
 const getSizeRotation = (angle: number) => (angle < 180 ? angle - 90 : angle + 90)
@@ -219,7 +229,7 @@ const otherInnerPos = computed(() =>
 const labelLengths = computed(() => ({
   storage: storageName.value.length,
   free: 4,
-  other: 5
+  ...(showOtherCategory.value ? { other: 5 } : {})
 }))
 
 const getGapForPair = (len1: number, len2: number) => {
@@ -232,7 +242,9 @@ const adjustedLabelAngles = computed(() => {
   const labels = [
     { id: 'storage', angle: angles.storage, len: lens.storage },
     { id: 'free', angle: angles.free, len: lens.free },
-    { id: 'other', angle: angles.other, len: lens.other }
+    ...(showOtherCategory.value
+      ? [{ id: 'other', angle: angles.other!, len: lens.other! }]
+      : [])
   ]
   labels.sort((a, b) => a.angle - b.angle)
 
@@ -283,7 +295,7 @@ const freeLabelPath = computed(() =>
   createArcPath(adjustedLabelAngles.value.free!, 'free', 4)
 )
 const otherLabelPath = computed(() =>
-  createArcPath(adjustedLabelAngles.value.other!, 'other', 5)
+  createArcPath(adjustedLabelAngles.value.other ?? sectorInfo.value.other.angle, 'other', 5)
 )
 
 const handleClick = () => (isExpanded.value ? collapse() : expand())
