@@ -5,6 +5,7 @@ export const exists = (path: string[]) => {
   const store = useMainStore()
   // Access docVersion to make this reactive
   void store.docVersion
+  if (path.length === 0) return true
   const p = path.join('/')
   return getDocuments().some(
     doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === p
