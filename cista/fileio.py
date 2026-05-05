@@ -1,9 +1,11 @@
+import errno
 import os
 import threading
 from pathlib import Path
 
 from cista import config
 from cista.util import filename
+from cista.util.diskspace import InsufficientStorageError, check_free_space
 from cista.util.lrucache import LRUCache
 
 
@@ -34,13 +36,24 @@ class File:
             self.open_rw()
         if self.fd is None:
             raise RuntimeError("file descriptor is not available for write")
+        check_free_space(self.path)
         if file_size is not None:
             if pos + len(buffer) > file_size:
                 raise ValueError("write exceeds declared file size")
-            os.ftruncate(self.fd, file_size)
+            try:
+                os.ftruncate(self.fd, file_size)
+            except OSError as e:
+                if e.errno == errno.ENOSPC:
+                    raise InsufficientStorageError("No space left on device") from e
+                raise
         if buffer:
             os.lseek(self.fd, pos, os.SEEK_SET)
-            os.write(self.fd, buffer)
+            try:
+                os.write(self.fd, buffer)
+            except OSError as e:
+                if e.errno == errno.ENOSPC:
+                    raise InsufficientStorageError("No space left on device") from e
+                raise
 
     def __getitem__(self, slc):
         if self.fd is None:

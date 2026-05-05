@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import errno
 import mimetypes
 import os
 import re
@@ -12,11 +13,12 @@ from urllib.parse import unquote, urlparse
 from wsgiref.handlers import format_date_time
 
 from sanic import Blueprint, HTTPResponse, empty, json
-from sanic.exceptions import BadRequest, NotFound
+from sanic.exceptions import BadRequest, NotFound, SanicException
 
 from cista import auth, config, sharefs, watching
 from cista.api import fileserver
 from cista.util import filename
+from cista.util.diskspace import InsufficientStorageError
 
 bp = Blueprint("fileserver", url_prefix="/files")
 
@@ -52,13 +54,22 @@ async def upload_file_chunk(request, name):
 
     rel, path = _safe_relpath(name, request=request)
     rel_name = rel.as_posix()
-    upload_info = await asyncio.to_thread(
-        fileserver.upload_info,
-        rel_name,
-        start,
-        body,
-        total,
-    )
+    try:
+        upload_info = await asyncio.to_thread(
+            fileserver.upload_info,
+            rel_name,
+            start,
+            body,
+            total,
+        )
+    except InsufficientStorageError as e:
+        raise SanicException(str(e), status_code=507, quiet=True) from e
+    except OSError as e:
+        if e.errno == errno.ENOSPC:
+            raise SanicException(
+                "No space left on device", status_code=507, quiet=True
+            ) from e
+        raise
     extras = []
     chunk_len = end - start
     whole_file = start == 0 and end == total
