@@ -115,6 +115,12 @@ def setup_storage(tmp_path: Path):
         mode="rw",
         share_paths=["docs"],
     )
+    share_anon = config.Token(
+        key="share_anon_123",
+        kind="share",
+        mode="ro",
+        share_paths=["docs"],
+    )
     config.config = config.Config(
         path=tmp_path,
         listen=":0",
@@ -124,6 +130,7 @@ def setup_storage(tmp_path: Path):
             "test_token_123": token,
             "share_ro_123": share_ro,
             "share_rw_123": share_rw,
+            "share_anon_123": share_anon,
         },
     )
     watching.state.root = []
@@ -285,3 +292,20 @@ async def test_share_token_rw_allows_writes_in_scope_only(client):
         "/files/secret.txt", headers=_basic_auth("token", "share_rw_123")
     )
     assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_anonymous_share_token_requires_public_mode(client):
+    config.config.public = True
+
+    _, res = await client.get(
+        "/files/docs/a.txt", headers=_basic_auth("token", "share_anon_123")
+    )
+    assert res.status_code == 200
+    assert res.body == b"A"
+
+    config.config.public = False
+    _, res = await client.get(
+        "/files/docs/a.txt", headers=_basic_auth("token", "share_anon_123")
+    )
+    assert res.status_code == 401

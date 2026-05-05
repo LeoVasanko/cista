@@ -574,6 +574,13 @@ def _basic_auth_login(request):
     if username == "token":
         token = config.config.tokens.get(password)
         if token:
+            if _allow_anonymous_share_token(token):
+                request.ctx.session = None
+                request.ctx.username = None
+                request.ctx.user = None
+                request.ctx.auth_token_id = password
+                request.ctx.auth_token = token
+                return None
             user = config.config.users.get(token.username)
             if user:
                 request.ctx.session = None
@@ -873,13 +880,15 @@ async def verify(request, *, privileged=False):
     """
     hydrate_request_auth_context(request, source="auth.verify")
 
-    # Public mode: skip auth unless privileged access is required
-    if config.config.public and not privileged:
-        return
-
     auth_header = request.headers.get("authorization", "")
     has_auth_header = bool(auth_header)
     scheme = auth_header.split()[0].lower() if has_auth_header else None
+
+    # Public mode: skip auth unless privileged access is required.
+    # Still parse explicit Authorization headers so share-token URLs can
+    # activate share scoping even while public access is enabled.
+    if config.config.public and not privileged and not has_auth_header:
+        return
 
     # Concise auth flow for diagnostics (populated by use_session + verify)
     auth_flow = list(getattr(request.ctx, "auth_flow", ["session:skipped"]))
@@ -940,6 +949,13 @@ async def verify(request, *, privileged=False):
                             "Access Forbidden: Only for privileged users",
                             quiet=True,
                         )
+                    return
+                token = request_share_token(request)
+                if (
+                    token is not None
+                    and _allow_anonymous_share_token(token)
+                    and not privileged
+                ):
                     return
         elif scheme in ("ntlm", "negotiate"):
             tried.append("ntlm")
@@ -1275,6 +1291,19 @@ def _token_belongs_to_user(token, username, sso_user_id):
     return bool(sso_user_id is not None and token.sso_user_id == sso_user_id)
 
 
+def _is_anonymous_share_token(token: config.Token) -> bool:
+    return (
+        sharefs.is_share_token(token)
+        and not token.username
+        and not token.sso_user_id
+    )
+
+
+def _allow_anonymous_share_token(token: config.Token) -> bool:
+    # Anonymous share links are intentionally coupled to public mode.
+    return config.config.public and _is_anonymous_share_token(token)
+
+
 def request_token(request) -> config.Token | None:
     token = getattr(request.ctx, "auth_token", None)
     return token if isinstance(token, config.Token) else None
@@ -1439,10 +1468,11 @@ async def create_share_token_handler(request):
             raise BadRequest("Could not determine SSO user")
     else:
         username = current_username or ""
-        if not username:
+        if username:
+            if username not in config.config.users:
+                raise BadRequest("User does not exist")
+        elif not config.config.public:
             raise BadRequest("Could not determine user")
-        if username not in config.config.users:
-            raise BadRequest("User does not exist")
 
     token = secrets.token_urlsafe(12)
     changes = {

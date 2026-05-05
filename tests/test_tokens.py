@@ -215,3 +215,18 @@ async def test_create_share_token(client):
     share_tokens = [t for t in res.json["tokens"] if t.get("kind") == "share"]
     assert len(share_tokens) == 1
     assert share_tokens[0]["mode"] == "ro"
+
+
+@pytest.mark.asyncio
+async def test_create_share_token_public_anonymous(client):
+    config.config = msgspec.structs.replace(config.config, public=True)
+
+    _, res = await client.post(
+        "/api/share-tokens",
+        json={"paths": ["hello.txt"], "mode": "ro", "name": "public-share"},
+    )
+    assert res.status_code == 200
+    data = res.json
+    assert data["kind"] == "share"
+    assert data["username"] == ""
+    assert data["sso_user_id"] == ""
