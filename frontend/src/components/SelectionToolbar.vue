@@ -29,7 +29,7 @@
       @mouseenter="unselectTooltip?.startHover"
       @mousemove="unselectTooltip?.updatePosition"
       @mouseleave="unselectTooltip?.endHover"
-    >✖ selection</button>
+    >✖ deselect</button>
   </div>
 </template>
 
