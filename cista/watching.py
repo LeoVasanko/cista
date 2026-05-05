@@ -9,7 +9,6 @@ from os import stat_result
 from pathlib import Path, PurePosixPath
 from stat import S_ISDIR, S_ISREG
 
-import inotify.adapters
 import msgspec
 from natsort import humansorted, natsort_keygen, ns
 from sanic.log import logger
@@ -17,6 +16,11 @@ from sanic.log import logger
 from cista import config
 from cista.fileio import fuid
 from cista.protocol import FileEntry, Space, UpdDel, UpdIns, UpdKeep
+
+try:
+    import inotify.adapters as inotify_adapters
+except Exception:
+    inotify_adapters = None
 
 # Platform-specific allocated size calculation
 if sys.platform == "win32":
@@ -665,9 +669,12 @@ DEBOUNCE_MAX = 0.1  # But no more than 100ms total
 
 def watcher(loop):
     """Unified watcher thread handling inotify, websocket signals, and periodic scans."""
-    use_inotify = sys.platform == "linux"
+    use_inotify = sys.platform == "linux" and inotify_adapters is not None
     inotify_tree = None
     modified_flags = frozenset()
+
+    if sys.platform == "linux" and inotify_adapters is None:
+        logger.warning("inotify unavailable; falling back to periodic scanning")
 
     if use_inotify:
         modified_flags = frozenset(
@@ -684,7 +691,7 @@ def watcher(loop):
 
     while not stop_event.is_set():
         if use_inotify:
-            inotify_tree = inotify.adapters.InotifyTree(rootpath.as_posix())
+            inotify_tree = inotify_adapters.InotifyTree(rootpath.as_posix())
 
         # Initialize the tree from filesystem
         try:
