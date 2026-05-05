@@ -1,24 +1,32 @@
 <template>
-  <Gallery
-    v-if="store.prefs.gallery"
-    ref="fileExplorer"
-    :key="`gallery-${folderPath}`"
-    :path="props.path"
-    :documents="documents"
-  />
-  <FileExplorer
-    v-else
-    ref="fileExplorer"
-    :key="`explorer-${folderPath}`"
-    :path="props.path"
-    :documents="documents"
-  />
+  <div class="transition-wrapper">
+    <Transition
+      :name="transitionName"
+      @after-enter="store.transitionDirection = 'none'"
+    >
+      <div :key="folderPath" class="explorer-content">
+        <Gallery
+          v-if="store.prefs.gallery"
+          ref="fileExplorer"
+          :path="props.path"
+          :documents="documents"
+        />
+        <FileExplorer
+          v-else
+          ref="fileExplorer"
+          :path="props.path"
+          :documents="documents"
+        />
+        <EmptyFolder :documents="documents" :path="props.path" />
+      </div>
+    </Transition>
+  </div>
   <div v-if="store.searchLoading" class="search-loading">Searching...</div>
-  <EmptyFolder :documents=documents :path=props.path />
 </template>
 
 <script setup lang="ts">
 import FileExplorer from '@/components/FileExplorer.vue'
+import Gallery from '@/components/Gallery.vue'
 import { getDocuments } from '@/stores/documentStore'
 import { useMainStore } from '@/stores/main'
 import { collator } from '@/utils'
@@ -34,6 +42,12 @@ const props = defineProps<{
 
 // Folder path for component keys - only recreate component when folder changes, not search
 const folderPath = computed(() => props.path.join('/'))
+
+const transitionName = computed(() => {
+  if (store.transitionDirection === 'forward') return 'slide-forward'
+  if (store.transitionDirection === 'backward') return 'slide-backward'
+  return ''
+})
 
 // Handle route-based search changes (back/forward navigation, direct URL)
 // Skip if store.query already matches (means we triggered this via typing)

@@ -98,6 +98,7 @@ export const useMainStore = defineStore('main', {
       privileged: false as boolean,
       isLoggedIn: false as boolean
     },
+    transitionDirection: 'none' as 'forward' | 'backward' | 'none',
     space: {
       disk: 0,
       free: 0,
