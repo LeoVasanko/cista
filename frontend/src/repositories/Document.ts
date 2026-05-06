@@ -89,6 +89,14 @@ export class Doc {
   get print(): boolean {
     return (FILE_TYPES.print as readonly string[]).includes(this.ext)
   }
+  get text(): boolean {
+    return (FILE_TYPES.text as readonly string[]).includes(this.ext)
+  }
+  get editurl(): string {
+    if (!this.text) return ''
+    const p = this.loc ? `${this.loc}/${this.name}` : this.name
+    return '/#/edit/' + p.replaceAll('?', '%3F').replaceAll('#', '%23')
+  }
   get complete(): boolean {
     return !this.ghost && (this.dir || this.size <= this.allocated)
   }

@@ -1,30 +1,38 @@
 <template>
   <nav class="headermain buttons">
-    <UploadButton :path="props.path" />
-    <SvgButton
-      name="create-folder"
-      tooltip="New folder"
-      @click="() => { store.fileExplorer!.newFolder() }"
-    />
-    <div class="smallgap"></div>
-    <SvgButton name="eye" @click="store.prefs.gallery = !store.prefs.gallery" tooltip="Details/Gallery" />
-    <div class="search-group">
-      <SvgButton name="find" tabindex="-1" @click="focusSearch" tooltip="Search" />
-      <input
-        ref="search"
-        type="search"
-        :value="query"
-        @input="updateSearch"
-        @keydown.escape="clearSearch"
+    <template v-if="!props.editorMode">
+      <UploadButton :path="props.path" />
+      <SvgButton
+        name="create-folder"
+        tooltip="New folder"
+        @click="() => { store.fileExplorer!.newFolder() }"
       />
-      <span v-if="!query" class="search-hint" @click="focusSearch">{{ store.prefs.searchHotkey }}</span>
-    </div>
-    <div v-if="showSortHints" class="sort-hints">
+      <div class="smallgap"></div>
+      <SvgButton name="eye" @click="store.prefs.gallery = !store.prefs.gallery" tooltip="Details/Gallery" />
+      <div class="search-group">
+        <SvgButton name="find" tabindex="-1" @click="focusSearch" tooltip="Search" />
+        <input
+          ref="search"
+          type="search"
+          :value="query"
+          @input="updateSearch"
+          @keydown.escape="clearSearch"
+        />
+        <span v-if="!query" class="search-hint" @click="focusSearch">{{ store.prefs.searchHotkey }}</span>
+      </div>
+    </template>
+    <div v-if="!props.editorMode && showSortHints" class="sort-hints">
       <span class="sort-label">Order</span>
       <span class="keycap">1</span>
       <span class="keycap">2</span>
       <span class="keycap">3</span>
     </div>
+    <SvgButton
+      v-if="props.editorMode"
+      name="disk"
+      tooltip="Save (Ctrl/Cmd+S)"
+      @click="store.editorSave?.()"
+    />
     <div class="spacer smallgap"></div>
     <DiskSpace v-if="store.space.disk" />
     <SvgButton name="cog" @click="settingsMenu" />
@@ -49,6 +57,7 @@ const textInputFocused = ref(false)
 const props = defineProps<{
   path: Array<string>
   query: string
+  editorMode?: boolean
 }>()
 
 const isInputElement = (el: Element | null): boolean => {

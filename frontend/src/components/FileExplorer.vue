@@ -49,7 +49,7 @@
               <FileRenameInput :doc="doc" :rename="rename" :exit="() => {editing = null}" />
             </template>
             <template v-else>
-              <a :href=doc.url tabindex=-1 @contextmenu.stop @focus.stop="store.cursor = doc.key">
+              <a :href="doc.text ? doc.editurl : doc.url" tabindex=-1 @contextmenu.stop @focus.stop="store.cursor = doc.key">
                 {{ doc.name }}
               </a>
               <button tabindex=-1 v-if="store.cursor == doc.key" class="rename-button" @click="() => (editing = doc)">🖊️</button>

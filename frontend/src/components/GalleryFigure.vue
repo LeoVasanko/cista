@@ -49,10 +49,12 @@ import { Doc } from '@/repositories/Document'
 import { useMainStore } from '@/stores/main'
 import { formatSize } from '@/utils'
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import CursorTooltip from './CursorTooltip.vue'
 import SparseIndicator from './SparseIndicator.vue'
 
 const store = useMainStore()
+const router = useRouter()
 type EditingProp = {
   rename: (doc: Doc, newName: string) => void
   exit: () => void
@@ -87,7 +89,12 @@ const snap = computed(() => {
 })
 
 const onclick = (ev: Event) => {
-  if (m.value!.play()) ev.preventDefault()
+  if (m.value!.play()) {
+    ev.preventDefault()
+  } else if (props.doc.text) {
+    ev.preventDefault()
+    router.push(props.doc.editurl.replace('/#', ''))
+  }
   store.cursor = props.doc.key
 }
 </script>

@@ -1,5 +1,6 @@
 import { useMainStore } from '@/stores/main'
 import ExplorerView from '@/views/ExplorerView.vue'
+import TextEditorView from '@/views/TextEditorView.vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 function getPathDepth(path: string): number {
@@ -10,6 +11,11 @@ function getPathDepth(path: string): number {
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/edit/:pathMatch(.*)*',
+      name: 'editor',
+      component: TextEditorView
+    },
     {
       path: '/:pathMatch(.*)*',
       name: 'explorer',

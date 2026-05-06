@@ -99,6 +99,7 @@ export const useMainStore = defineStore('main', {
       isLoggedIn: false as boolean
     },
     transitionDirection: 'none' as 'forward' | 'backward' | 'none',
+    editorSave: null as null | (() => void),
     space: {
       disk: 0,
       free: 0,
@@ -327,6 +328,7 @@ export const useMainStore = defineStore('main', {
       this.connected = false
       this.dialog = ''
       this.cursor = ''
+      this.editorSave = null
     },
     async logout() {
       console.log('Logout')

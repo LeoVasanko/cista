@@ -8,7 +8,7 @@
     @focus=focusCurrent
     tabindex=0
   >
-    <a href="#/"
+    <a :href="`/#${urlAt(0)}`"
       :ref="el => setLinkRef(0, el)"
       class="home"
       :class="{ current: !!isCurrent(0) }"
@@ -22,7 +22,7 @@
       <CursorTooltip ref="homeTooltip" text="/">/</CursorTooltip>
     </a>
     <template v-for="(location, index) in longest" :key="index">
-      <a :href="`/#/${longest.slice(0, index + 1).join('/')}/`"
+      <a :href="`/#${urlAt(index + 1)}`"
         :class="{ current: !!isCurrent(index + 1) }"
         :aria-current="isCurrent(index + 1)"
         @click.prevent="navigate(index + 1)"
@@ -62,10 +62,17 @@ const setPathTooltipRef = (index: number, el: any) => {
 
 const props = defineProps<{
   path: Array<string>
+  links?: Array<string>
   primary?: boolean
 }>()
 
 const longest = ref<Array<string>>([])
+const longestLinks = ref<Array<string>>(['/'])
+
+const defaultLinks = (segments: Array<string>) => [
+  '/',
+  ...segments.map((_, index) => `/${segments.slice(0, index + 1).join('/')}/`)
+]
 
 const isCurrent = (index: number) =>
   index == props.path.length ? 'location' : undefined
@@ -77,16 +84,22 @@ const focusCurrent = () => {
   })
 }
 
+const urlAt = (index: number) => {
+  const explicit = longestLinks.value[index]
+  return explicit ?? (index ? `/${longest.value.slice(0, index).join('/')}/` : '/')
+}
+
 const navigate = (index: number) => {
   const link = links[index]
   if (!link) throw Error(`No link at index ${index} (path: ${props.path})`)
-  const url = index ? `/${longest.value.slice(0, index).join('/')}/` : '/'
+  const url = urlAt(index)
   const long = longest.value.length ? `/${longest.value.join('/')}/` : '/'
   const browser = decodeURIComponent(location.hash.slice(1).split('//')[0] ?? '')
   const u = url.replaceAll('?', '%3F').replaceAll('#', '%23')
   // Clicking on current link clears the rest of the path and adds new history
   if (isCurrent(index)) {
     longest.value.splice(index)
+    longestLinks.value.splice(index + 1)
     router.push(u)
   }
   // Moving along breadcrumbs doesn't create new history
@@ -102,20 +115,27 @@ const move = (dir: number) => {
 }
 
 watchEffect(() => {
+  const currentLinks = props.links ?? defaultLinks(props.path)
   const longcut = longest.value.slice(0, props.path.length)
   const same = longcut.every((value, index) => value === props.path[index])
   // Navigated out of previous path, reset longest to current
-  if (!same) longest.value = props.path
+  if (!same) {
+    longest.value = props.path
+    longestLinks.value = currentLinks
+  }
   else if (props.path.length > longcut.length) {
     longest.value = longcut.concat(props.path.slice(longcut.length))
+    longestLinks.value.splice(0, currentLinks.length, ...currentLinks)
   } else {
     // Prune deleted folders from longest
     for (let i = props.path.length; i < longest.value.length; ++i) {
       if (!exists(longest.value.slice(0, i + 1))) {
         longest.value = longest.value.slice(0, i)
+        longestLinks.value = longestLinks.value.slice(0, i + 1)
         break
       }
     }
+    longestLinks.value.splice(0, currentLinks.length, ...currentLinks)
   }
   // If needed, focus primary navigation to new location
   if (props.primary)

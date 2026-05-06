@@ -11,11 +11,27 @@
   <AboutModal />
   <AccessDeniedModal />
   <header>
-    <HeaderMain ref="headerMain" :path="path.pathList" :query="path.query" />
-    <BreadCrumb :path="path.pathList" primary />
+    <HeaderMain
+      ref="headerMain"
+      :path="path.pathList"
+      :query="path.query"
+      :editor-mode="path.isEditorPath"
+    />
+    <BreadCrumb
+      :path="path.breadcrumbPathList"
+      :links="path.breadcrumbLinks"
+      primary
+    />
   </header>
-  <main>
-    <RouterView :path="path.pathList" :query="path.query" />
+  <main class="transition-wrapper">
+    <Transition
+      :name="routeTransitionName"
+      @after-enter="store.transitionDirection = 'none'"
+    >
+      <div :key="routeViewKey" class="explorer-content">
+        <RouterView :path="path.pathList" :query="path.query" />
+      </div>
+    </Transition>
   </main>
   <footer v-if="store.selected.size || store.uprogress.total || store.dprogress.total">
     <SelectionToolbar :path="path.pathList" />
@@ -44,19 +60,48 @@ import type { SortOrder } from './utils/docsort'
 
 interface Path {
   path: string
+  isEditorPath: boolean
   pathList: string[]
+  breadcrumbPathList: string[]
+  breadcrumbLinks?: string[]
   query: string
 }
 const store = useMainStore()
 const path: ComputedRef<Path> = computed(() => {
   const p = decodeURIComponent(Router.currentRoute.value.path).split('//')
-  const pathList = (p[0] ?? '').split('/').filter(value => value !== '')
+  const routePathList = (p[0] ?? '').split('/').filter(value => value !== '')
   const query = p.slice(1).join('//')
+  const isEditorPath = routePathList[0] === 'edit'
+  const pathList = isEditorPath ? routePathList.slice(1, -1) : routePathList
+  const breadcrumbPathList = isEditorPath
+    ? routePathList.slice(1)
+    : routePathList
+  const breadcrumbLinks = isEditorPath
+    ? [
+        '/',
+        ...routePathList
+          .slice(1, -1)
+          .map((_, index) => `/${routePathList.slice(1, index + 2).join('/')}/`),
+        `/${routePathList.join('/')}`
+      ]
+    : undefined
   return {
     path: p[0] ?? '',
+    isEditorPath,
     pathList,
+    breadcrumbPathList,
+    breadcrumbLinks,
     query
   }
+})
+const routeTransitionName = computed(() => {
+  if (store.transitionDirection === 'forward') return 'slide-forward'
+  if (store.transitionDirection === 'backward') return 'slide-backward'
+  return ''
+})
+const routeViewKey = computed(() => {
+  const route = Router.currentRoute.value
+  return route.name === 'editor' ? route.path : String(route.name ?? route.path)
 })
 watch(
   () => path.value.path,
@@ -86,7 +131,7 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   const fileExplorer = store.fileExplorer as any
   if (!fileExplorer) return
   const c = fileExplorer.isCursor()
-  const input = (event.target as HTMLElement).tagName === 'INPUT'
+  const input = ['INPUT', 'TEXTAREA'].includes((event.target as HTMLElement).tagName)
   const keyup = event.type === 'keyup'
 
   // Always clear repeat timer on arrow keyup, even if focus moved to input
@@ -142,11 +187,17 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
     // Paging/navigation key handling - fall through to bottom
   }
   // Find: process on keydown so that we can bypass the built-in search hotkey
-  else if (!keyup && event.key === 'f' && (event.ctrlKey || event.metaKey)) {
+  else if (
+    !path.value.isEditorPath &&
+    !input &&
+    !keyup &&
+    event.key === 'f' &&
+    (event.ctrlKey || event.metaKey)
+  ) {
     headerMain.value!.toggleSearchInput()
   }
   // Search also on / (UNIX style) - use code to support any keyboard layout
-  else if (!input && keyup && event.code === 'Slash') {
+  else if (!path.value.isEditorPath && !input && keyup && event.code === 'Slash') {
     // Record the actual character for display (varies by keyboard layout)
     if (event.key.length === 1 && event.key !== store.prefs.searchHotkey) {
       store.prefs.searchHotkey = event.key
@@ -159,7 +210,9 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
     store.clearToast()
     // Keep rename and other non-search inputs isolated from search behavior.
     if (input && !searchInput) return
-    headerMain.value!.clearSearch(event)
+    if (!path.value.isEditorPath) {
+      headerMain.value!.clearSearch(event)
+    }
     store.focusBreadcrumb()
   } else if (!input && keyup && event.key === 'Backspace') {
     Router.back()
