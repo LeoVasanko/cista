@@ -3,21 +3,22 @@
     <div class="editor-body">
       <div v-if="loading" class="status">Loading…</div>
       <div v-else-if="error" class="status error">{{ error }}</div>
-      <textarea
-        v-else
-        ref="textarea"
-        v-model="content"
-        spellcheck="false"
-        @keydown="onKeydown"
-      />
+      <div v-else ref="editorHost" class="editor-host"></div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { indentWithTab } from '@codemirror/commands'
+import { LanguageDescription } from '@codemirror/language'
+import { languages } from '@codemirror/language-data'
+import { Compartment, EditorState } from '@codemirror/state'
+import { oneDark } from '@codemirror/theme-one-dark'
+import { EditorView, keymap } from '@codemirror/view'
+import { basicSetup } from 'codemirror'
 import { apiFetch } from '@/repositories/Client'
 import { useMainStore } from '@/stores/main'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -43,7 +44,9 @@ const original = ref('')
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
-const textarea = ref<HTMLTextAreaElement | null>(null)
+const editorHost = ref<HTMLDivElement | null>(null)
+let editorView: EditorView | null = null
+const languageCompartment = new Compartment()
 
 const dirty = computed(() => content.value !== original.value)
 
@@ -62,11 +65,44 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
   event.returnValue = ''
 }
 
-const onKeydown = (ev: KeyboardEvent) => {
-  if ((ev.ctrlKey || ev.metaKey) && ev.key === 's') {
-    ev.preventDefault()
-    save()
+const detectLanguage = async () => {
+  const language = LanguageDescription.matchFilename(languages, filename.value)
+  if (!language) return []
+  try {
+    return [await language.load()]
+  } catch {
+    return []
   }
+}
+
+const initEditor = async (text: string) => {
+  if (!editorHost.value) return
+  const languageExtensions = await detectLanguage()
+  const state = EditorState.create({
+    doc: text,
+    extensions: [
+      basicSetup,
+      oneDark,
+      languageCompartment.of(languageExtensions),
+      EditorView.updateListener.of(update => {
+        if (update.docChanged) {
+          content.value = update.state.doc.toString()
+        }
+      }),
+      keymap.of([
+        {
+          key: 'Mod-s',
+          run: () => {
+            void save()
+            return true
+          }
+        },
+        indentWithTab
+      ])
+    ]
+  })
+  editorView = new EditorView({ state, parent: editorHost.value })
+  editorView.focus()
 }
 
 const save = async () => {
@@ -111,10 +147,14 @@ onMounted(async () => {
     const text = await textRes.text()
     content.value = text
     original.value = text
+    loading.value = false
+    await nextTick()
+    await initEditor(text)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load file'
-  } finally {
-    loading.value = false
+  }
+  finally {
+    if (loading.value) loading.value = false
   }
 })
 
@@ -122,6 +162,8 @@ onUnmounted(() => {
   if (store.editorSave === save) {
     store.editorSave = null
   }
+  editorView?.destroy()
+  editorView = null
   window.removeEventListener('beforeunload', beforeUnload)
 })
 </script>
@@ -133,6 +175,7 @@ onUnmounted(() => {
   height: 100%;
   background: #1a1a1a;
   color: #ddd;
+  text-align: left;
 }
 .editor-body {
   flex: 1;
@@ -140,25 +183,40 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
-.editor-body textarea {
+.editor-host {
   flex: 1;
-  width: 100%;
-  resize: none;
+  min-height: 0;
+}
+.editor-host :deep(.cm-editor) {
+  flex: 1;
+  height: 100%;
   border: none;
   outline: none;
-  padding: 1rem;
+}
+.editor-host :deep(.cm-scroller) {
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 0.875rem;
   line-height: 1.5;
-  background: #1a1a1a;
-  color: #ddd;
-  white-space: pre;
-  overflow-wrap: normal;
-  overflow-x: auto;
+  text-align: left;
 }
-.editor-body textarea::selection {
-  background: var(--accent-color, #007bff);
-  color: #000;
+.editor-host :deep(.cm-content) {
+  padding: 1rem;
+  text-align: left;
+}
+.editor-host :deep(.cm-selectionBackground) {
+  background: var(--soft-color, #146) !important;
+}
+.editor-host :deep(.cm-focused .cm-selectionBackground) {
+  background: var(--soft-color, #146) !important;
+}
+.editor-host :deep(.cm-content ::selection) {
+  background: var(--soft-color, #146);
+}
+.editor-host :deep(.cm-content, .cm-gutter) {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+.editor-host :deep(.cm-line, .cm-gutters, .cm-gutterElement) {
+  text-align: left;
 }
 .status {
   padding: 2rem;

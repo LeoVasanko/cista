@@ -131,7 +131,9 @@ const globalShortcutHandler = (event: KeyboardEvent) => {
   const fileExplorer = store.fileExplorer as any
   if (!fileExplorer) return
   const c = fileExplorer.isCursor()
-  const input = ['INPUT', 'TEXTAREA'].includes((event.target as HTMLElement).tagName)
+  const target = event.target as HTMLElement
+  const input =
+    ['INPUT', 'TEXTAREA'].includes(target.tagName) || !!target.closest('.cm-editor')
   const keyup = event.type === 'keyup'
 
   // Always clear repeat timer on arrow keyup, even if focus moved to input

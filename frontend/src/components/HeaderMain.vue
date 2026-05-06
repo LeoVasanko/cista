@@ -3,6 +3,11 @@
     <template v-if="!props.editorMode">
       <UploadButton :path="props.path" />
       <SvgButton
+        name="create-file"
+        tooltip="New file"
+        @click="() => { store.fileExplorer!.newFile() }"
+      />
+      <SvgButton
         name="create-folder"
         tooltip="New folder"
         @click="() => { store.fileExplorer!.newFolder() }"

@@ -12,10 +12,10 @@
       </tr>
     </thead>
     <tbody>
-      <tr v-if="editing?.key === 'new'" class="folder">
+      <tr v-if="editing?.key === 'new'" :class="editing.dir ? 'folder' : 'file'">
         <td class="selection"></td>
         <td class="name">
-          <FileRenameInput :doc="editing" :rename="mkdir" :exit="() => {editing = null}" />
+          <FileRenameInput :doc="editing" :rename="createItem" :exit="() => {editing = null}" />
         </td>
         <FileModified :doc=editing :now=nowkey />
         <FileSize :doc=editing />
@@ -206,8 +206,20 @@ const rename = async (doc: Doc, newName: string) => {
   }
 }
 defineExpose({
+  newFile() {
+    const now = Math.floor(Date.now() / 1000)
+    editing.value = new Doc({
+      loc: loc.value,
+      key: 'new',
+      name: 'New File.txt',
+      dir: false,
+      mtime: now,
+      size: 0,
+      allocated: 0
+    })
+    store.cursor = editing.value.key
+  },
   newFolder() {
-    console.log('New folder')
     const now = Math.floor(Date.now() / 1000)
     editing.value = new Doc({
       loc: loc.value,
@@ -350,19 +362,36 @@ onUnmounted(() => {
   keyboardFollowScroll.cancel()
   clearInterval(modifiedTimer)
 })
-const mkdir = async (doc: Doc, name: string) => {
+const editRoute = (path: string) =>
+  '/edit/' +
+  path
+    .split('/')
+    .map(part => encodeURIComponent(part))
+    .join('/')
+
+const createItem = async (doc: Doc, name: string) => {
   doc.name = name
   doc.key = crypto.randomUUID()
   store.addGhost(doc)
   editing.value = null
   const path = doc.loc ? `${doc.loc}/${name}` : name
   try {
-    const res = await apiFetch(filesUrl(path), { method: 'MKCOL' })
+    const res = doc.dir
+      ? await apiFetch(filesUrl(path), { method: 'MKCOL' })
+      : await apiFetch(filesUrl(path), {
+          method: 'PUT',
+          body: '',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        })
     if (!res.ok) throw new Error(await parseErrorMessage(res))
-    router.push(doc.urlrouter)
+    if (doc.dir) {
+      router.push(doc.urlrouter)
+    } else {
+      router.push(editRoute(path))
+    }
   } catch (err) {
-    console.error('Mkdir failed', err)
-    store.showToast(err instanceof Error ? err.message : 'Mkdir failed')
+    console.error('Create failed', err)
+    store.showToast(err instanceof Error ? err.message : 'Create failed')
   }
 }
 const showFolderBreadcrumb = (i: number) => {
