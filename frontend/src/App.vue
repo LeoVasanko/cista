@@ -24,21 +24,20 @@
     />
   </header>
   <main class="transition-wrapper">
-    <RouterView v-slot="{ Component }">
-      <Transition
-        :name="routeTransitionName"
-        @after-enter="store.transitionDirection = 'none'"
-      >
+    <Transition
+      :name="routeTransitionName"
+      @after-enter="store.transitionDirection = 'none'"
+    >
+      <div :key="routeViewKey" class="explorer-content">
         <KeepAlive>
           <component
-            :is="Component"
+            :is="routeViewComponent"
             :key="routeViewKey"
-            class="explorer-content"
             v-bind="routeViewProps"
           />
         </KeepAlive>
-      </Transition>
-    </RouterView>
+      </div>
+    </Transition>
   </main>
   <footer v-if="store.selected.size || store.uprogress.total || store.dprogress.total">
     <SelectionToolbar :path="path.pathList" />
@@ -50,16 +49,18 @@
 <script setup lang="ts">
 import type HeaderMain from '@/components/HeaderMain.vue'
 import { loadSession, watchConnect, watchDisconnect } from '@/repositories/WS'
+import { getDocuments } from '@/stores/documentStore'
 import { useMainStore } from '@/stores/main'
 import type { ComputedRef } from 'vue'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterView } from 'vue-router'
 
 import Router from '@/router/index'
 import { computed } from 'vue'
 import AboutModal from './components/AboutModal.vue'
 import AccessDeniedModal from './components/AccessDeniedModal.vue'
+import ExplorerView from './views/ExplorerView.vue'
 import SelectionToolbar from './components/SelectionToolbar.vue'
+import TextEditorView from './views/TextEditorView.vue'
 import type SettingsModalVue from './components/SettingsModal.vue'
 import UserManagementModal from './components/UserManagementModal.vue'
 import UserTokensModal from './components/UserTokensModal.vue'
@@ -67,6 +68,7 @@ import type { SortOrder } from './utils/docsort'
 
 interface Path {
   path: string
+  canonicalPath: string
   isEditorPath: boolean
   pathList: string[]
   breadcrumbPathList: string[]
@@ -74,26 +76,42 @@ interface Path {
   query: string
 }
 const store = useMainStore()
+
+const getDocByPath = (fullPath: string) =>
+  getDocuments().find(doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === fullPath)
+
 const path: ComputedRef<Path> = computed(() => {
   const p = decodeURIComponent(Router.currentRoute.value.path).split('//')
-  const routePathList = (p[0] ?? '').split('/').filter(value => value !== '')
+  const rawPath = p[0] ?? ''
+  const routePathList = rawPath.split('/').filter(value => value !== '')
   const query = p.slice(1).join('//')
-  const isEditorPath = routePathList[0] === 'edit'
-  const pathList = isEditorPath ? routePathList.slice(1, -1) : routePathList
-  const breadcrumbPathList = isEditorPath
-    ? routePathList.slice(1)
-    : routePathList
+  const fullPath = routePathList.join('/')
+  // Access docVersion to make route mode reactive to tree updates
+  void store.docVersion
+  const doc = fullPath ? getDocByPath(fullPath) : null
+  const isEditorPath = !!(doc && !doc.dir && doc.text)
+  const canonicalBase = !fullPath
+    ? '/'
+    : doc?.dir
+      ? `/${fullPath}/`
+      : `/${fullPath}`
+  const canonicalPath = query
+    ? rawPath // keep search URL shape untouched
+    : canonicalBase
+  const pathList = isEditorPath ? routePathList.slice(0, -1) : routePathList
+  const breadcrumbPathList = routePathList
   const breadcrumbLinks = isEditorPath
     ? [
         '/',
         ...routePathList
-          .slice(1, -1)
-          .map((_, index) => `/${routePathList.slice(1, index + 2).join('/')}/`),
-        `/${routePathList.join('/')}`
+          .slice(0, -1)
+          .map((_, index) => `/${routePathList.slice(0, index + 1).join('/')}/`),
+        `/${fullPath}`
       ]
     : undefined
   return {
-    path: p[0] ?? '',
+    path: rawPath,
+    canonicalPath,
     isEditorPath,
     pathList,
     breadcrumbPathList,
@@ -106,14 +124,28 @@ const routeTransitionName = computed(() => {
   if (store.transitionDirection === 'backward') return 'slide-backward'
   return ''
 })
+const routeViewComponent = computed(() =>
+  path.value.isEditorPath ? TextEditorView : ExplorerView
+)
 const routeViewKey = computed(() => {
-  const route = Router.currentRoute.value
-  return route.name === 'editor' ? route.path : String(route.name ?? route.path)
+  return path.value.isEditorPath
+    ? `editor:${path.value.path}`
+    : 'explorer'
 })
 const routeViewProps = computed(() =>
   path.value.isEditorPath
     ? {}
     : { path: path.value.pathList, query: path.value.query }
+)
+watch(
+  () => path.value.canonicalPath,
+  canonical => {
+    const current = decodeURIComponent(Router.currentRoute.value.path)
+    if (canonical && current !== canonical) {
+      Router.replace(canonical.replaceAll('?', '%3F').replaceAll('#', '%23'))
+    }
+  },
+  { immediate: true }
 )
 watch(
   () => path.value.path,

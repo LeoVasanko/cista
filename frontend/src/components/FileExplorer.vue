@@ -363,7 +363,7 @@ onUnmounted(() => {
   clearInterval(modifiedTimer)
 })
 const editRoute = (path: string) =>
-  '/edit/' +
+  '/' +
   path
     .split('/')
     .map(part => encodeURIComponent(part))

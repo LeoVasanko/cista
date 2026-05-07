@@ -34,7 +34,10 @@ const store = useMainStore()
 
 const MAX_SIZE = 1024 * 1024 // 1 MiB
 
-const filePath = computed(() => decodeURIComponent(route.path.slice(6))) // strip /edit/
+const filePath = computed(() => {
+  const raw = decodeURIComponent(route.path).split('//')[0] ?? ''
+  return raw.replace(/^\//, '').replace(/\/$/, '')
+})
 const filename = computed(() => filePath.value.split('/').pop() || '')
 
 const filesUrl = computed(() => {

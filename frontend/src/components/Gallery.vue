@@ -454,7 +454,7 @@ onUnmounted(() => {
 // Re-seed aspect ratios whenever docs update (e.g., ar patch from server)
 watch(() => props.documents, seedFromDocs)
 const editRoute = (path: string) =>
-  '/edit/' +
+  '/' +
   path
     .split('/')
     .map(part => encodeURIComponent(part))

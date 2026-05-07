@@ -95,7 +95,7 @@ export class Doc {
   get editurl(): string {
     if (!this.text) return ''
     const p = this.loc ? `${this.loc}/${this.name}` : this.name
-    return '/#/edit/' + p.replaceAll('?', '%3F').replaceAll('#', '%23')
+    return '/#/' + p.replaceAll('?', '%3F').replaceAll('#', '%23')
   }
   get complete(): boolean {
     return !this.ghost && (this.dir || this.size <= this.allocated)
