@@ -18,8 +18,16 @@ import { EditorView, keymap } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
 import { apiFetch } from '@/repositories/Client'
 import { useMainStore } from '@/stores/main'
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { onBeforeRouteLeave, useRoute } from 'vue-router'
+import {
+  computed,
+  nextTick,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref
+} from 'vue'
+import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const store = useMainStore()
@@ -50,19 +58,30 @@ const languageCompartment = new Compartment()
 
 const dirty = computed(() => content.value !== original.value)
 
-onBeforeRouteLeave((_to, _from, next) => {
-  if (!dirty.value) {
-    next()
-    return
-  }
-  const discard = window.confirm('You have unsaved changes. Discard them?')
-  next(discard)
-})
-
 const beforeUnload = (event: BeforeUnloadEvent) => {
   if (!dirty.value) return
   event.preventDefault()
   event.returnValue = ''
+}
+
+let beforeUnloadActive = false
+
+const activateEditorBindings = () => {
+  store.editorSave = save
+  if (!beforeUnloadActive) {
+    window.addEventListener('beforeunload', beforeUnload)
+    beforeUnloadActive = true
+  }
+}
+
+const deactivateEditorBindings = () => {
+  if (store.editorSave === save) {
+    store.editorSave = null
+  }
+  if (beforeUnloadActive) {
+    window.removeEventListener('beforeunload', beforeUnload)
+    beforeUnloadActive = false
+  }
 }
 
 const detectLanguage = async () => {
@@ -129,8 +148,7 @@ const save = async () => {
 }
 
 onMounted(async () => {
-  store.editorSave = save
-  window.addEventListener('beforeunload', beforeUnload)
+  activateEditorBindings()
   loading.value = true
   error.value = ''
   try {
@@ -158,13 +176,18 @@ onMounted(async () => {
   }
 })
 
+onActivated(() => {
+  activateEditorBindings()
+})
+
+onDeactivated(() => {
+  deactivateEditorBindings()
+})
+
 onUnmounted(() => {
-  if (store.editorSave === save) {
-    store.editorSave = null
-  }
+  deactivateEditorBindings()
   editorView?.destroy()
   editorView = null
-  window.removeEventListener('beforeunload', beforeUnload)
 })
 </script>
 

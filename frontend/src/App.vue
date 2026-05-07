@@ -24,14 +24,21 @@
     />
   </header>
   <main class="transition-wrapper">
-    <Transition
-      :name="routeTransitionName"
-      @after-enter="store.transitionDirection = 'none'"
-    >
-      <div :key="routeViewKey" class="explorer-content">
-        <RouterView :path="path.pathList" :query="path.query" />
-      </div>
-    </Transition>
+    <RouterView v-slot="{ Component }">
+      <Transition
+        :name="routeTransitionName"
+        @after-enter="store.transitionDirection = 'none'"
+      >
+        <KeepAlive>
+          <component
+            :is="Component"
+            :key="routeViewKey"
+            class="explorer-content"
+            v-bind="routeViewProps"
+          />
+        </KeepAlive>
+      </Transition>
+    </RouterView>
   </main>
   <footer v-if="store.selected.size || store.uprogress.total || store.dprogress.total">
     <SelectionToolbar :path="path.pathList" />
@@ -103,6 +110,11 @@ const routeViewKey = computed(() => {
   const route = Router.currentRoute.value
   return route.name === 'editor' ? route.path : String(route.name ?? route.path)
 })
+const routeViewProps = computed(() =>
+  path.value.isEditorPath
+    ? {}
+    : { path: path.value.pathList, query: path.value.query }
+)
 watch(
   () => path.value.path,
   () => {

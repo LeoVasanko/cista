@@ -23,6 +23,8 @@ import type { SortOrder } from '@/utils/docsort'
 import { createKeyboardFollowScroll } from '@/utils/keyboardFollowScroll'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import {
+  onActivated,
+  onDeactivated,
   computed,
   nextTick,
   onMounted,
@@ -170,6 +172,7 @@ const onImgLoad = (e: Event) => {
 }
 const updateColumns = () => {
   if (!gallery.value) return
+  if (gallery.value.getBoundingClientRect().width <= 0) return
   const style = getComputedStyle(gallery.value)
   const templates = style.gridTemplateColumns
     .split(' ')
@@ -412,6 +415,19 @@ watchEffect(() => {
   }
 })
 let resizeObserver: ResizeObserver | null = null
+const attachGalleryObservers = () => {
+  if (!gallery.value || resizeObserver) return
+  resizeObserver = new ResizeObserver(updateColumns)
+  resizeObserver.observe(gallery.value)
+  gallery.value.addEventListener('load', onImgLoad, { capture: true })
+}
+
+const detachGalleryObservers = () => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  gallery.value?.removeEventListener('load', onImgLoad, { capture: true })
+}
+
 onMounted(() => {
   const active = document.querySelector('.cursor') as HTMLElement | null
   if (active) {
@@ -419,16 +435,20 @@ onMounted(() => {
   }
   updateColumns()
   seedFromDocs()
-  if (gallery.value) {
-    resizeObserver = new ResizeObserver(updateColumns)
-    resizeObserver.observe(gallery.value)
-    gallery.value.addEventListener('load', onImgLoad, { capture: true })
-  }
+  attachGalleryObservers()
+})
+onActivated(() => {
+  nextTick(() => {
+    updateColumns()
+    attachGalleryObservers()
+  })
+})
+onDeactivated(() => {
+  detachGalleryObservers()
 })
 onUnmounted(() => {
   keyboardFollowScroll.cancel()
-  resizeObserver?.disconnect()
-  gallery.value?.removeEventListener('load', onImgLoad, { capture: true })
+  detachGalleryObservers()
 })
 
 // Re-seed aspect ratios whenever docs update (e.g., ar patch from server)

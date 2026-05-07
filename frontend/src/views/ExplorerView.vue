@@ -2,24 +2,20 @@
   <div class="transition-wrapper">
     <Transition
       :name="transitionName"
-      @after-enter="store.transitionDirection = 'none'"
+      @after-enter="onAfterEnter"
     >
-      <div :key="folderPath" class="explorer-content">
-        <Gallery
-          v-if="store.prefs.gallery"
+      <KeepAlive>
+        <component
+          :is="store.prefs.gallery ? Gallery : FileExplorer"
+          :key="cacheKey"
           ref="fileExplorer"
+          class="explorer-content"
           :path="props.path"
           :documents="documents"
         />
-        <FileExplorer
-          v-else
-          ref="fileExplorer"
-          :path="props.path"
-          :documents="documents"
-        />
-        <EmptyFolder :documents="documents" :path="props.path" />
-      </div>
+      </KeepAlive>
     </Transition>
+    <EmptyFolder :documents="documents" :path="props.path" />
   </div>
   <div v-if="store.searchLoading" class="search-loading">Searching...</div>
 </template>
@@ -31,7 +27,7 @@ import { getDocuments } from '@/stores/documentStore'
 import { useMainStore } from '@/stores/main'
 import { collator } from '@/utils'
 import { sorted, sortedGrouped } from '@/utils/docsort'
-import { computed, ref, watch, watchEffect } from 'vue'
+import { computed, nextTick, ref, watch, watchEffect } from 'vue'
 
 const store = useMainStore()
 const fileExplorer = ref()
@@ -42,12 +38,29 @@ const props = defineProps<{
 
 // Folder path for component keys - only recreate component when folder changes, not search
 const folderPath = computed(() => props.path.join('/'))
+const cacheKey = computed(() => `${store.prefs.gallery ? 'gallery' : 'list'}:${folderPath.value}`)
 
 const transitionName = computed(() => {
   if (store.transitionDirection === 'forward') return 'slide-forward'
   if (store.transitionDirection === 'backward') return 'slide-backward'
   return ''
 })
+
+const folderScrollTop = new Map<string, number>()
+const scrollKey = (path: string) => path || '/'
+const getMainScroller = () => document.querySelector('main') as HTMLElement | null
+
+const restoreScroll = (path: string) => {
+  const scroller = getMainScroller()
+  if (!scroller) return
+  const top = folderScrollTop.get(scrollKey(path)) ?? 0
+  scroller.scrollTop = top
+}
+
+const onAfterEnter = () => {
+  store.transitionDirection = 'none'
+  restoreScroll(folderPath.value)
+}
 
 // Handle route-based search changes (back/forward navigation, direct URL)
 // Skip if store.query already matches (means we triggered this via typing)
@@ -100,6 +113,19 @@ const documents = computed(() => {
 watchEffect(() => {
   store.fileExplorer = fileExplorer.value
 })
+
+watch(
+  folderPath,
+  async (path, oldPath) => {
+    const scroller = getMainScroller()
+    if (scroller && oldPath !== undefined) {
+      folderScrollTop.set(scrollKey(oldPath), scroller.scrollTop)
+    }
+    await nextTick()
+    requestAnimationFrame(() => restoreScroll(path))
+  },
+  { immediate: true }
+)
 
 // Only auto-switch gallery mode when entering a new folder or on initial file list load
 watch(
