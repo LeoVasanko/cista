@@ -15,7 +15,7 @@
       <tr v-if="editing?.key === 'new'" :class="editing.dir ? 'folder' : 'file'">
         <td class="selection"></td>
         <td class="name">
-          <FileRenameInput :doc="editing" :rename="createItem" :exit="() => {editing = null}" />
+          <FileRenameInput :doc="editing" :rename="createItem" :exit="exitEditing" />
         </td>
         <FileModified :doc=editing :now=nowkey />
         <FileSize :doc=editing />
@@ -46,7 +46,7 @@
           </td>
           <td class="name">
             <template v-if="editing === doc">
-              <FileRenameInput :doc="doc" :rename="rename" :exit="() => {editing = null}" />
+              <FileRenameInput :doc="doc" :rename="rename" :exit="exitEditing" />
             </template>
             <template v-else>
               <a :href="doc.text ? doc.editurl : doc.url" tabindex=-1 @contextmenu.stop @focus.stop="store.cursor = doc.key">
@@ -69,6 +69,7 @@
       </tr>
     </tbody>
   </table>
+  <EmptyFolder v-else :documents="documents" :path="props.path" />
 </template>
 
 <script setup lang="ts">
@@ -81,11 +82,12 @@ import ContextMenu from '@imengyu/vue3-context-menu'
 import {
   computed,
   nextTick,
+  onDeactivated,
   onMounted,
   onUnmounted,
   ref,
   shallowRef,
-  watchEffect
+  watch
 } from 'vue'
 import { useRouter } from 'vue-router'
 import FileRenameInput from './FileRenameInput.vue'
@@ -189,6 +191,9 @@ const pageMove = (direction: 1 | -1, ev: KeyboardEvent) => {
 
 // File rename
 const editing = shallowRef<Doc | null>(null)
+const exitEditing = () => {
+  editing.value = null
+}
 const rename = async (doc: Doc, newName: string) => {
   const oldName = doc.name
   doc.name = newName // We should get an update from watch but this is quicker
@@ -243,7 +248,7 @@ defineExpose({
     const docs = props.documents
     if (docs.length > 0) {
       store.cursor = docs[0]!.key
-      // Also focus the element directly (watchEffect won't trigger if cursor unchanged)
+      // Also focus the element directly (post-flush watcher won't trigger if cursor unchanged)
       nextTick(() => {
         const a = document.querySelector(
           `#file-${store.cursor} .name a`
@@ -329,22 +334,35 @@ const focusBreadcrumb = () => {
 const keyboardFollowScroll = createKeyboardFollowScroll()
 const markKeyboardFollow = keyboardFollowScroll.markKeyboardFollow
 const keepCursorVisibleSmooth = keyboardFollowScroll.keepVisible
-watchEffect(() => {
-  if (store.cursor && store.cursor !== editing.value?.key) editing.value = null
-  if (editing.value) store.cursor = editing.value?.key
-  if (store.cursor) {
-    const a = document.querySelector(
-      `#file-${store.cursor} .name a`
-    ) as HTMLAnchorElement | null
-    if (a) a.focus({ preventScroll: true })
+watch(
+  () => store.cursor,
+  cursor => {
+    if (cursor && editing.value && cursor !== editing.value.key) {
+      exitEditing()
+    }
   }
-})
-watchEffect(() => {
-  if (!props.documents.length && store.cursor && !store.query) {
-    store.cursor = ''
-    focusBreadcrumb()
+)
+watch(
+  () => store.cursor,
+  cursor => {
+    if (cursor && !editing.value) {
+      const a = document.querySelector(
+        `#file-${cursor} .name a`
+      ) as HTMLAnchorElement | null
+      if (a) a.focus({ preventScroll: true })
+    }
+  },
+  { flush: 'post' }
+)
+watch(
+  () => [props.documents.length, store.cursor, store.query, editing.value] as const,
+  ([len, cursor, query, editingDoc]) => {
+    if (!len && cursor && !query && !editingDoc) {
+      store.cursor = ''
+      focusBreadcrumb()
+    }
   }
-})
+)
 let nowkey = ref(0)
 let modifiedTimer: any = null
 const updateModified = () => {
@@ -357,6 +375,9 @@ onMounted(() => {
   if (active) {
     active.focus({ preventScroll: true })
   }
+})
+onDeactivated(() => {
+  if (editing.value) exitEditing()
 })
 onUnmounted(() => {
   keyboardFollowScroll.cancel()
@@ -373,7 +394,8 @@ const createItem = async (doc: Doc, name: string) => {
   doc.name = name
   doc.key = crypto.randomUUID()
   store.addGhost(doc)
-  editing.value = null
+  store.cursor = doc.key
+  exitEditing()
   const path = doc.loc ? `${doc.loc}/${name}` : name
   try {
     const res = doc.dir
@@ -658,12 +680,6 @@ tbody .selection input {
   content: '📁';
   font-size: 1.5rem;
 }
-.empty-container {
-  padding-top: 3rem;
-  text-align: center;
-  font-size: 3rem;
-  color: var(--accent-color);
-}
 .folder-change {
   margin-left: -.5rem;
 }
@@ -674,4 +690,3 @@ tbody .selection input {
   color: #888;
 }
 </style>
-@/stores/main

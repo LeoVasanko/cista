@@ -13,6 +13,7 @@
       />
     </template>
   </div>
+  <EmptyFolder v-else :documents="documents" :path="props.path" />
 </template>
 
 <script setup lang="ts">
@@ -23,16 +24,15 @@ import type { SortOrder } from '@/utils/docsort'
 import { createKeyboardFollowScroll } from '@/utils/keyboardFollowScroll'
 import ContextMenu from '@imengyu/vue3-context-menu'
 import {
-  onActivated,
-  onDeactivated,
   computed,
   nextTick,
+  onActivated,
+  onDeactivated,
   onMounted,
   onUnmounted,
   ref,
   shallowRef,
-  watch,
-  watchEffect
+  watch
 } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -304,7 +304,7 @@ defineExpose({
     const docs = props.documents
     if (docs.length > 0) {
       store.cursor = docs[0]!.key
-      // Also focus the element directly (watchEffect won't trigger if cursor unchanged)
+      // Also focus the element directly (post-flush watcher won't trigger if cursor unchanged)
       nextTick(() => {
         const a = document.querySelector(
           `#file-${store.cursor}`
@@ -396,24 +396,35 @@ const focusBreadcrumb = () => {
 const keyboardFollowScroll = createKeyboardFollowScroll()
 const markKeyboardFollow = keyboardFollowScroll.markKeyboardFollow
 const keepCursorVisibleSmooth = keyboardFollowScroll.keepVisible
-watchEffect(() => {
-  if (store.cursor && store.cursor !== editing.value?.key) editing.value = null
-  if (editing.value) store.cursor = editing.value.key
-  if (store.cursor && !editing.value) {
-    const a = document.querySelector(
-      `#file-${store.cursor}`
-    ) as HTMLAnchorElement | null
-    if (a) {
-      a.focus({ preventScroll: true })
+watch(
+  () => store.cursor,
+  cursor => {
+    if (cursor && editing.value && cursor !== editing.value.key) {
+      exit()
     }
   }
-})
-watchEffect(() => {
-  if (!props.documents.length && store.cursor && !store.query) {
-    store.cursor = ''
-    focusBreadcrumb()
+)
+watch(
+  () => store.cursor,
+  cursor => {
+    if (cursor && !editing.value) {
+      const a = document.querySelector(`#file-${cursor}`) as HTMLAnchorElement | null
+      if (a) {
+        a.focus({ preventScroll: true })
+      }
+    }
+  },
+  { flush: 'post' }
+)
+watch(
+  () => [props.documents.length, store.cursor, store.query, editing.value] as const,
+  ([len, cursor, query, editingDoc]) => {
+    if (!len && cursor && !query && !editingDoc) {
+      store.cursor = ''
+      focusBreadcrumb()
+    }
   }
-})
+)
 let resizeObserver: ResizeObserver | null = null
 const attachGalleryObservers = () => {
   if (!gallery.value || resizeObserver) return
@@ -445,6 +456,7 @@ onActivated(() => {
 })
 onDeactivated(() => {
   detachGalleryObservers()
+  if (editing.value) exit()
 })
 onUnmounted(() => {
   keyboardFollowScroll.cancel()
@@ -464,7 +476,8 @@ const createItem = async (doc: Doc, name: string) => {
   doc.name = name
   doc.key = crypto.randomUUID()
   store.addGhost(doc)
-  editing.value = null
+  store.cursor = doc.key
+  exit()
   const path = doc.loc ? `${doc.loc}/${name}` : name
   try {
     const res = doc.dir

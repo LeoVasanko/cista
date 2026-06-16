@@ -7,9 +7,16 @@ export const exists = (path: string[]) => {
   void store.docVersion
   if (path.length === 0) return true
   const p = path.join('/')
-  return getDocuments().some(
-    doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === p
-  )
+  const hidden = store.hiddenPaths
+  const inDocs = getDocuments().some(doc => {
+    const full = doc.loc ? `${doc.loc}/${doc.name}` : doc.name
+    return full === p && !hidden.has(full)
+  })
+  if (inDocs) return true
+  return store.ghosts.some(g => {
+    const full = g.loc ? `${g.loc}/${g.name}` : g.name
+    return full === p && !hidden.has(full)
+  })
 }
 
 /** Strip file extension intelligently (handles .tar.gz, name.with.dots.pdf, etc.) */

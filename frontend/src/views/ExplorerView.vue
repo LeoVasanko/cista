@@ -15,7 +15,6 @@
         />
       </KeepAlive>
     </Transition>
-    <EmptyFolder :documents="documents" :path="props.path" />
   </div>
   <div v-if="store.searchLoading" class="search-loading">Searching...</div>
 </template>
@@ -38,7 +37,9 @@ const props = defineProps<{
 
 // Folder path for component keys - only recreate component when folder changes, not search
 const folderPath = computed(() => props.path.join('/'))
-const cacheKey = computed(() => `${store.prefs.gallery ? 'gallery' : 'list'}:${folderPath.value}`)
+const cacheKey = computed(
+  () => `${store.prefs.gallery ? 'gallery' : 'list'}:${folderPath.value}`
+)
 
 const transitionName = computed(() => {
   if (store.transitionDirection === 'forward') return 'slide-forward'
@@ -140,16 +141,6 @@ watch(
 </script>
 
 <style scoped>
-.empty-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  font-size: 2rem;
-  text-shadow: 0 0 .3rem #000, 0 0 2rem #0008;
-  color: var(--accent-color);
-}
 .search-loading {
   position: fixed;
   bottom: 1rem;
