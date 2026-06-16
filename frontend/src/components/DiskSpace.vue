@@ -104,7 +104,9 @@ const showOtherCategory = computed(() => {
   return !!s.disk && otherBytes.value / s.disk >= 0.01
 })
 const freeSliceBytes = computed(() =>
-  showOtherCategory.value ? store.space.free : Math.max(0, store.space.disk - store.space.allocated)
+  showOtherCategory.value
+    ? store.space.free
+    : Math.max(0, store.space.disk - store.space.allocated)
 )
 
 // Calculate max label length based on angular gap to neighbor labels
@@ -295,7 +297,11 @@ const freeLabelPath = computed(() =>
   createArcPath(adjustedLabelAngles.value.free!, 'free', 4)
 )
 const otherLabelPath = computed(() =>
-  createArcPath(adjustedLabelAngles.value.other ?? sectorInfo.value.other.angle, 'other', 5)
+  createArcPath(
+    adjustedLabelAngles.value.other ?? sectorInfo.value.other.angle,
+    'other',
+    5
+  )
 )
 
 const handleClick = () => (isExpanded.value ? collapse() : expand())

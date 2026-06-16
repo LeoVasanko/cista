@@ -1293,9 +1293,7 @@ def _token_belongs_to_user(token, username, sso_user_id):
 
 def _is_anonymous_share_token(token: config.Token) -> bool:
     return (
-        sharefs.is_share_token(token)
-        and not token.username
-        and not token.sso_user_id
+        sharefs.is_share_token(token) and not token.username and not token.sso_user_id
     )
 
 

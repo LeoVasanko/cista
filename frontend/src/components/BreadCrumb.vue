@@ -122,8 +122,7 @@ watchEffect(() => {
   if (!same) {
     longest.value = props.path
     longestLinks.value = currentLinks
-  }
-  else if (props.path.length > longcut.length) {
+  } else if (props.path.length > longcut.length) {
     longest.value = longcut.concat(props.path.slice(longcut.length))
     longestLinks.value.splice(0, currentLinks.length, ...currentLinks)
   } else {

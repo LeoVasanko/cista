@@ -58,13 +58,13 @@ import Router from '@/router/index'
 import { computed } from 'vue'
 import AboutModal from './components/AboutModal.vue'
 import AccessDeniedModal from './components/AccessDeniedModal.vue'
-import ExplorerView from './views/ExplorerView.vue'
 import SelectionToolbar from './components/SelectionToolbar.vue'
-import TextEditorView from './views/TextEditorView.vue'
 import type SettingsModalVue from './components/SettingsModal.vue'
 import UserManagementModal from './components/UserManagementModal.vue'
 import UserTokensModal from './components/UserTokensModal.vue'
 import type { SortOrder } from './utils/docsort'
+import ExplorerView from './views/ExplorerView.vue'
+import TextEditorView from './views/TextEditorView.vue'
 
 interface Path {
   path: string
@@ -78,7 +78,9 @@ interface Path {
 const store = useMainStore()
 
 const getDocByPath = (fullPath: string) =>
-  getDocuments().find(doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === fullPath)
+  getDocuments().find(
+    doc => (doc.loc ? `${doc.loc}/${doc.name}` : doc.name) === fullPath
+  )
 
 const path: ComputedRef<Path> = computed(() => {
   const p = decodeURIComponent(Router.currentRoute.value.path).split('//')
@@ -90,11 +92,7 @@ const path: ComputedRef<Path> = computed(() => {
   void store.docVersion
   const doc = fullPath ? getDocByPath(fullPath) : null
   const isEditorPath = !!(doc && !doc.dir && doc.text)
-  const canonicalBase = !fullPath
-    ? '/'
-    : doc?.dir
-      ? `/${fullPath}/`
-      : `/${fullPath}`
+  const canonicalBase = !fullPath ? '/' : doc?.dir ? `/${fullPath}/` : `/${fullPath}`
   const canonicalPath = query
     ? rawPath // keep search URL shape untouched
     : canonicalBase
@@ -128,14 +126,10 @@ const routeViewComponent = computed(() =>
   path.value.isEditorPath ? TextEditorView : ExplorerView
 )
 const routeViewKey = computed(() => {
-  return path.value.isEditorPath
-    ? `editor:${path.value.path}`
-    : 'explorer'
+  return path.value.isEditorPath ? `editor:${path.value.path}` : 'explorer'
 })
 const routeViewProps = computed(() =>
-  path.value.isEditorPath
-    ? {}
-    : { path: path.value.pathList, query: path.value.query }
+  path.value.isEditorPath ? {} : { path: path.value.pathList, query: path.value.query }
 )
 watch(
   () => path.value.canonicalPath,

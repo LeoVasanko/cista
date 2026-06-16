@@ -9,6 +9,8 @@
 </template>
 
 <script setup lang="ts">
+import { apiFetch } from '@/repositories/Client'
+import { useMainStore } from '@/stores/main'
 import { indentWithTab } from '@codemirror/commands'
 import { LanguageDescription } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
@@ -16,8 +18,6 @@ import { Compartment, EditorState } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView, keymap } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
-import { apiFetch } from '@/repositories/Client'
-import { useMainStore } from '@/stores/main'
 import {
   computed,
   nextTick,
@@ -173,8 +173,7 @@ onMounted(async () => {
     await initEditor(text)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load file'
-  }
-  finally {
+  } finally {
     if (loading.value) loading.value = false
   }
 })
