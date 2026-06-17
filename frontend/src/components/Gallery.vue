@@ -625,7 +625,8 @@ const contextMenu = (ev: MouseEvent, doc: Doc) => {
   display: grid;
   gap: .5em;
   grid-template-columns: repeat(auto-fill, minmax(15em, 1fr));
-  align-items: end;
+  align-items: start;
+  align-content: start;
 }
 .folder-indicator {
   grid-column: 1 / -1;

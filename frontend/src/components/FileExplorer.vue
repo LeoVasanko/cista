@@ -1,75 +1,77 @@
 <template>
-  <table v-if="props.documents.length || editing">
-    <thead>
-      <tr>
-        <th class="selection">
-          <input type="checkbox" tabindex="-1" v-model="allSelected" :indeterminate="selectionIndeterminate">
-        </th>
-        <th class="sortcolumn" :class="{ sortactive: store.sortOrder === 'name' }" @click="store.toggleSort('name')">Name</th>
-        <th class="sortcolumn modified right" :class="{ sortactive: store.sortOrder === 'modified' }" @click="store.toggleSort('modified')">Modified</th>
-        <th class="sortcolumn size right" :class="{ sortactive: store.sortOrder === 'size' }" @click="store.toggleSort('size')">Size</th>
-        <th class="menu"></th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-if="editing?.key === 'new'" :class="editing.dir ? 'folder' : 'file'">
-        <td class="selection"></td>
-        <td class="name">
-          <FileRenameInput :doc="editing" :rename="createItem" :exit="exitEditing" />
-        </td>
-        <FileModified :doc=editing :now=nowkey />
-        <FileSize :doc=editing />
-        <td class="menu"></td>
-      </tr>
-      <template v-for="(doc, index) in documents" :key="doc.key">
-        <tr class="folder-change" v-if="showFolderBreadcrumb(index)">
-          <th colspan="5"><BreadCrumb :path="doc.loc ? doc.loc.split('/') : []" /></th>
+  <div class="file-explorer">
+    <table v-if="props.documents.length || editing">
+      <thead>
+        <tr>
+          <th class="selection">
+            <input type="checkbox" tabindex="-1" v-model="allSelected" :indeterminate="selectionIndeterminate">
+          </th>
+          <th class="sortcolumn" :class="{ sortactive: store.sortOrder === 'name' }" @click="store.toggleSort('name')">Name</th>
+          <th class="sortcolumn modified right" :class="{ sortactive: store.sortOrder === 'modified' }" @click="store.toggleSort('modified')">Modified</th>
+          <th class="sortcolumn size right" :class="{ sortactive: store.sortOrder === 'size' }" @click="store.toggleSort('size')">Size</th>
+          <th class="menu"></th>
         </tr>
-
-        <tr
-          :id="`file-${doc.key}`"
-          :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc.key, ghost: doc.ghost }"
-          @click="store.cursor = store.cursor === doc.key ? '' : doc.key"
-          @contextmenu.prevent="contextMenu($event, doc)"
-        >
-          <td class="selection" @click.up.stop="store.cursor = store.cursor === doc.key ? doc.key : ''">
-            <input
-              type="checkbox"
-              tabindex="-1"
-              :checked="store.selected.has(doc.key)"
-              @change="
-                ($event.target as HTMLInputElement).checked
-                  ? store.selected.add(doc.key)
-                  : store.selected.delete(doc.key)
-              "
-            />
-          </td>
+      </thead>
+      <tbody>
+        <tr v-if="editing?.key === 'new'" :class="editing.dir ? 'folder' : 'file'">
+          <td class="selection"></td>
           <td class="name">
-            <template v-if="editing === doc">
-              <FileRenameInput :doc="doc" :rename="rename" :exit="exitEditing" />
-            </template>
-            <template v-else>
-              <a :href="doc.text ? doc.editurl : doc.url" tabindex=-1 @contextmenu.stop @focus.stop="store.cursor = doc.key">
-                {{ doc.name }}
-              </a>
-              <button tabindex=-1 v-if="store.cursor == doc.key" class="rename-button" @click="() => (editing = doc)">🖊️</button>
-            </template>
+            <FileRenameInput :doc="editing" :rename="createItem" :exit="exitEditing" />
           </td>
-          <FileModified :doc=doc :now=nowkey />
-          <FileSize :doc=doc />
-          <td class="menu">
-            <button tabindex=-1 @click.stop="contextMenu($event, doc)">⋮</button>
-          </td>
+          <FileModified :doc=editing :now=nowkey />
+          <FileSize :doc=editing />
+          <td class="menu"></td>
         </tr>
-      </template>
-      <tr class="summary" v-if="props.documents.length > 1">
-        <td colspan="3" class="right">{{props.documents.length}} items</td>
-        <td class="size right">{{ formatSize(props.documents.reduce((a, b) => a + b.size, 0)) }}</td>
-        <td class="menu"></td>
-      </tr>
-    </tbody>
-  </table>
-  <EmptyFolder v-else :documents="documents" :path="props.path" />
+        <template v-for="(doc, index) in documents" :key="doc.key">
+          <tr class="folder-change" v-if="showFolderBreadcrumb(index)">
+            <th colspan="5"><BreadCrumb :path="doc.loc ? doc.loc.split('/') : []" /></th>
+          </tr>
+
+          <tr
+            :id="`file-${doc.key}`"
+            :class="{ file: !doc.dir, folder: doc.dir, cursor: store.cursor === doc.key, ghost: doc.ghost }"
+            @click="store.cursor = store.cursor === doc.key ? '' : doc.key"
+            @contextmenu.prevent="contextMenu($event, doc)"
+          >
+            <td class="selection" @click.up.stop="store.cursor = store.cursor === doc.key ? doc.key : ''">
+              <input
+                type="checkbox"
+                tabindex="-1"
+                :checked="store.selected.has(doc.key)"
+                @change="
+                  ($event.target as HTMLInputElement).checked
+                    ? store.selected.add(doc.key)
+                    : store.selected.delete(doc.key)
+                "
+              />
+            </td>
+            <td class="name">
+              <template v-if="editing === doc">
+                <FileRenameInput :doc="doc" :rename="rename" :exit="exitEditing" />
+              </template>
+              <template v-else>
+                <a :href="doc.text ? doc.editurl : doc.url" tabindex=-1 @contextmenu.stop @focus.stop="store.cursor = doc.key">
+                  {{ doc.name }}
+                </a>
+                <button tabindex=-1 v-if="store.cursor == doc.key" class="rename-button" @click="() => (editing = doc)">🖊️</button>
+              </template>
+            </td>
+            <FileModified :doc=doc :now=nowkey />
+            <FileSize :doc=doc />
+            <td class="menu">
+              <button tabindex=-1 @click.stop="contextMenu($event, doc)">⋮</button>
+            </td>
+          </tr>
+        </template>
+        <tr class="summary" v-if="props.documents.length > 1">
+          <td colspan="3" class="right">{{props.documents.length}} items</td>
+          <td class="size right">{{ formatSize(props.documents.reduce((a, b) => a + b.size, 0)) }}</td>
+          <td class="menu"></td>
+        </tr>
+      </tbody>
+    </table>
+    <EmptyFolder v-else :documents="documents" :path="props.path" />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -547,9 +549,14 @@ const contextMenu = (ev: MouseEvent, doc: Doc) => {
 </script>
 
 <style scoped>
+.file-explorer {
+  height: 100%;
+  width: 100%;
+}
 table {
   width: 100%;
   table-layout: fixed;
+  height: auto;
 }
 thead tr {
   position: sticky;
