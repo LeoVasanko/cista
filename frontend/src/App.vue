@@ -94,7 +94,7 @@ const path: ComputedRef<Path> = computed(() => {
   const isEditorPath = !!(doc && !doc.dir && doc.text)
   const canonicalBase = !fullPath ? '/' : doc?.dir ? `/${fullPath}/` : `/${fullPath}`
   const canonicalPath = query
-    ? rawPath // keep search URL shape untouched
+    ? `${rawPath}//${query}` // keep search URL shape untouched
     : canonicalBase
   const pathList = isEditorPath ? routePathList.slice(0, -1) : routePathList
   const breadcrumbPathList = routePathList
