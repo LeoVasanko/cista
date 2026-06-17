@@ -60,6 +60,7 @@ input#FileRenameInput {
   padding: .75em;
   font-weight: 600;
   width: auto;
+  text-align: center;
 }
 
 </style>
