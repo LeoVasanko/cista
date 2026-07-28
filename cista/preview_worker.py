@@ -219,7 +219,18 @@ def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
             cmd.insert(5, f"{new_w}x{new_h}")
     try:
         try:
-            subprocess.run(cmd, capture_output=True, check=True, shell=False)  # noqa: S603
+            # stdin=DEVNULL is critical: ffmpeg must not inherit the worker's
+            # stdin, which carries the framed request protocol. An inherited
+            # stdin lets ffmpeg eat protocol bytes and, if the worker is
+            # killed mid-conversion, keeps the orphaned ffmpeg holding the
+            # pipe open so the parent's proc.wait() hangs forever.
+            subprocess.run(  # noqa: S603
+                cmd,
+                capture_output=True,
+                check=True,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+            )
         except subprocess.CalledProcessError as e:
             shell_cmd = shlex.join(cmd)
             stderr = (e.stderr or b"").decode(errors="replace").strip()
@@ -540,11 +551,7 @@ def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
     try:
         config.load_config()
-        logger.warning(
-            "preview-worker config=%s master_secret=%s",
-            config.conffile,
-            config.config.secret,
-        )
+        logger.info("preview-worker config=%s", config.conffile)
     except Exception:
         logger.exception("preview-worker failed to load config at startup")
     if len(sys.argv) > 1:

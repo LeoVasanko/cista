@@ -145,6 +145,9 @@ class _PreviewWorker:
 
     async def kill(self) -> None:
         if self.proc.returncode is None:
+            # Safe to hard-kill: the worker is stateless per request, and its
+            # subprocesses (ffmpeg) use stdin=DEVNULL so they never hold the
+            # worker's pipes open — proc.wait() cannot hang on pipe EOF.
             with contextlib.suppress(ProcessLookupError):
                 self.proc.kill()
             await self.proc.wait()
@@ -179,7 +182,6 @@ class _PreviewWorkerPool:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            start_new_session=True,
         )
         _active_procs.add(proc)
         try:
