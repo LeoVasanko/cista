@@ -132,6 +132,7 @@ ignore = [
     "ANN205", # legacy codebase: no full runtime annotation coverage yet
     "BLE001", # broad catch remains in boundary/proxy/error-handling paths
     "C901", # legacy complexity; keep other correctness rules enabled
+    "CPY", # copyright notices not wanted in this codebase
     "D100", # legacy docs not yet standardized
     "D101", # legacy docs not yet standardized
     "D102", # legacy docs not yet standardized

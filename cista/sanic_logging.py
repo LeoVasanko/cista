@@ -156,6 +156,7 @@ def format_access_log(
     method: str,
     host: str,
     path: str,
+    *,
     duration_ms: float,
     extra: str | None = None,
 ) -> str:

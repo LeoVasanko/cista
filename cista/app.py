@@ -86,7 +86,7 @@ async def log_access(req, res):
         path = f"{path}?{qs}"
     extra = getattr(req.ctx, "log_extra", None)
     line = format_access_log(
-        client, res.status, req.method, host, path, duration_ms, extra=extra
+        client, res.status, req.method, host, path, duration_ms=duration_ms, extra=extra
     )
     access_logger.info(line)
     return res
