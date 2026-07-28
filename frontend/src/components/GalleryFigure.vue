@@ -29,7 +29,7 @@
               <span class="filename">{{ snap.displayName }}<SparseIndicator :doc="doc" class="after-name" /></span>
               <span v-if="snap.ext" class="file-ext">.{{ snap.ext }}</span>
             </span>
-            <button class="rename-btn" @click="$emit('rename')" title="Rename">✏️</button>
+            <button class="rename-btn" @click="emit('rename')" title="Rename">✏️</button>
           </div>
           <div class=namespacer></div>
         </template>
@@ -63,6 +63,10 @@ type EditingProp = {
 const props = defineProps<{
   doc: Doc
   editing?: EditingProp
+}>()
+const emit = defineEmits<{
+  (e: 'rename'): void
+  (e: 'menu', ev: MouseEvent): void
 }>()
 const m = ref<typeof MediaPreview | null>(null)
 const tooltip = ref<InstanceType<typeof CursorTooltip> | null>(null)

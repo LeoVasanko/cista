@@ -8,7 +8,7 @@
         :editing="editing === doc ? {rename, exit} : null"
         :style="{ '--gallery-figure-height': rowHeightsByKey[doc.key] ?? '15em' }"
         @menu="contextMenu($event, doc)"
-        @rename="editing = doc; store.cursor = doc.key"
+        @rename="onFigureRename(doc)"
         :class="{ 'folder-start': showFolderBreadcrumb(index) }"
       />
     </template>
@@ -63,6 +63,10 @@ const parseErrorMessage = async (res: Response) => {
 const editing = shallowRef<Doc | null>(null)
 const exit = () => {
   editing.value = null
+}
+const onFigureRename = (doc: Doc) => {
+  editing.value = doc
+  store.cursor = doc.key
 }
 const rename = async (doc: Doc, newName: string) => {
   const oldName = doc.name
@@ -396,9 +400,13 @@ const focusBreadcrumb = () => {
 const keyboardFollowScroll = createKeyboardFollowScroll()
 const markKeyboardFollow = keyboardFollowScroll.markKeyboardFollow
 const keepCursorVisibleSmooth = keyboardFollowScroll.keepVisible
+// Deactivated (KeepAlive-cached) instances stay alive with frozen, potentially
+// stale props - their watchers must not react to global store changes.
+let isActive = true
 watch(
   () => store.cursor,
   cursor => {
+    if (!isActive) return
     if (cursor && editing.value && cursor !== editing.value.key) {
       exit()
     }
@@ -407,6 +415,7 @@ watch(
 watch(
   () => store.cursor,
   cursor => {
+    if (!isActive) return
     if (cursor && !editing.value) {
       const a = document.querySelector(`#file-${cursor}`) as HTMLAnchorElement | null
       if (a) {
@@ -419,6 +428,7 @@ watch(
 watch(
   () => [props.documents.length, store.cursor, store.query, editing.value] as const,
   ([len, cursor, query, editingDoc]) => {
+    if (!isActive) return
     if (!len && cursor && !query && !editingDoc) {
       store.cursor = ''
       focusBreadcrumb()
@@ -449,12 +459,14 @@ onMounted(() => {
   attachGalleryObservers()
 })
 onActivated(() => {
+  isActive = true
   nextTick(() => {
     updateColumns()
     attachGalleryObservers()
   })
 })
 onDeactivated(() => {
+  isActive = false
   detachGalleryObservers()
   if (editing.value) exit()
 })

@@ -53,7 +53,7 @@
                 <a :href="doc.text ? doc.editurl : doc.url" tabindex=-1 @contextmenu.stop @focus.stop="store.cursor = doc.key">
                   {{ doc.name }}
                 </a>
-                <button tabindex=-1 v-if="store.cursor == doc.key" class="rename-button" @click="() => (editing = doc)">🖊️</button>
+                <button tabindex=-1 class="rename-button" @click="() => (editing = doc)">🖊️</button>
               </template>
             </td>
             <FileModified :doc=doc :now=nowkey />
@@ -84,6 +84,7 @@ import ContextMenu from '@imengyu/vue3-context-menu'
 import {
   computed,
   nextTick,
+  onActivated,
   onDeactivated,
   onMounted,
   onUnmounted,
@@ -336,9 +337,13 @@ const focusBreadcrumb = () => {
 const keyboardFollowScroll = createKeyboardFollowScroll()
 const markKeyboardFollow = keyboardFollowScroll.markKeyboardFollow
 const keepCursorVisibleSmooth = keyboardFollowScroll.keepVisible
+// Deactivated (KeepAlive-cached) instances stay alive with frozen, potentially
+// stale props - their watchers must not react to global store changes.
+let isActive = true
 watch(
   () => store.cursor,
   cursor => {
+    if (!isActive) return
     if (cursor && editing.value && cursor !== editing.value.key) {
       exitEditing()
     }
@@ -347,6 +352,7 @@ watch(
 watch(
   () => store.cursor,
   cursor => {
+    if (!isActive) return
     if (cursor && !editing.value) {
       const a = document.querySelector(
         `#file-${cursor} .name a`
@@ -359,6 +365,7 @@ watch(
 watch(
   () => [props.documents.length, store.cursor, store.query, editing.value] as const,
   ([len, cursor, query, editingDoc]) => {
+    if (!isActive) return
     if (!len && cursor && !query && !editingDoc) {
       store.cursor = ''
       focusBreadcrumb()
@@ -378,7 +385,11 @@ onMounted(() => {
     active.focus({ preventScroll: true })
   }
 })
+onActivated(() => {
+  isActive = true
+})
 onDeactivated(() => {
+  isActive = false
   if (editing.value) exitEditing()
 })
 onUnmounted(() => {
@@ -617,6 +628,12 @@ table td {
 .name .rename-button {
   position: absolute;
   right: 0;
+  opacity: 0;
+  visibility: hidden;
+}
+tbody tr:hover .name .rename-button {
+  opacity: 1;
+  visibility: visible;
   animation: appear calc(5 * var(--transition-time)) linear;
 }
 @keyframes appear {
