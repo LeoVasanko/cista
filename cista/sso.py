@@ -88,6 +88,8 @@ async def validate_sso_request(request, *, perm: str = "cista:login") -> dict | 
         headers["cookie"] = request.headers["cookie"]
     if "authorization" in request.headers:
         headers["authorization"] = request.headers["authorization"]
+    if "user-agent" in request.headers:
+        headers["user-agent"] = request.headers["user-agent"]
     headers["accept"] = "application/json"
     headers["x-forwarded-for"] = request.client_ip
     headers["x-forwarded-host"] = request.host
