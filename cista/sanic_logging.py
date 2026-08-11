@@ -3,10 +3,12 @@
 import logging
 import os
 import sys
-import unicodedata
 from ipaddress import IPv6Address
 
 from sanic.log import LOGGING_CONFIG_DEFAULTS
+
+from cista.util.logformat import EmojiFormatter as _EmojiFormatter
+from cista.util.logformat import display_width as _display_width
 
 logger = logging.getLogger("cista.access")
 
@@ -130,14 +132,6 @@ def format_duration_ms(duration_ms: float) -> str:
         hours += 1
         minutes = 0
     return f"{hours}h{minutes}m"
-
-
-def _display_width(text: str) -> int:
-    return sum(
-        1 + (unicodedata.east_asian_width(c) in "FW")
-        for c in text
-        if unicodedata.category(c) != "Mn"
-    )
 
 
 def _format_left(label: str) -> str:
@@ -277,28 +271,6 @@ def configure_access_logging() -> None:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     logger.propagate = False
-
-
-_LEVEL_EMOJI = {
-    logging.DEBUG: "🔍",
-    logging.INFO: "ℹ️",  # noqa: RUF001
-    logging.WARNING: "⚠️",
-    logging.ERROR: "🛑",
-    logging.CRITICAL: "🛑",
-}
-
-
-def _format_level_prefix(levelno: int) -> str:
-    emoji = _LEVEL_EMOJI.get(levelno, "▪️")
-    prefix = f"{emoji} "
-    return prefix + (" " * max(0, 3 - _display_width(prefix)))
-
-
-class _EmojiFormatter(logging.Formatter):
-    """Compact formatter: emoji + message, no timestamp/level text/logger name."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        return _format_level_prefix(record.levelno) + record.getMessage()
 
 
 def configure_main_logging() -> None:

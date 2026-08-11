@@ -17,6 +17,7 @@ import gc
 import io
 import logging
 import mimetypes
+import os
 import shlex
 import struct
 import subprocess
@@ -33,8 +34,18 @@ import pyvips
 from blake3 import blake3
 
 from cista import config
+from cista.util.logformat import format_level_prefix
 
 logger = logging.getLogger(__name__)
+
+
+class _WorkerLogFormatter(logging.Formatter):
+    """Emoji level prefix like the main process, tagged with the worker pid."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        prefix = format_level_prefix(record.levelno)
+        return f"{prefix}worker[{os.getpid()}]: {record.getMessage()}"
+
 
 AVIF_FAST_EFFORT = 0
 
@@ -554,11 +565,14 @@ def _run_loop() -> None:
 
 
 def main() -> None:
-    # Configure all log output to stderr before any imports that may emit logs.
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+    # Configure all log output to stderr before any imports that may emit
+    # logs. stderr is inherited by the parent, so this lands in the server
+    # log, formatted like the main process and tagged with the worker pid.
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(_WorkerLogFormatter())
+    logging.basicConfig(level=logging.INFO, handlers=[handler])
     try:
         config.load_config()
-        logger.info("preview-worker config=%s", config.conffile)
     except Exception:
         logger.exception("preview-worker failed to load config at startup")
     if len(sys.argv) > 1:
