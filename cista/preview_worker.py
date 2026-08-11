@@ -18,6 +18,10 @@ import io
 import logging
 import mimetypes
 import os
+
+# Silence the SVT-AV1 encoder's stderr spam, set log level ERROR
+os.environ.setdefault("SVT_LOG", "1")
+
 import shlex
 import struct
 import subprocess
