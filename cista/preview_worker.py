@@ -213,6 +213,11 @@ def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
         tmp_path = tmp_f.name
     cmd = [
         "ffmpeg",
+        # Keep error messages, drop the banner/config/stream-mapping spam.
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostats",
         "-y",
         "-i",
         str(path),
@@ -233,8 +238,9 @@ def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
             new_w = int(w * scale)
             new_h = int(h * scale)
             # insert -s <wxh> right after the input file
-            cmd.insert(4, "-s")
-            cmd.insert(5, f"{new_w}x{new_h}")
+            input_index = cmd.index(str(path)) + 1
+            cmd.insert(input_index, "-s")
+            cmd.insert(input_index + 1, f"{new_w}x{new_h}")
     try:
         try:
             # stdin=DEVNULL is critical: ffmpeg must not inherit the worker's
@@ -285,9 +291,10 @@ def process_image_pyvips(path, *, maxsize, quality):
             height=height,
         )
 
-    # Other image formats: pyvips first, ffmpeg fallback.
+    # Other image formats: pyvips only. ffmpeg is not a useful fallback
+    # here — when pyvips cannot decode a file, ffmpeg's image decoders
+    # cannot either, and their failure output is far noisier.
     load_opts = {"access": "sequential"}
-    orig_w = orig_h = None
     try:
         img = pyvips.Image.new_from_file(str(path), **load_opts)
         img = img.autorot()
@@ -301,11 +308,9 @@ def process_image_pyvips(path, *, maxsize, quality):
             effort=AVIF_FAST_EFFORT,
             keep="none",
         )
-        backend = "pyvips"
-    except pyvips.error.Error:
-        orig_w, orig_h = None, None
-        ret = _image_via_ffmpeg(path, maxsize, quality)
-        backend = "ffmpeg"
+    except pyvips.error.Error as e:
+        raise ValueError(f"cannot decode image: {e}") from e
+    backend = "pyvips"
     t_end = perf_counter()
 
     return ret, PreviewResponse(
