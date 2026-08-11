@@ -299,7 +299,7 @@ def process_image_pyvips(path, *, maxsize, quality):
             ".avif",
             Q=quality,
             effort=AVIF_FAST_EFFORT,
-            strip=True,
+            keep="none",
         )
         backend = "pyvips"
     except pyvips.error.Error:
@@ -331,7 +331,7 @@ def process_image_buffer(data: bytes, *, quality, maxsize, maxzoom):
         ".avif",
         Q=quality,
         effort=AVIF_FAST_EFFORT,
-        strip=True,
+        keep="none",
     )
     t_end = perf_counter()
 
@@ -359,7 +359,7 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
         img = pyvips.Image.new_from_memory(
             pix.samples_mv, pix.width, pix.height, pix.n, "uchar"
         )
-    ret = img.write_to_buffer(".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True)
+    ret = img.write_to_buffer(".avif", Q=quality, effort=AVIF_FAST_EFFORT, keep="none")
     backend = "pdf+pyvips"
     t_save_end = perf_counter()
 
@@ -571,6 +571,8 @@ def main() -> None:
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(_WorkerLogFormatter())
     logging.basicConfig(level=logging.INFO, handlers=[handler])
+    # pyvips is chatty at INFO ("threadpool completed ..." per operation).
+    logging.getLogger("pyvips").setLevel(logging.WARNING)
     try:
         config.load_config()
     except Exception:
