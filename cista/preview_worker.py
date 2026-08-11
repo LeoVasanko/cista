@@ -26,9 +26,9 @@ from pathlib import Path
 from time import perf_counter
 
 import av
-import fitz  # PyMuPDF
 import msgspec
 import numpy as np
+import pymupdf
 import pyvips
 from blake3 import blake3
 
@@ -329,11 +329,11 @@ def process_image_buffer(data: bytes, *, quality, maxsize, maxzoom):
 
 def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     t_load_start = perf_counter()
-    pdf = fitz.open(path)
+    pdf = pymupdf.open(path)
     page = pdf.load_page(page_number)
     w, h = page.rect[2:4]
     zoom = min(maxsize / w, maxsize / h, maxzoom)
-    mat = fitz.Matrix(zoom, zoom)
+    mat = pymupdf.Matrix(zoom, zoom)
     pix = page.get_pixmap(matrix=mat)
     t_load_end = perf_counter()
 
