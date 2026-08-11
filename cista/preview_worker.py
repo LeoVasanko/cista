@@ -218,6 +218,8 @@ def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
         "-loglevel",
         "error",
         "-nostats",
+        # No interactive keyboard prompts ("Press [q] to stop ...").
+        "-nostdin",
         "-y",
         "-i",
         str(path),
