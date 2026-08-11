@@ -128,13 +128,20 @@ def _read_request() -> tuple[PreviewRequest, bytes] | None:
     return req, data
 
 
+# Raw stdout buffer reserved for the binary protocol once main() redirects
+# Python-level stdout to stderr. None means "use sys.stdout.buffer as-is"
+# (CLI single-shot mode, where real stdout is wanted).
+_protocol_out = None
+
+
 def _write_response(resp: PreviewResponse, payload: bytes) -> None:
+    out = _protocol_out if _protocol_out is not None else sys.stdout.buffer
     meta_bytes = _enc.encode(resp)
     packet = struct.pack("<II", len(meta_bytes), len(payload)) + meta_bytes + payload
     checksum = blake3(packet).digest()
-    sys.stdout.buffer.write(checksum)
-    sys.stdout.buffer.write(packet)
-    sys.stdout.buffer.flush()
+    out.write(checksum)
+    out.write(packet)
+    out.flush()
 
 
 def dispatch(path, quality, maxsize, maxzoom, data=None):
@@ -329,18 +336,18 @@ def process_image_buffer(data: bytes, *, quality, maxsize, maxzoom):
 
 def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     t_load_start = perf_counter()
-    pdf = pymupdf.open(path)
-    page = pdf.load_page(page_number)
-    w, h = page.rect[2:4]
-    zoom = min(maxsize / w, maxsize / h, maxzoom)
-    mat = pymupdf.Matrix(zoom, zoom)
-    pix = page.get_pixmap(matrix=mat)
-    t_load_end = perf_counter()
+    with pymupdf.open(path) as pdf:
+        page = pdf.load_page(page_number)
+        w, h = page.rect[2:4]
+        zoom = min(maxsize / w, maxsize / h, maxzoom)
+        mat = pymupdf.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat)
+        t_load_end = perf_counter()
 
-    t_save_start = perf_counter()
-    img = pyvips.Image.new_from_memory(
-        pix.samples_mv, pix.width, pix.height, pix.n, "uchar"
-    )
+        t_save_start = perf_counter()
+        img = pyvips.Image.new_from_memory(
+            pix.samples_mv, pix.width, pix.height, pix.n, "uchar"
+        )
     ret = img.write_to_buffer(".avif", Q=quality, effort=AVIF_FAST_EFFORT, strip=True)
     backend = "pdf+pyvips"
     t_save_end = perf_counter()
@@ -557,10 +564,17 @@ def main() -> None:
     if len(sys.argv) > 1:
         _run_once()
         return
+    # The command channel is a binary protocol on fd 1. Anything printed to
+    # stdout by Python code (e.g. a library emitting a warning via print())
+    # would corrupt the protocol, so redirect Python-level stdout to stderr
+    # (the server log) and keep the raw buffer solely for protocol traffic.
+    global _protocol_out
+    _protocol_out = sys.stdout.buffer
+    sys.stdout = sys.stderr
     # Eagerly import heavy modules before signalling readiness so the parent
     # does not hand us a request while we are still initialising.
-    sys.stdout.buffer.write(b"\x01")
-    sys.stdout.buffer.flush()
+    _protocol_out.write(b"\x01")
+    _protocol_out.flush()
     _run_loop()
 
 

@@ -161,7 +161,7 @@ ignore = [
     "TRY003", # exception-message strictness too noisy on legacy handlers
 ]
 isort.known-first-party = ["cista"]
-per-file-ignores."tests/*" = ["S", "ANN", "D", "INP", "PLR2004", "ARG001"]
+per-file-ignores."tests/*" = ["S", "ANN", "D", "INP", "PLR2004", "ARG001", "SLF001"]
 per-file-ignores."scripts/*" = ["T20"]
 
 [dependency-groups]

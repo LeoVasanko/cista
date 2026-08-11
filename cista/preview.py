@@ -77,6 +77,9 @@ _preview_cache = PreviewCache(capacity=500)
 
 PREVIEW_TIMEOUT = 10.0  # seconds until preview subprocess is killed
 PREVIEW_WORKERS = max(2, min(8, cpu_count()))
+WORKER_KILL_GRACE = 5.0  # max seconds to wait for a killed worker to be reaped
+WORKER_RESPAWN_DELAY = 1.0  # initial delay before retrying a failed worker spawn
+WORKER_RESPAWN_DELAY_MAX = 30.0
 _active_procs: set[asyncio.subprocess.Process] = set()
 _preview_pool = None
 _preview_pool_lock = asyncio.Lock()
@@ -144,14 +147,25 @@ class _PreviewWorker:
         return payload or None, resp
 
     async def kill(self) -> None:
-        if self.proc.returncode is None:
-            # Safe to hard-kill: the worker is stateless per request, and its
-            # subprocesses (ffmpeg) use stdin=DEVNULL so they never hold the
-            # worker's pipes open — proc.wait() cannot hang on pipe EOF.
-            with contextlib.suppress(ProcessLookupError):
-                self.proc.kill()
-            await self.proc.wait()
-        _active_procs.discard(self.proc)
+        try:
+            if self.proc.returncode is None:
+                # Safe to hard-kill: the worker is stateless per request.
+                # proc.wait() must not be awaited unaided: if a pipe
+                # transport is flow-control paused (e.g. an undrained stderr
+                # pipe), asyncio may never resolve wait() even after SIGKILL,
+                # which would permanently wedge the calling dispatcher.
+                with contextlib.suppress(ProcessLookupError):
+                    self.proc.kill()
+                try:
+                    await asyncio.wait_for(self.proc.wait(), timeout=WORKER_KILL_GRACE)
+                except TimeoutError:
+                    logger.error(
+                        "Preview worker pid=%s not reaped within %ds of kill",
+                        self.proc.pid,
+                        int(WORKER_KILL_GRACE),
+                    )
+        finally:
+            _active_procs.discard(self.proc)
 
 
 class _PreviewWorkerPool:
@@ -166,22 +180,19 @@ class _PreviewWorkerPool:
         self._seq = 0
         self._closed = False
 
-    async def _read_startup_stderr(self, proc: asyncio.subprocess.Process) -> str:
-        if proc.stderr is None:
-            return ""
-        with contextlib.suppress(TimeoutError):
-            data = await asyncio.wait_for(proc.stderr.read(), timeout=0.5)
-            return data.decode(errors="replace").strip()
-        return ""
-
     async def _spawn_worker(self) -> _PreviewWorker:
+        # stderr is inherited, not piped: a piped stderr that nobody drains
+        # eventually fills its OS buffer, blocking the worker mid-request,
+        # and its flow-control-paused transport makes proc.wait() hang even
+        # after kill() — together this used to permanently wedge the pool.
+        # Inheriting sends worker diagnostics straight to the server log.
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
             "cista.preview_worker",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stderr=None,
         )
         _active_procs.add(proc)
         try:
@@ -191,21 +202,14 @@ class _PreviewWorkerPool:
                 proc.kill()
             with contextlib.suppress(Exception):
                 await proc.wait()
-            stderr = await self._read_startup_stderr(proc)
-            if stderr:
-                raise WorkerProtocolError(
-                    "preview worker failed to become ready: " + stderr.splitlines()[-1]
-                ) from err
-            raise WorkerProtocolError("preview worker failed to become ready") from err
+            raise WorkerProtocolError(
+                "preview worker failed to become ready"
+                " (worker stderr goes to the server log)"
+            ) from err
         except asyncio.IncompleteReadError as err:
-            stderr = await self._read_startup_stderr(proc)
-            if stderr:
-                raise WorkerProtocolError(
-                    "preview worker exited before signalling readiness: "
-                    + stderr.splitlines()[-1]
-                ) from err
             raise WorkerProtocolError(
                 "preview worker exited before signalling readiness"
+                " (worker stderr goes to the server log)"
             ) from err
         if ready != b"\x01":
             raise WorkerProtocolError(f"preview worker ready signal invalid: {ready!r}")
@@ -218,106 +222,135 @@ class _PreviewWorkerPool:
 
     async def _replace_worker(self, worker: _PreviewWorker) -> None:
         self._workers.discard(worker)
-        await worker.kill()
-        if self._closed:
-            return
         try:
-            await self._add_worker()
+            await worker.kill()
         except Exception:
-            logger.exception("Failed to replace preview worker")
-
-    async def _dispatch_loop(self) -> None:
-        while True:
+            logger.exception("Failed to kill preview worker pid=%s", worker.proc.pid)
+        # Keep retrying until a replacement is up: a pool that silently
+        # shrinks degrades all preview traffic to timeouts.
+        delay = WORKER_RESPAWN_DELAY
+        while not self._closed:
             try:
-                _priority, _seq, future, args = await self._pending.get()
-            except asyncio.CancelledError:
+                await self._add_worker()
+            except Exception:
+                logger.exception(
+                    "Failed to replace preview worker (pool %d/%d); retrying in %ds",
+                    len(self._workers),
+                    self.size,
+                    int(delay),
+                )
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, WORKER_RESPAWN_DELAY_MAX)
+            else:
                 return
 
-            if future.cancelled():
-                continue
-
+    async def _dispatch_loop(self) -> None:
+        # Nothing may escape the loop body: a dispatcher that dies silently
+        # permanently shrinks pool capacity and degrades all preview
+        # traffic to timeouts.
+        while True:
             try:
-                worker = await asyncio.wait_for(
-                    self._idle.get(), timeout=PREVIEW_TIMEOUT
-                )
-            except TimeoutError:
-                logger.warning(
-                    "Preview worker unavailable (%ds) for %s",
-                    int(PREVIEW_TIMEOUT),
-                    args[0].name,
-                )
-                if not future.done():
-                    future.set_exception(
-                        PreviewTimeoutError(
-                            args[0].name,
-                            backend=_expected_preview_backend(args[0]),
-                        )
-                    )
-                continue
-
-            filepath = args[0]
-            replace = False
-            try:
-                out, resp = await asyncio.wait_for(
-                    worker.request(*args),
-                    timeout=PREVIEW_TIMEOUT,
-                )
-                if not future.done():
-                    future.set_result((out, resp))
-            except TimeoutError:
-                replace = True
-                if not future.done():
-                    future.set_exception(
-                        PreviewTimeoutError(
-                            filepath.name,
-                            backend=_expected_preview_backend(filepath),
-                        )
-                    )
-            except WorkerChecksumError:
-                replace = True
-                logger.error("Preview checksum mismatch for %s", filepath.name)
-                if not future.done():
-                    future.set_exception(
-                        PreviewError(f"worker checksum mismatch for {filepath.name}")
-                    )
-            except PreviewError as e:
-                if not future.done():
-                    future.set_exception(e)
-            except (
-                WorkerProtocolError,
-                asyncio.IncompleteReadError,
-                BrokenPipeError,
-                ConnectionResetError,
-                OSError,
-                ValueError,
-                msgspec.json.DecodeError,
-            ) as e:
-                replace = True
-                logger.warning(
-                    "Preview worker protocol failure for %s: %s", filepath.name, e
-                )
-                if not future.done():
-                    future.set_exception(
-                        PreviewError(
-                            f"worker protocol failure for {filepath.name}: {e}"
-                        )
-                    )
+                await self._dispatch_one()
+            except asyncio.CancelledError:
+                return
             except Exception:
-                replace = True
-                logger.exception(
-                    "Unexpected preview worker error for %s", filepath.name
-                )
-                if not future.done():
-                    future.set_exception(
-                        PreviewError(f"unexpected worker error for {filepath.name}")
+                logger.exception("Preview dispatcher error; continuing")
+
+    async def _dispatch_one(self) -> None:
+        _priority, _seq, future, args = await self._pending.get()
+
+        if future.cancelled():
+            return
+
+        try:
+            worker = await asyncio.wait_for(self._idle.get(), timeout=PREVIEW_TIMEOUT)
+        except TimeoutError:
+            logger.warning(
+                "Preview worker unavailable (%ds) for %s",
+                int(PREVIEW_TIMEOUT),
+                args[0].name,
+            )
+            if not future.done():
+                future.set_exception(
+                    PreviewTimeoutError(
+                        args[0].name,
+                        backend=_expected_preview_backend(args[0]),
                     )
-            finally:
-                if replace:
-                    await self._replace_worker(worker)
-                elif worker.proc.returncode is None:
-                    await self._idle.put(worker)
-                else:
-                    await self._replace_worker(worker)
+                )
+            return
+
+        filepath = args[0]
+        replace = False
+        try:
+            out, resp = await asyncio.wait_for(
+                worker.request(*args),
+                timeout=PREVIEW_TIMEOUT,
+            )
+            if not future.done():
+                future.set_result((out, resp))
+        except TimeoutError:
+            replace = True
+            logger.warning(
+                "Preview worker pid=%s timed out (%ds) on %s; replacing it",
+                worker.proc.pid,
+                int(PREVIEW_TIMEOUT),
+                filepath.name,
+            )
+            if not future.done():
+                future.set_exception(
+                    PreviewTimeoutError(
+                        filepath.name,
+                        backend=_expected_preview_backend(filepath),
+                    )
+                )
+        except WorkerChecksumError:
+            replace = True
+            logger.error(
+                "Preview checksum mismatch for %s (worker pid=%s); replacing it",
+                filepath.name,
+                worker.proc.pid,
+            )
+            if not future.done():
+                future.set_exception(
+                    PreviewError(f"worker checksum mismatch for {filepath.name}")
+                )
+        except PreviewError as e:
+            if not future.done():
+                future.set_exception(e)
+        except (
+            WorkerProtocolError,
+            asyncio.IncompleteReadError,
+            BrokenPipeError,
+            ConnectionResetError,
+            OSError,
+            ValueError,
+            msgspec.DecodeError,
+        ) as e:
+            replace = True
+            logger.warning(
+                "Preview worker pid=%s protocol failure for %s: %s",
+                worker.proc.pid,
+                filepath.name,
+                e,
+            )
+            if not future.done():
+                future.set_exception(
+                    PreviewError(f"worker protocol failure for {filepath.name}: {e}")
+                )
+        except Exception:
+            replace = True
+            logger.exception("Unexpected preview worker error for %s", filepath.name)
+            if not future.done():
+                future.set_exception(
+                    PreviewError(f"unexpected worker error for {filepath.name}")
+                )
+        finally:
+            if replace:
+                await self._replace_worker(worker)
+            elif worker.proc.returncode is None:
+                await self._idle.put(worker)
+            else:
+                await self._replace_worker(worker)
 
     async def start(self) -> None:
         workers = await asyncio.gather(
