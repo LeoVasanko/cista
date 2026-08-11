@@ -19,7 +19,7 @@ import subprocess
 import threading
 import urllib.error
 import urllib.request
-from functools import partial
+from functools import lru_cache, partial
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from time import perf_counter
@@ -50,6 +50,7 @@ def _get_jwt_secret() -> str:
     )
 
 
+@lru_cache(maxsize=1)
 def _get_callback_host() -> str:
     """Return the host IP that OnlyOffice (usually in Docker) can use to reach us."""
     if host := os.environ.get("ONLYOFFICE_CALLBACK_HOST"):
@@ -199,7 +200,11 @@ OO_AVAILABILITY_CACHE_TTL = 30.0
 
 
 async def is_available_cached() -> bool:
-    """Return cached OnlyOffice availability, refreshed every 30 seconds."""
+    """Return cached OnlyOffice availability, refreshed every 30 seconds.
+
+    State transitions are logged, so an unreachable server is reported once
+    instead of on every preview attempt.
+    """
     global _oo_available_cache
     now = perf_counter()
     if _oo_available_cache is not None:
@@ -207,6 +212,15 @@ async def is_available_cached() -> bool:
         if now - timestamp < OO_AVAILABILITY_CACHE_TTL:
             return result
     result = await is_available_async()
+    if _oo_available_cache is None or _oo_available_cache[0] != result:
+        if result:
+            logger.info(
+                "OnlyOffice document server available at %s", _get_onlyoffice_url()
+            )
+        else:
+            logger.warning(
+                "OnlyOffice document server not reachable at %s", _get_onlyoffice_url()
+            )
     _oo_available_cache = (result, now)
     return result
 
