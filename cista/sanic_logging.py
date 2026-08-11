@@ -286,6 +286,9 @@ def configure_main_logging() -> None:
     LOGGING_CONFIG_DEFAULTS["formatters"]["generic"] = {
         "class": "cista.sanic_logging._EmojiFormatter",
     }
+    # Silence websockets' built-in "connection closed" INFO messages; we log WS
+    # open/close ourselves in the custom access log instead.
+    logging.getLogger("websockets.server").setLevel(logging.WARNING)
     # Also reformat any handlers already attached (covers the initial Sanic() call)
     for name in ("sanic.root", "sanic.error", "sanic.server", "sanic.websockets"):
         for handler in logging.getLogger(name).handlers:
