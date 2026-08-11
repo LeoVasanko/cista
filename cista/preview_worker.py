@@ -23,6 +23,7 @@ import os
 os.environ.setdefault("SVT_LOG", "1")
 
 import shlex
+import signal
 import struct
 import subprocess
 import sys
@@ -35,6 +36,7 @@ import msgspec
 import numpy as np
 import pymupdf
 import pyvips
+import tracerite
 from blake3 import blake3
 
 from cista import config
@@ -571,6 +573,8 @@ def _run_loop() -> None:
 
 
 def main() -> None:
+    # Format tracebacks like the main process.
+    tracerite.load()
     # Configure all log output to stderr before any imports that may emit
     # logs. stderr is inherited by the parent, so this lands in the server
     # log, formatted like the main process and tagged with the worker pid.
@@ -586,6 +590,9 @@ def main() -> None:
     if len(sys.argv) > 1:
         _run_once()
         return
+    # Ctrl-C SIGINTs the whole process group; the parent pool terminates us
+    # (and our stdin EOF exits us) — don't dump KeyboardInterrupt tracebacks.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     # The command channel is a binary protocol on fd 1. Anything printed to
     # stdout by Python code (e.g. a library emitting a warning via print())
     # would corrupt the protocol, so redirect Python-level stdout to stderr

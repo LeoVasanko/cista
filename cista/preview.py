@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
 import mimetypes
+import os
+import signal
 import struct
 import sys
 import threading
@@ -83,6 +85,7 @@ WORKER_RESPAWN_DELAY_MAX = 30.0
 _active_procs: set[asyncio.subprocess.Process] = set()
 _preview_pool = None
 _preview_pool_lock = asyncio.Lock()
+_pool_stopped = False
 AVIF_FAST_EFFORT = 0
 WORKER_CHECKSUM_BYTES = 32
 WORKER_MAX_JSON_BYTES = 1_000_000
@@ -150,16 +153,19 @@ class _PreviewWorker:
         try:
             if self.proc.returncode is None:
                 # Safe to hard-kill: the worker is stateless per request.
+                # Kill the whole process group (worker is the group leader,
+                # spawned with start_new_session) so that an in-flight ffmpeg
+                # grandchild cannot be orphaned by the worker's SIGKILL.
                 # proc.wait() must not be awaited unaided: if a pipe
                 # transport is flow-control paused (e.g. an undrained stderr
                 # pipe), asyncio may never resolve wait() even after SIGKILL,
                 # which would permanently wedge the calling dispatcher.
                 with contextlib.suppress(ProcessLookupError):
-                    self.proc.kill()
+                    os.killpg(self.proc.pid, signal.SIGKILL)
                 try:
                     await asyncio.wait_for(self.proc.wait(), timeout=WORKER_KILL_GRACE)
                 except TimeoutError:
-                    logger.error(
+                    logger.exception(
                         "Preview worker pid=%s not reaped within %ds of kill",
                         self.proc.pid,
                         int(WORKER_KILL_GRACE),
@@ -177,6 +183,7 @@ class _PreviewWorkerPool:
         )
         self._workers: set[_PreviewWorker] = set()
         self._dispatchers: list[asyncio.Task] = []
+        self._in_flight: set[asyncio.Future] = set()
         self._seq = 0
         self._closed = False
 
@@ -193,13 +200,16 @@ class _PreviewWorkerPool:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=None,
+            # Own process group so kill() can SIGKILL the worker together with
+            # any grandchild (e.g. ffmpeg) it may have spawned.
+            start_new_session=True,
         )
         _active_procs.add(proc)
         try:
             ready = await asyncio.wait_for(proc.stdout.readexactly(1), timeout=30.0)
         except TimeoutError as err:
             with contextlib.suppress(ProcessLookupError):
-                proc.kill()
+                os.killpg(proc.pid, signal.SIGKILL)
             with contextlib.suppress(Exception):
                 await proc.wait()
             raise WorkerProtocolError(
@@ -371,9 +381,10 @@ class _PreviewWorkerPool:
         data: bytes | None = None,
     ):
         if self._closed:
-            raise PreviewError("preview worker pool closed")
+            raise PreviewPoolClosedError("preview worker pool closed")
         loop = asyncio.get_running_loop()
         future = loop.create_future()
+        self._in_flight.add(future)
         self._seq += 1
         await self._pending.put(
             (
@@ -383,7 +394,10 @@ class _PreviewWorkerPool:
                 (filepath, quality, maxsize, maxzoom, data),
             )
         )
-        return await future
+        try:
+            return await future
+        finally:
+            self._in_flight.discard(future)
 
     async def close(self) -> None:
         self._closed = True
@@ -394,13 +408,23 @@ class _PreviewWorkerPool:
         self._dispatchers.clear()
         workers = list(self._workers)
         self._workers.clear()
+        # Fail every future still waiting on a result — pending and in-flight
+        # alike — so request handlers finish immediately instead of waiting
+        # out their timeouts during server shutdown.
+        for future in list(self._in_flight):
+            if not future.done():
+                future.set_exception(
+                    PreviewPoolClosedError("preview worker pool closed")
+                )
         while not self._pending.empty():
             try:
                 _priority, _seq, future, _args = self._pending.get_nowait()
             except asyncio.QueueEmpty:
                 break
             if not future.done():
-                future.set_exception(PreviewError("preview worker pool closed"))
+                future.set_exception(
+                    PreviewPoolClosedError("preview worker pool closed")
+                )
         while not self._idle.empty():
             try:
                 self._idle.get_nowait()
@@ -414,10 +438,10 @@ class _PreviewWorkerPool:
 async def start_preview_workers() -> None:
     """Warm up persistent preview workers during server startup."""
     global _preview_pool
-    if _preview_pool is not None:
+    if _preview_pool is not None or _pool_stopped:
         return
     async with _preview_pool_lock:
-        if _preview_pool is not None:
+        if _preview_pool is not None or _pool_stopped:
             return
         pool = _PreviewWorkerPool(PREVIEW_WORKERS)
         await pool.start()
@@ -427,7 +451,8 @@ async def start_preview_workers() -> None:
 
 async def shutdown_preview_workers() -> None:
     """Kill persistent preview workers (called during server shutdown)."""
-    global _preview_pool
+    global _preview_pool, _pool_stopped
+    _pool_stopped = True
     async with _preview_pool_lock:
         pool = _preview_pool
         _preview_pool = None
@@ -437,7 +462,7 @@ async def shutdown_preview_workers() -> None:
         return
     for proc in list(_active_procs):
         with contextlib.suppress(ProcessLookupError):
-            proc.kill()
+            os.killpg(proc.pid, signal.SIGKILL)
     await asyncio.gather(
         *(proc.wait() for proc in list(_active_procs)), return_exceptions=True
     )
@@ -473,6 +498,10 @@ class PreviewError(Exception):
         self.backend = backend
 
 
+class PreviewPoolClosedError(PreviewError):
+    """The preview worker pool has been shut down (server is stopping)."""
+
+
 # Max concurrent OnlyOffice conversion requests. OO has its own queue;
 # we must not flood it. This is intentionally small.
 OO_MAX_CONCURRENT = PREVIEW_WORKERS
@@ -489,6 +518,8 @@ class OOConversionManager:
 
     async def convert(self, filepath: Path) -> bytes:
         """Return PNG bytes for *filepath*, deduplicating concurrent requests."""
+        if not await onlyoffice.is_available_cached():
+            raise RuntimeError("OnlyOffice server not reachable")
         stat = await asyncio.to_thread(filepath.stat)
         key = f"{filepath}:{stat.st_mtime_ns}"
 
@@ -561,7 +592,7 @@ async def _run_preview_process(
     """Run preview request in a persistent worker process."""
     await start_preview_workers()
     if _preview_pool is None:
-        raise PreviewError(f"preview worker pool unavailable for {filepath.name}")
+        raise PreviewPoolClosedError("preview worker pool closed")
     return await _preview_pool.run(filepath, quality, maxsize, maxzoom, data)
 
 
@@ -692,19 +723,25 @@ async def preview(req, path):
             req.ctx.log_extra = _onlyoffice_error_short_text(detail)
             return empty(503)
         raise
+    except PreviewPoolClosedError:
+        # Server is shutting down; not an error, just a cancelled preview.
+        req.ctx.log_extra = "preview cancelled"
+        return empty(503)
     except PreviewError as e:
-        if e.backend:
-            req.ctx.log_extra = e.backend
         detail = str(e)
         if detail == "preview worker error" and e.stderr:
             captured = e.stderr.strip()
             if captured:
                 detail = captured.splitlines()[0]
-        logger.error("%s preview: %s", filepath, detail)
+        # The worker already logged the failure (with traceback where the
+        # error occurred) — annotate the access log instead of re-logging.
+        req.ctx.log_extra = e.backend or detail
         return empty(422)
     except asyncio.CancelledError:
+        # Server shutdown or client disconnect: the connection is being torn
+        # down, so responding is impossible — just annotate the access log.
         req.ctx.log_extra = "preview cancelled"
-        return empty(503)
+        raise
     except Exception:
         logger.exception("Unhandled preview error for %s", filepath)
         return empty(500)
