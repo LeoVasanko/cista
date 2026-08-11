@@ -62,12 +62,18 @@ async def close_client():
         _client = None
 
 
-async def validate_sso_request(request, *, perm: str = "cista:login") -> dict | None:
+async def validate_sso_request(
+    request, *, perm: str = "cista:login", renew: bool = True
+) -> dict | None:
     """Validate an SSO request against the auth backend.
 
     Args:
         request: The Sanic request object
         perm: Permission to validate (default: cista:login, privileged also cista:admin)
+        renew: Whether to allow the auth backend to renew the session cookie.
+            Use ``False`` for WebSocket validation where Set-Cookie cannot be
+            forwarded to the client; this makes the request read-only and avoids
+            resetting the backend renewal timeout.
 
     Returns:
         User info dict if valid, None if validation fails with auth required response
@@ -96,6 +102,8 @@ async def validate_sso_request(request, *, perm: str = "cista:login") -> dict | 
     headers["x-forwarded-proto"] = request.scheme
 
     url = f"{PASKIA_BACKEND_URL}/auth/api/validate?perm={perm}"
+    if not renew:
+        url += "&renew=0"
 
     try:
         response = await client.post(

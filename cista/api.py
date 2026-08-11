@@ -40,7 +40,9 @@ async def watch(req, ws):
     if sso.paskia_enabled():
         # SSO auth: call validation to get user info (don't enforce auth in public mode)
         try:
-            await sso.validate_sso_request(req)
+            # WebSocket cannot forward Set-Cookie, so ask the auth backend not to
+            # renew the session here; renewal happens on the HTTP side instead.
+            await sso.validate_sso_request(req, renew=False)
         except Exception as e:
             logger.debug("watch SSO validation failed: %s", e)
         if sso_user := getattr(req.ctx, "sso_user", None):
