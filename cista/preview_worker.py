@@ -208,8 +208,10 @@ def _get_image_dimensions(path: Path) -> tuple[int, int] | None:
 def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
     """Convert any image to AVIF using ffmpeg CLI.
 
-    ffmpeg handles HEIC tile assembly, EXIF rotation, HDR metadata and
-    ICC profile embedding automatically.
+    ffmpeg handles HEIC tile assembly, HDR metadata and ICC profile embedding
+    automatically. Note: -vf cannot be used here — HEIC tile assembly feeds
+    the stream from a complex filtergraph, which conflicts with simple -vf
+    filtering; scaling must use the -s output option instead.
     """
     dims = _get_image_dimensions(path)
     crf = int(63 * (1 - quality / 100) ** 2)
@@ -281,11 +283,12 @@ def process_image_pyvips(path, *, maxsize, quality):
     t_start = perf_counter()
     suffix = path.suffix.lower()
 
-    # HEIC/HEIF: ffmpeg handles tile assembly and HDR correctly;
-    # skip pyvips entirely.
-    if suffix in (".heic", ".heif"):
-        heic_dims = _get_image_dimensions(path)
-        width, height = heic_dims or (None, None)
+    # HEIC/HEIF/AVIF: ffmpeg handles tile assembly and HDR correctly;
+    # skip pyvips entirely (pyvips drops CICP colour metadata, turning
+    # HDR sources into washed-out SDR previews).
+    if suffix in (".heic", ".heif", ".avif"):
+        dims = _get_image_dimensions(path)
+        width, height = dims or (None, None)
         ret = _image_via_ffmpeg(path, maxsize, quality)
         t_end = perf_counter()
         return ret, PreviewResponse(
@@ -300,10 +303,12 @@ def process_image_pyvips(path, *, maxsize, quality):
     # Other image formats: pyvips only. ffmpeg is not a useful fallback
     # here — when pyvips cannot decode a file, ffmpeg's image decoders
     # cannot either, and their failure output is far noisier.
-    load_opts = {"access": "sequential"}
     try:
-        img = pyvips.Image.new_from_file(str(path), **load_opts)
-        img = img.autorot()
+        img = pyvips.Image.new_from_file(str(path), access="sequential")
+        if img.get_typeof("orientation") and img.get("orientation") != 1:
+            # autorot's rot90 reads pixels out of order, which sequential
+            # access cannot do — reopen with random access when rotating.
+            img = pyvips.Image.new_from_file(str(path)).autorot()
         orig_w, orig_h = img.width, img.height
         scale = min(maxsize / img.width, maxsize / img.height, 1.0)
         if scale < 1.0:
@@ -387,6 +392,34 @@ def process_pdf(path, *, maxsize, maxzoom, quality, page_number=0):
     )
 
 
+def _rotate_frame_yuv(frame, k):
+    """Rotate a planar YUV420 frame by k*90° counter-clockwise, keeping its format.
+
+    Rotating each plane independently preserves the pixel format (including
+    10-bit HDR formats like yuv420p10le, which PyAV exposes as uint16 planes)
+    and the source colorspace.
+    """
+    fmt = frame.format
+    w, h = frame.width, frame.height
+    if (
+        not fmt.is_planar
+        or fmt.chroma_width(w) * 2 != w
+        or fmt.chroma_height(h) * 2 != h
+    ):
+        raise ValueError(f"unsupported format for YUV rotation: {fmt.name}")
+    planes = frame.to_ndarray()
+    y, u, v = (
+        planes[:h],
+        planes[h : h + h // 4].reshape(h // 2, w // 2),
+        planes[h + h // 4 :].reshape(h // 2, w // 2),
+    )
+    planes = np.hstack(
+        [p.flat for p in (np.rot90(y, k), np.rot90(u, k), np.rot90(v, k))]
+    )
+    new_width = w if k % 2 == 0 else h
+    return av.VideoFrame.from_ndarray(planes.reshape(-1, new_width), format=fmt.name)
+
+
 def process_video(path, *, maxsize, quality):
     frame = None
     imgdata = io.BytesIO()
@@ -427,49 +460,11 @@ def process_video(path, *, maxsize, quality):
             new_height = int(frame.height * scale_factor)
             frame = frame.reformat(width=new_width, height=new_height)
 
-        # Apply EXIF rotation if present
+        # Apply display-matrix rotation if present
         if frame.rotation:
             # frame.rotation indicates clockwise rotation needed to display correctly
-            # np.rot90 rotates counter-clockwise, so we negate k
             k = (frame.rotation // 90) % 4  # Convert to counter-clockwise rotations
-            if k == 2:
-                # 180° rotation can be done in YUV420p, preserving HDR
-                try:
-                    fplanes = frame.to_ndarray()
-                    # Split into Y, U, V planes of proper dimensions
-                    planes = [
-                        fplanes[: frame.height],
-                        fplanes[
-                            frame.height : frame.height + frame.height // 4
-                        ].reshape(frame.height // 2, frame.width // 2),
-                        fplanes[frame.height + frame.height // 4 :].reshape(
-                            frame.height // 2, frame.width // 2
-                        ),
-                    ]
-                    # Rotate each plane by 180°
-                    planes = [np.rot90(p, 2) for p in planes]
-                    # Restore PyAV format
-                    planes = np.hstack([p.flat for p in planes]).reshape(
-                        -1, planes[0].shape[1]
-                    )
-                    frame = av.VideoFrame.from_ndarray(planes, format=frame.format.name)
-                    del planes, fplanes
-                except Exception:
-                    logger.exception("Error rotating video frame by 180°")
-            elif k in (1, 3):
-                # 90° or 270° rotation requires RGB conversion (loses HDR)
-                try:
-                    rgb = frame.to_ndarray(format="rgb24")
-                    rgb = np.rot90(rgb, k)
-                    frame = av.VideoFrame.from_ndarray(rgb, format="rgb24")
-                    frame = frame.reformat(
-                        format="yuv420p"
-                    )  # Convert back for encoding
-                    del rgb
-                except Exception:
-                    logger.exception(
-                        "Error rotating video frame by %s°", frame.rotation
-                    )
+            frame = _rotate_frame_yuv(frame, k)
 
         # libsvtav1 rejects full-range JPEG-style YUV pixel formats such as
         # yuvj420p, so normalize them before opening the encoder.
