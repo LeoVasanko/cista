@@ -260,10 +260,10 @@ def _image_via_ffmpeg(path: Path, maxsize: int, quality: int) -> bytes:
             stderr = (e.stderr or b"").decode(errors="replace").strip()
             if stderr:
                 raise RuntimeError(
-                    f"ffmpeg failed (exit {e.returncode}): {shell_cmd}\n{stderr}"
+                    f"ffmpeg failed (exit {e.returncode}):\n{shell_cmd}\n{stderr}"
                 ) from e
             raise RuntimeError(
-                f"ffmpeg failed (exit {e.returncode}): {shell_cmd}"
+                f"ffmpeg failed (exit {e.returncode}):\n{shell_cmd}"
             ) from e
         with Path(tmp_path).open("rb") as f:
             return f.read()
