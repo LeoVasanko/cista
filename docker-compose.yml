@@ -1,7 +1,7 @@
 services:
   onlyoffice:
     build:
-      context: ./docker/onlyoffice-converter-patch
+      context: ./mediapreview/mediapreview/docker
       args:
         ONLYOFFICE_VERSION: "9.3.1"
     container_name: onlyoffice

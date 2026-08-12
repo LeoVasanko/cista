@@ -2,11 +2,12 @@ import asyncio
 from secrets import token_bytes
 
 import msgspec
+from mediapreview.office import is_available_cached
 from sanic import Blueprint, json
 from sanic.exceptions import BadRequest
 from sanic.log import logger
 
-from cista import __version__, auth, config, onlyoffice, sharefs, sso, watching
+from cista import __version__, auth, config, sharefs, sso, watching
 from cista.auth import (
     create_share_token_handler,
     create_token_handler,
@@ -67,7 +68,7 @@ async def watch(req, ws):
                     "version": __version__,
                     "public": config.config.public,
                     "paskia": sso.paskia_enabled(),
-                    "office_previews": await onlyoffice.is_available_cached(),
+                    "office_previews": await is_available_cached(),
                 },
                 "user": user_info,
             }

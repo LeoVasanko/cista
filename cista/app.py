@@ -10,6 +10,8 @@ from wsgiref.handlers import format_date_time
 
 import tracerite
 from blake3 import blake3
+from mediapreview.office import close_oo_client, log_reachable_info
+from mediapreview.pool import shutdown_preview_workers, start_preview_workers
 from sanic import Sanic, empty, raw, redirect
 from sanic.exceptions import Forbidden, NotFound
 from sanic.log import logger
@@ -29,7 +31,6 @@ from cista import (
     watching,
 )
 from cista.api import bp
-from cista.preview import shutdown_preview_workers, start_preview_workers
 from cista.sanic_logging import (
     configure_access_logging,
     configure_main_logging,
@@ -129,6 +130,7 @@ setproctitle("cista-main")
 @app.before_server_start
 async def main_start(app):
     config.load_config()
+    onlyoffice.configure()
     setproctitle(f"cista {config.config.path.name}")
     app.ctx.threadexec = ThreadPoolExecutor(
         max_workers=4, thread_name_prefix="cista-worker"
@@ -142,7 +144,7 @@ async def main_start(app):
 @app.after_server_start
 async def main_after_start(app):
     _ = app
-    onlyoffice.log_reachable_info()
+    log_reachable_info()
 
 
 # Sanic sometimes fails to execute after_server_stop, so we do it before instead (potentially interrupting handlers)
@@ -150,7 +152,7 @@ async def main_after_start(app):
 async def main_stop(app):
     async with asyncio.TaskGroup() as tg:
         tg.create_task(asyncio.to_thread(watching.stop, app))
-        tg.create_task(onlyoffice.close_oo_client())
+        tg.create_task(close_oo_client())
         tg.create_task(shutdown_preview_workers())
         tg.create_task(sso.close_client())
 

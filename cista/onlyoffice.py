@@ -1,135 +1,27 @@
-"""OnlyOffice Document Server integration for office document preview.
+"""Cista-specific OnlyOffice setup.
 
-Provides server-side conversion of office documents to PNG via the
-OnlyOffice Document Server /ConvertService.ashx API. The resulting PNG
-is passed through pyvips for AVIF compression.
-
-Environment requirements:
-    - OnlyOffice Document Server must be running and reachable.
-    - If Document Server runs in Docker, the callback host IP must be
-      reachable from the container (usually the docker bridge IP).
+The conversion client itself lives in `mediapreview.office`; this module
+only bridges cista's config-derived JWT secret into it and wires the
+`--oosetup` Docker bootstrap to cista's config.
 """
 
-import asyncio
-import json
 import os
-import socket
-import socketserver
-import subprocess
-import threading
-import urllib.error
-import urllib.request
-from functools import lru_cache, partial
-from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
-from time import perf_counter
-from urllib.parse import quote
 
-import httpx
-import jwt
-from sanic.log import logger
+import mediapreview.office
 
 from cista import config
 
-# ---------------------------------------------------------------------------
-# Configuration helpers
-# ---------------------------------------------------------------------------
 
-
-_httpx_client: httpx.AsyncClient | None = None
-
-
-def _get_onlyoffice_url() -> str:
-    return os.environ.get("ONLYOFFICE_CISTA_URL", "http://localhost:8988")
-
-
-def _get_jwt_secret() -> str:
-    return (
-        os.environ.get("ONLYOFFICE_JWT_SECRET")
-        or config.derived_secret("onlyoffice", size=16).hex()
+def configure() -> None:
+    """Point mediapreview's OnlyOffice client at cista's derived JWT secret."""
+    os.environ.setdefault(
+        "ONLYOFFICE_JWT_SECRET", config.derived_secret("onlyoffice", size=16).hex()
     )
 
 
-@lru_cache(maxsize=1)
-def _get_callback_host() -> str:
-    """Return the host IP that OnlyOffice (usually in Docker) can use to reach us."""
-    if host := os.environ.get("ONLYOFFICE_CALLBACK_HOST"):
-        return host
-    # Try to auto-detect docker bridge IP
-    try:
-        result = subprocess.run(
-            ["/sbin/ip", "-4", "addr", "show", "docker0"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-            check=False,
-        )
-        for line in result.stdout.splitlines():
-            if "inet " in line:
-                parts = line.strip().split()
-                addr_part = parts[1]  # e.g. 172.17.0.1/16
-                return addr_part.split("/")[0]
-    except Exception:
-        logger.debug("Failed to auto-detect docker bridge IP")
-    return "127.0.0.1"
-
-
-# ---------------------------------------------------------------------------
-# Async HTTP client
-# ---------------------------------------------------------------------------
-
-
-def get_httpx_client() -> httpx.AsyncClient:
-    """Return the shared async HTTP client for OnlyOffice requests."""
-    global _httpx_client
-    if _httpx_client is None:
-        _httpx_client = httpx.AsyncClient()
-    return _httpx_client
-
-
-async def close_oo_client() -> None:
-    """Close the shared async HTTP client."""
-    global _httpx_client
-    if _httpx_client is not None:
-        await _httpx_client.aclose()
-        _httpx_client = None
-
-
-# ---------------------------------------------------------------------------
-# Availability check
-# ---------------------------------------------------------------------------
-
-
-def _probe_status() -> tuple[bool, bool, str | None]:
-    """Return (ok, responded, detail) for a lightweight reachability probe."""
-    url = _get_onlyoffice_url().rstrip("/") + "/ConvertService.ashx"
-    try:
-        with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310
-            status = resp.status
-    except urllib.error.HTTPError as e:
-        status = e.code
-    except Exception:
-        return False, False, None
-
-    if status in (200, 405):
-        return True, True, None
-    if status >= 500:
-        return False, True, f"HTTP {status}"
-    return False, True, f"HTTP {status}"
-
-
-def log_reachable_info() -> None:
-    """Log info on success, warning on responded probe errors, silent on no-response."""
-    ok, responded, detail = _probe_status()
-    if ok:
-        logger.info("Using OnlyOffice document server at %s", _get_onlyoffice_url())
-    elif responded:
-        suffix = f": {detail}" if detail else ""
-        logger.warning("OnlyOffice probe failed%s", suffix)
-
-
 def setup_docker(confdir: Path | None = None) -> int:
-    """Build and run the patched OnlyOffice Docker image."""
+    """Build and run the patched OnlyOffice Docker image (via mediapreview)."""
     if confdir is not None:
         os.environ["CISTA_HOME"] = confdir.as_posix()
     config.init_confdir()
@@ -143,191 +35,5 @@ def setup_docker(confdir: Path | None = None) -> int:
                 "public": False,
             }
         )
-
-    secret = config.derived_secret("onlyoffice", size=16).hex()
-    docker_dir = Path(__file__).parent / "docker"
-    if not docker_dir.is_dir():
-        raise FileNotFoundError(
-            f"Docker files not found at {docker_dir}. Is the package installed correctly?"
-        )
-
-    logger.info("Building OnlyOffice image")
-    build_cmd = ["docker", "build", "-t", "onlyoffice-cista", str(docker_dir)]
-    logger.info("%s", " ".join(build_cmd))
-    result = subprocess.run(build_cmd, check=False, shell=False)  # noqa: S603
-    if result.returncode != 0:
-        raise RuntimeError("Failed to build OnlyOffice image")
-
-    logger.info("Starting OnlyOffice container")
-    run_cmd = [
-        "docker",
-        "run",
-        "-d",
-        "-p",
-        "8988:80",
-        "-e",
-        f"JWT_SECRET={secret}",
-        "-e",
-        "WORKERS=8",
-        "--name",
-        "onlyoffice-cista",
-        "--restart",
-        "unless-stopped",
-        "onlyoffice-cista",
-    ]
-    logger.info("%s", " ".join(run_cmd))
-    result = subprocess.run(run_cmd, check=False, shell=False)  # noqa: S603
-    if result.returncode != 0:
-        raise RuntimeError("Failed to start OnlyOffice container")
-    logger.info("OnlyOffice is running on http://localhost:8988")
-    return 0
-
-
-async def is_available_async(request_timeout: float = 2.0) -> bool:
-    """Return True if the configured OnlyOffice Document Server is reachable."""
-    url = _get_onlyoffice_url().rstrip("/") + "/ConvertService.ashx"
-    client = get_httpx_client()
-    try:
-        response = await client.get(url, timeout=request_timeout)
-    except Exception:
-        return False
-    else:
-        return response.status_code in (200, 405)
-
-
-_oo_available_cache: tuple[bool, float] | None = None
-OO_AVAILABILITY_CACHE_TTL = 30.0
-
-
-async def is_available_cached() -> bool:
-    """Return cached OnlyOffice availability, refreshed every 30 seconds.
-
-    State transitions are logged, so an unreachable server is reported once
-    instead of on every preview attempt.
-    """
-    global _oo_available_cache
-    now = perf_counter()
-    if _oo_available_cache is not None:
-        result, timestamp = _oo_available_cache
-        if now - timestamp < OO_AVAILABILITY_CACHE_TTL:
-            return result
-    result = await is_available_async()
-    if _oo_available_cache is None or _oo_available_cache[0] != result:
-        if result:
-            logger.info(
-                "OnlyOffice document server available at %s", _get_onlyoffice_url()
-            )
-        else:
-            logger.warning(
-                "OnlyOffice document server not reachable at %s", _get_onlyoffice_url()
-            )
-    _oo_available_cache = (result, now)
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Temporary HTTP server so OnlyOffice can download the file
-# ---------------------------------------------------------------------------
-
-
-class _QuietHandler(SimpleHTTPRequestHandler):
-    def log_message(self, fmt, *args) -> None:
-        pass
-
-
-def _get_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("0.0.0.0", 0))  # noqa: S104
-        return s.getsockname()[1]
-
-
-def _serve_file_temporarily(file_path: Path):
-    """Start a temporary HTTP server for *file_path* and return (url, server)."""
-    directory = str(file_path.parent)
-    filename = file_path.name
-    port = _get_free_port()
-
-    handler = partial(_QuietHandler, directory=directory)
-    httpd = socketserver.TCPServer(("0.0.0.0", port), handler)  # noqa: S104
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-
-    host = _get_callback_host()
-    url = f"http://{host}:{port}/{quote(filename)}"
-    return url, httpd
-
-
-# ---------------------------------------------------------------------------
-# OnlyOffice conversion client
-# ---------------------------------------------------------------------------
-
-
-def _build_jwt_token(payload: dict) -> str | None:
-    secret = _get_jwt_secret()
-    if not secret:
-        return None
-    return jwt.encode(payload, secret, algorithm="HS256")
-
-
-async def convert_to_png_async(file_path: Path, request_timeout: float = 5.0) -> bytes:
-    """Convert *file_path* to PNG using OnlyOffice Document Server (async).
-
-    Returns the PNG bytes. Raises RuntimeError on failure.
-    """
-    oo_url = _get_onlyoffice_url().rstrip("/")
-    convert_url = f"{oo_url}/ConvertService.ashx"
-    client = get_httpx_client()
-
-    # Start temporary HTTP server so OnlyOffice can fetch the file
-    doc_url, httpd = await asyncio.to_thread(_serve_file_temporarily, file_path)
-    try:
-        suffix = file_path.suffix.lstrip(".").lower()
-        payload = {
-            "async": False,
-            "filetype": suffix,
-            "key": f"cista_{(await asyncio.to_thread(file_path.stat)).st_mtime_ns}",
-            "outputtype": "png",
-            "title": file_path.name,
-            "url": doc_url,
-        }
-
-        headers = {"Content-Type": "application/json"}
-        token = _build_jwt_token(payload)
-        if token:
-            # Conversion API expects JWT in request body when token checks are enabled.
-            payload["token"] = token
-            headers["Authorization"] = token
-
-        t_start = perf_counter()
-        response = await client.post(
-            convert_url,
-            content=json.dumps(payload).encode(),
-            headers=headers,
-            timeout=request_timeout,
-        )
-        response.raise_for_status()
-        body = response.content
-        t_end = perf_counter()
-
-        # Parse XML response
-        text = body.decode("utf-8", errors="replace")
-        if "<Error>" in text:
-            code = "unknown"
-            if "<Error>" in text and "</Error>" in text:
-                code = text.split("<Error>")[1].split("</Error>")[0]
-            raise RuntimeError(f"OnlyOffice conversion error: {code}")
-
-        if "<FileUrl>" not in text:
-            raise RuntimeError("OnlyOffice response did not contain FileUrl")
-
-        file_url = text.split("<FileUrl>")[1].split("</FileUrl>")[0]
-        file_url = file_url.replace("&amp;", "&")
-
-        logger.debug("OnlyOffice converted in %.2fs: %s", t_end - t_start, file_url)
-
-        # Download converted PNG
-        png_response = await client.get(file_url, timeout=request_timeout)
-        png_response.raise_for_status()
-        return png_response.content
-    finally:
-        await asyncio.to_thread(httpd.shutdown)
+    configure()
+    return mediapreview.office.setup_docker()
