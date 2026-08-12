@@ -12,6 +12,7 @@ from urllib.parse import unquote
 from wsgiref.handlers import format_date_time
 
 import httpx
+from mediapreview import CachedPreview, PreviewCache, is_previewable_path
 from mediapreview.formats import OFFICE_PREVIEW_SUFFIXES
 from mediapreview.formats import expected_backend as _expected_preview_backend
 from mediapreview.office import onlyoffice_error_short_text
@@ -30,7 +31,6 @@ from sanic.log import logger
 from cista import auth, config, sharefs, watching
 from cista.fileio import fuid
 from cista.util.filename import sanitize
-from mediapreview import CachedPreview, PreviewCache, is_previewable_path
 
 bp = Blueprint("preview", url_prefix="/preview")
 

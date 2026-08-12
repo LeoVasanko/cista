@@ -286,9 +286,14 @@ def configure_main_logging() -> None:
     LOGGING_CONFIG_DEFAULTS["formatters"]["generic"] = {
         "class": "cista.sanic_logging._EmojiFormatter",
     }
-    # Silence websockets' built-in "connection closed" INFO messages; we log WS
-    # open/close ourselves in the custom access log instead.
-    logging.getLogger("websockets.server").setLevel(logging.WARNING)
+    # Sanic passes its "sanic.websockets" logger to websockets' ServerProtocol,
+    # so "connection closed" (websockets >= 17, INFO) and Sanic's own
+    # "Websocket timed out waiting for pong" (WARNING) both emit via
+    # sanic.websockets, not websockets.server. Raise it to ERROR so these
+    # routine disconnect messages are dropped while real errors still show.
+    # Patch the config defaults too, so the level survives Sanic's dictConfig.
+    LOGGING_CONFIG_DEFAULTS["loggers"]["sanic.websockets"]["level"] = "ERROR"
+    logging.getLogger("sanic.websockets").setLevel(logging.ERROR)
     # Also reformat any handlers already attached (covers the initial Sanic() call)
     for name in ("sanic.root", "sanic.error", "sanic.server", "sanic.websockets"):
         for handler in logging.getLogger(name).handlers:
