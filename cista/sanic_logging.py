@@ -294,7 +294,23 @@ def configure_main_logging() -> None:
     # Patch the config defaults too, so the level survives Sanic's dictConfig.
     LOGGING_CONFIG_DEFAULTS["loggers"]["sanic.websockets"]["level"] = "ERROR"
     logging.getLogger("sanic.websockets").setLevel(logging.ERROR)
+    # Preview worker timeouts are already annotated in the access log extra;
+    # the pool's WARNING would otherwise fall to logging.lastResort, printing
+    # a bare message with no level prefix.
+    logging.getLogger("mediapreview.pool").setLevel(logging.ERROR)
     # Also reformat any handlers already attached (covers the initial Sanic() call)
     for name in ("sanic.root", "sanic.error", "sanic.server", "sanic.websockets"):
         for handler in logging.getLogger(name).handlers:
             handler.setFormatter(_EmojiFormatter())
+
+
+def reset_sanic_log_levels() -> None:
+    """Force Sanic's loggers back to INFO in debug/dev mode.
+
+    Debug mode enables DEBUG on sanic.root at runtime
+    (ApplicationState.set_mode calls logger.setLevel(DEBUG)), which unleashes
+    useless noise like the 'Error Page:' content-negotiation messages. Call
+    from before_server_start so the override lands after Sanic's own setup.
+    """
+    for name in ("sanic.root", "sanic.error", "sanic.server"):
+        logging.getLogger(name).setLevel(logging.INFO)

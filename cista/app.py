@@ -13,7 +13,7 @@ from blake3 import blake3
 from mediapreview.office import close_oo_client, log_reachable_info
 from mediapreview.pool import shutdown_preview_workers, start_preview_workers
 from sanic import Sanic, empty, raw, redirect
-from sanic.exceptions import Forbidden, NotFound
+from sanic.exceptions import Forbidden, NotFound, RequestCancelled
 from sanic.log import logger
 from setproctitle import setproctitle
 from stream_zip import ZIP_AUTO, stream_zip
@@ -35,6 +35,7 @@ from cista.sanic_logging import (
     configure_access_logging,
     configure_main_logging,
     format_access_log,
+    reset_sanic_log_levels,
 )
 from cista.sanic_logging import logger as access_logger
 from cista.util.apphelpers import handle_sanic_exception
@@ -124,11 +125,28 @@ app.blueprint(fileserver.bp)
 app.exception(Exception)(handle_sanic_exception)
 
 
+@app.exception(asyncio.CancelledError)
+async def request_cancelled(req, e):
+    """Request cancelled mid-flight (client disconnect or server shutdown).
+
+    Sanic wraps this as RequestCancelled (client disconnect only) — a
+    BaseException, so the generic Exception handler above never sees it — and
+    its default handler renders a 500 error page. Report 499 for client
+    disconnects and 503 for server-side cancellation instead; no traceback
+    (quiet=True), since there is nothing to fix. The connection is usually
+    already gone.
+    """
+    if not getattr(req.ctx, "log_extra", None):
+        req.ctx.log_extra = "cancelled"
+    return empty(499 if isinstance(e, RequestCancelled) else 503)
+
+
 setproctitle("cista-main")
 
 
 @app.before_server_start
 async def main_start(app):
+    reset_sanic_log_levels()
     config.load_config()
     onlyoffice.configure()
     setproctitle(f"cista {config.config.path.name}")

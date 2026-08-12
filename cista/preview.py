@@ -6,6 +6,7 @@ Sanic with auth, etag negotiation and the in-memory response cache.
 """
 
 import asyncio
+import re
 import urllib.parse
 from pathlib import PurePosixPath
 from urllib.parse import unquote
@@ -36,6 +37,21 @@ bp = Blueprint("preview", url_prefix="/preview")
 
 # Global preview cache instance
 _preview_cache = PreviewCache(capacity=500)
+
+
+def _shorten_error(detail: str) -> str:
+    """Shorten an upstream backend error for the single-line access log.
+
+    Backend errors arrive verbatim from ffmpeg/pyvips/pymupdf and often carry
+    an '[Errno N]' prefix, the input file path, and multi-line library noise —
+    all redundant with the URL already in the log line. Keep the first line,
+    drop the bracket prefix, and cut at the first ': ' separator.
+    """
+    lines = detail.splitlines()
+    if not lines:
+        return ""
+    first_line = re.sub(r"^\[[^\]]*\]\s*", "", lines[0].strip())
+    return first_line.split(": ", 1)[0]
 
 
 @bp.on_request
@@ -125,8 +141,16 @@ async def preview(req, path):
             if captured:
                 detail = captured.splitlines()[0]
         # The worker already logged the failure (with traceback where the
-        # error occurred) — annotate the access log instead of re-logging.
-        req.ctx.log_extra = e.backend or detail
+        # error occurred) — annotate the access log instead of re-logging,
+        # with a shortened reason. In dev mode, print the full error too.
+        backend = e.backend or _expected_preview_backend(filepath)
+        if req.app.debug:
+            full = detail
+            if e.stderr and e.stderr.strip() not in detail:
+                full = f"{detail}\n{e.stderr.strip()}"
+            logger.warning("[%s] preview failed: %s", backend, full.strip())
+        short = _shorten_error(detail)
+        req.ctx.log_extra = f"{backend}: {short}" if short else backend
         return empty(422)
     except asyncio.CancelledError:
         # Server shutdown or client disconnect: the connection is being torn
