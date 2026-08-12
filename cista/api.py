@@ -5,7 +5,6 @@ import msgspec
 from mediapreview.office import is_available_cached
 from sanic import Blueprint, json
 from sanic.exceptions import BadRequest
-from sanic.log import logger
 
 from cista import __version__, auth, config, sharefs, sso, watching
 from cista.auth import (
@@ -15,7 +14,11 @@ from cista.auth import (
     list_tokens_handler,
 )
 from cista.fileio import FileServer
-from cista.util.apphelpers import websocket_wrapper
+from cista.util.apphelpers import (
+    get_watch_user_info,
+    run_auth_checked_watch,
+    websocket_wrapper,
+)
 
 bp = Blueprint("api", url_prefix="/api")
 fileserver = FileServer()
@@ -36,29 +39,7 @@ async def stop_fileserver(app):
 @bp.websocket("watch")
 @websocket_wrapper
 async def watch(req, ws):
-    # Build user info from either built-in auth or SSO
-    user_info = None
-    if sso.paskia_enabled():
-        # SSO auth: call validation to get user info (don't enforce auth in public mode)
-        try:
-            # WebSocket cannot forward Set-Cookie, so ask the auth backend not to
-            # renew the session here; renewal happens on the HTTP side instead.
-            await sso.validate_sso_request(req, renew=False)
-        except Exception as e:
-            logger.debug("watch SSO validation failed: %s", e)
-        if sso_user := getattr(req.ctx, "sso_user", None):
-            ctx = sso_user.get("ctx", {})
-            perms = ctx.get("permissions", [])
-            user_info = {
-                "username": ctx.get("user", {}).get("display_name", ""),
-                "privileged": "cista:admin" in perms,
-            }
-    elif req.ctx.user:
-        # Built-in auth: use local user database
-        user_info = {
-            "username": req.ctx.username,
-            "privileged": req.ctx.user.privileged,
-        }
+    user_info = await get_watch_user_info(req)
 
     await ws.send(
         msgspec.json.encode(
@@ -85,17 +66,7 @@ async def watch(req, ws):
             await ws.send(root)
         else:
             await ws.send(watching.format_root(sharefs.build_virtual_root(share_token)))
-        # Send updates
-        while True:
-            msg = await q.get()
-            if share_token is None or (
-                isinstance(msg, str) and msg.startswith('{"space"')
-            ):
-                await ws.send(msg)
-            else:
-                await ws.send(
-                    watching.format_root(sharefs.build_virtual_root(share_token))
-                )
+        await run_auth_checked_watch(req, ws, q, share_token)
     except RuntimeError as e:
         if str(e) == "cannot schedule new futures after shutdown":
             return  # Server shutting down, drop the WebSocket

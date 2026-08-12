@@ -103,6 +103,19 @@ async def forward_sso_cookies(req, res):
 
 
 @app.on_response
+async def invalidate_sso_cache_on_logout(req, _res):
+    """Purge cached SSO validations after a logout request."""
+    # Convenience for logout/login flows, not a security feature: cached
+    # entries expire after 10 seconds anyway if the logout happened elsewhere.
+    if (
+        sso.paskia_enabled()
+        and req.method == "POST"
+        and req.path in {"/auth/api/logout", "/auth/logout"}
+    ):
+        sso.invalidate_validation_cache(req)
+
+
+@app.on_response
 async def persist_auth_session(req, res):
     """Persist a session cookie after successful Authorization-based auth."""
     username = getattr(req.ctx, "create_session_username", None)

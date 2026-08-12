@@ -1,14 +1,15 @@
+import asyncio
 import time
 from functools import wraps
 
 import msgspec
 import websockets.exceptions
 from sanic import errorpages
-from sanic.exceptions import SanicException
+from sanic.exceptions import SanicException, Unauthorized
 from sanic.log import logger
 from sanic.response import raw, redirect
 
-from cista import auth
+from cista import auth, config, session, sharefs, sso, watching
 from cista.protocol import ErrorMsg
 from cista.sanic_logging import log_ws_close, log_ws_open
 
@@ -101,3 +102,101 @@ def websocket_wrapper(handler):
             log_ws_close(ws_id, close_code, duration, extra=close_extra)
 
     return wrapper
+
+
+class StopError(Exception):
+    """Used internally to end a watch websocket's task group cleanly."""
+
+
+async def get_watch_user_info(request):
+    """Return the current user info for a watch websocket, re-validating auth.
+
+    Handles all three auth modes:
+      - Paskia/SSO: re-validates with the auth backend (cache-friendly)
+      - Built-in: re-reads the local session cookie from the live store
+      - Public: returns None when no session is present
+
+    Raises Unauthorized/Forbidden in non-public mode when the session is gone.
+    """
+    # Long-lived API/share tokens are validated once at handshake; re-checking
+    # them on every message would add unnecessary backend calls.
+    if getattr(request.ctx, "auth_token", None) is not None:
+        return None
+
+    if sso.paskia_enabled():
+        try:
+            await sso.validate_sso_request(request, renew=False)
+        except SanicException:
+            if config.config.public:
+                return None
+            raise
+        sso_user = getattr(request.ctx, "sso_user", None) or {}
+        if sso_user:
+            ctx = sso_user.get("ctx", {})
+            perms = ctx.get("permissions", [])
+            return {
+                "username": ctx.get("user", {}).get("display_name", ""),
+                "privileged": "cista:admin" in perms,
+            }
+        return None
+
+    s = session.get(request)
+    if s:
+        user = config.config.users.get(s.get("username"))
+        if user:
+            return {"username": s["username"], "privileged": user.privileged}
+
+    if config.config.public:
+        return None
+
+    raise Unauthorized("Login required", "cookie", quiet=True)
+
+
+async def _check_watch_auth_or_stop(request, ws) -> None:
+    """Re-validate watch auth; on failure send an error and raise StopError."""
+    try:
+        await get_watch_user_info(request)
+    except SanicException as exc:
+        # Match the error format used by websocket_wrapper
+        message = f"⚠️ {str(exc) or 'Authentication error'}"
+        await asend(
+            ws,
+            ErrorMsg(
+                {"code": exc.status_code, "message": message, **(exc.context or {})}
+            ),
+        )
+        raise StopError from None
+
+
+async def run_auth_checked_watch(request, ws, queue, share_token) -> None:
+    """Run the watch websocket loop with per-message and periodic auth checks.
+
+    Messages are forwarded from *queue* to *ws*. Auth is re-checked before each
+    message (hitting the SSO cache in the common case) and every 10 seconds when
+    idle, so a session invalidated on the backend does not stay open forever.
+    """
+
+    async def consume() -> None:
+        while True:
+            item = await queue.get()
+            await _check_watch_auth_or_stop(request, ws)
+            if share_token is None or (
+                isinstance(item, str) and item.startswith('{"space"')
+            ):
+                await ws.send(item)
+            else:
+                await ws.send(
+                    watching.format_root(sharefs.build_virtual_root(share_token))
+                )
+
+    async def idle_checker() -> None:
+        while True:
+            await asyncio.sleep(10)
+            await _check_watch_auth_or_stop(request, ws)
+
+    try:
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(consume())
+            tg.create_task(idle_checker())
+    except* StopError:
+        pass

@@ -10,8 +10,10 @@ Environment variables:
 """
 
 import asyncio
+import hashlib
 import os
 import re
+from time import time
 
 import httpx
 import websockets
@@ -62,6 +64,40 @@ async def close_client():
         _client = None
 
 
+# In-memory cache for successful SSO /auth/api/validate responses.
+# Keyed by (credential hash, validation URL) so that entries for different
+# perms/renew flags coexist and all entries for a credential can be purged
+# on logout.
+_VALIDATE_CACHE_TTL = 10
+_validate_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+
+
+def _validate_credential_key(request) -> str:
+    """Return a stable key for the credential material in the request."""
+    cookie = request.headers.get("cookie", "")
+    authorization = request.headers.get("authorization", "")
+    return hashlib.sha256(f"{cookie}\x00{authorization}".encode()).hexdigest()
+
+
+def _cleanup_validate_cache() -> None:
+    """Drop expired cache entries."""
+    now = time()
+    for key, (timestamp, _) in list(_validate_cache.items()):
+        if now - timestamp >= _VALIDATE_CACHE_TTL:
+            del _validate_cache[key]
+
+
+def invalidate_validation_cache(request) -> None:
+    """Remove cached SSO validations for the credentials carried by *request*.
+
+    Called after a logout request so the next request is forced to the
+    backend instead of being served from a stale success cache.
+    """
+    credential_key = _validate_credential_key(request)
+    for key in [key for key in _validate_cache if key[0] == credential_key]:
+        del _validate_cache[key]
+
+
 async def validate_sso_request(
     request, *, perm: str = "cista:login", renew: bool = True
 ) -> dict | None:
@@ -105,6 +141,17 @@ async def validate_sso_request(
     if not renew:
         url += "&renew=0"
 
+    credential_key = _validate_credential_key(request)
+    cache_key = (credential_key, url)
+
+    cached = _validate_cache.get(cache_key)
+    if cached is not None:
+        timestamp, data = cached
+        if time() - timestamp < _VALIDATE_CACHE_TTL:
+            request.ctx.sso_user = data
+            return data
+        del _validate_cache[cache_key]
+
     try:
         response = await client.post(
             url,
@@ -121,6 +168,8 @@ async def validate_sso_request(
                 request.ctx.sso_user = {}
                 return {}
             else:
+                _cleanup_validate_cache()
+                _validate_cache[cache_key] = (time(), data)
                 return data
 
         try:
