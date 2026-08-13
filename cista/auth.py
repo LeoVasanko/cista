@@ -226,7 +226,7 @@ def hydrate_request_auth_context(request, *, source: str) -> None:
 
 
 _AUTH_REALM = "cista"
-_AUTH_CACHE_TTL = 10
+_AUTH_CACHE_TTL = 300
 _auth_cache: dict[str, tuple[float, config.User]] = {}
 _WINDOWS_UA_HINTS = (
     "windows",
