@@ -6,6 +6,7 @@ only bridges cista's config-derived JWT secret into it and wires the
 """
 
 import os
+import sys
 from pathlib import Path
 
 import mediapreview.office
@@ -36,4 +37,11 @@ def setup_docker(confdir: Path | None = None) -> str:
             }
         )
     configure()
-    return mediapreview.office.setup_docker()
+    try:
+        return mediapreview.office.setup_docker()
+    finally:
+        # Print regardless of build outcome: the secret is deterministic
+        # (derived from the config).
+        sys.stdout.write(
+            f"ONLYOFFICE_JWT_SECRET={os.environ['ONLYOFFICE_JWT_SECRET']}\n"
+        )
