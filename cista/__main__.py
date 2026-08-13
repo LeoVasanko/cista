@@ -1,5 +1,6 @@
 import os
 import sys
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 from docopt import docopt
@@ -30,7 +31,7 @@ def create_startup_box(
     *, folder, url, unix=None, dev=False, paskia_url=None, public=False
 ):
     """Create a framed startup box with server information."""
-    title = f"Cista {cista.__version__}"
+    title = f"Cista {cista.__version__} (mediapreview {pkg_version('mediapreview')})"
     listen = unix or url
     location = f"{folder} @ {listen}"
     lines = [title, location]
