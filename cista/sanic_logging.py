@@ -274,11 +274,44 @@ def configure_access_logging() -> None:
 
 
 def configure_main_logging() -> None:
-    """Replace Sanic's verbose 'Main yyyy-mm-dd INFO:' prefix with emoji-only format.
+    """Replace Sanic's verbose 'Main yyyy-mm-dd INFO:' prefix with emoji-only format
 
-    Patches LOGGING_CONFIG_DEFAULTS so the formatter survives every dictConfig
-    call Sanic makes during serve_single() / serve().
+    and make sure the root logger catches unhandled loggers instead of falling back
+    to logging.lastResort (which prints a bare message with no level prefix).
+
+    Patches LOGGING_CONFIG_DEFAULTS so the formatter and root logger survive every
+    dictConfig call Sanic makes during serve_single() / serve().
     """
+    # Give the root logger a real handler so third-party warnings (e.g.
+    # mediapreview.office) are formatted with the emoji prefix instead of being
+    # printed plain by logging.lastResort.
+    root = logging.getLogger()
+    root.setLevel(logging.WARNING)
+    if not root.handlers:
+        root_handler = ReentrantSafeStreamHandler(sys.stderr)
+        root_handler.setFormatter(_EmojiFormatter())
+        root.addHandler(root_handler)
+
+    # Ensure future dictConfig calls keep a root logger so unhandled loggers still
+    # get the emoji formatter rather than falling back to logging.lastResort.
+    LOGGING_CONFIG_DEFAULTS["root"] = {
+        "level": "WARNING",
+        "handlers": ["error_console"],
+    }
+
+    # Sanic's loggers already have their own handlers; stop them from bubbling up
+    # to the root handler we just added so messages are not duplicated.
+    for name in (
+        "sanic.root",
+        "sanic.error",
+        "sanic.access",
+        "sanic.server",
+        "sanic.websockets",
+    ):
+        logging.getLogger(name).propagate = False
+        if name in LOGGING_CONFIG_DEFAULTS["loggers"]:
+            LOGGING_CONFIG_DEFAULTS["loggers"][name]["propagate"] = False
+
     for handler_name in ("console", "error_console", "access_console"):
         LOGGING_CONFIG_DEFAULTS["handlers"][handler_name]["class"] = (
             "cista.sanic_logging.ReentrantSafeStreamHandler"
@@ -295,8 +328,7 @@ def configure_main_logging() -> None:
     LOGGING_CONFIG_DEFAULTS["loggers"]["sanic.websockets"]["level"] = "ERROR"
     logging.getLogger("sanic.websockets").setLevel(logging.ERROR)
     # Preview worker timeouts are already annotated in the access log extra;
-    # the pool's WARNING would otherwise fall to logging.lastResort, printing
-    # a bare message with no level prefix.
+    # keep the pool's own warnings quiet so they are not logged twice.
     logging.getLogger("mediapreview.pool").setLevel(logging.ERROR)
     # Also reformat any handlers already attached (covers the initial Sanic() call)
     for name in ("sanic.root", "sanic.error", "sanic.server", "sanic.websockets"):
