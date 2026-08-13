@@ -18,7 +18,9 @@ from mediapreview.exceptions import (
     PreviewError,
 )
 from mediapreview.formats import OFFICE_PREVIEW_SUFFIXES
+from mediapreview.formats import expected_backend as _expected_preview_backend
 from mediapreview.pool import (
+    PREVIEW_TIMEOUT,
     generate_office_preview,
     run_preview,
 )
@@ -80,14 +82,23 @@ async def preview(req, path):
         logger.debug(f"Preview cache hit: {rel}")
         return raw(cached.body, headers=cached.headers)
 
-    # Generate preview
+    # Generate preview. The outer deadline is strict: pool internals have
+    # their own timeouts, but queueing (workers, the OnlyOffice semaphore)
+    # must not let a request exceed PREVIEW_TIMEOUT.
     try:
         if filepath.suffix.lower() in OFFICE_PREVIEW_SUFFIXES:
-            img, preview_resp = await generate_office_preview(
-                filepath, quality, maxsize, maxzoom
+            img, preview_resp = await asyncio.wait_for(
+                generate_office_preview(filepath, quality, maxsize, maxzoom),
+                timeout=PREVIEW_TIMEOUT,
             )
         else:
-            img, preview_resp = await run_preview(filepath, quality, maxsize, maxzoom)
+            img, preview_resp = await asyncio.wait_for(
+                run_preview(filepath, quality, maxsize, maxzoom),
+                timeout=PREVIEW_TIMEOUT,
+            )
+    except TimeoutError:
+        req.ctx.log_extra = f"{_expected_preview_backend(filepath)} timeout"
+        return empty(503)
     except PreviewError as e:
         # mediapreview is responsible for backend-specific diagnostics; cista only
         # needs the backend name, a short access-log reason, and a response status.
