@@ -21,7 +21,7 @@ def configure() -> None:
     )
 
 
-def setup_docker(confdir: Path | None = None) -> str:
+def setup_docker(confdir: Path | None = None) -> int:
     """Build and run the patched OnlyOffice Docker image (via mediapreview)."""
     if confdir is not None:
         os.environ["CISTA_HOME"] = confdir.as_posix()
@@ -38,10 +38,11 @@ def setup_docker(confdir: Path | None = None) -> str:
         )
     configure()
     try:
-        return mediapreview.office.setup_docker()
+        mediapreview.office.setup_docker()
     finally:
         # Print regardless of build outcome: the secret is deterministic
         # (derived from the config).
         sys.stdout.write(
             f"ONLYOFFICE_JWT_SECRET={os.environ['ONLYOFFICE_JWT_SECRET']}\n"
         )
+    return 0
