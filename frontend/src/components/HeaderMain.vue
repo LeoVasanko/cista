@@ -28,9 +28,9 @@
     </template>
     <div v-if="!props.editorMode && showSortHints" class="sort-hints">
       <span class="sort-label">Order</span>
-      <span class="keycap">1</span>
-      <span class="keycap">2</span>
-      <span class="keycap">3</span>
+      <button type="button" class="keycap" aria-label="Alphabetical order" @click="store.sort('name')">1</button>
+      <button type="button" class="keycap" aria-label="Newest first" @click="store.sort('modified')">2</button>
+      <button type="button" class="keycap" aria-label="Largest first" @click="store.sort('size')">3</button>
     </div>
     <SvgButton
       v-if="props.editorMode"
@@ -314,6 +314,14 @@ onUnmounted(() => {
   border-radius: 0.3em;
   padding: 0 0.45em;
   line-height: 1.4;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.keycap:hover,
+.keycap:focus {
+  background: #e6e6e6;
+  border-color: #aaa;
+  transform: scale(1.05);
 }
 @media screen and (min-width: 800px) {
   .sort-hints {
