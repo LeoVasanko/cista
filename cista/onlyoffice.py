@@ -20,7 +20,7 @@ def configure() -> None:
     )
 
 
-def setup_docker(confdir: Path | None = None) -> int:
+def setup_docker(confdir: Path | None = None) -> str:
     """Build and run the patched OnlyOffice Docker image (via mediapreview)."""
     if confdir is not None:
         os.environ["CISTA_HOME"] = confdir.as_posix()

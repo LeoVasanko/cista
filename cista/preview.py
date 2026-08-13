@@ -6,22 +6,19 @@ Sanic with auth, etag negotiation and the in-memory response cache.
 """
 
 import asyncio
-import re
 import urllib.parse
 from pathlib import PurePosixPath
 from urllib.parse import unquote
 from wsgiref.handlers import format_date_time
 
-import httpx
 from mediapreview import CachedPreview, PreviewCache, is_previewable_path
-from mediapreview.formats import OFFICE_PREVIEW_SUFFIXES
-from mediapreview.formats import expected_backend as _expected_preview_backend
-from mediapreview.office import onlyoffice_error_short_text
-from mediapreview.pool import (
-    PREVIEW_TIMEOUT,
+from mediapreview.exceptions import (
+    PreviewBackendError,
+    PreviewCancelledError,
     PreviewError,
-    PreviewPoolClosedError,
-    PreviewTimeoutError,
+)
+from mediapreview.formats import OFFICE_PREVIEW_SUFFIXES
+from mediapreview.pool import (
     generate_office_preview,
     run_preview,
 )
@@ -37,21 +34,6 @@ bp = Blueprint("preview", url_prefix="/preview")
 
 # Global preview cache instance
 _preview_cache = PreviewCache(capacity=500)
-
-
-def _shorten_error(detail: str) -> str:
-    """Shorten an upstream backend error for the single-line access log.
-
-    Backend errors arrive verbatim from ffmpeg/pyvips/pymupdf and often carry
-    an '[Errno N]' prefix, the input file path, and multi-line library noise —
-    all redundant with the URL already in the log line. Keep the first line,
-    drop the bracket prefix, and cut at the first ': ' separator.
-    """
-    lines = detail.splitlines()
-    if not lines:
-        return ""
-    first_line = re.sub(r"^\[[^\]]*\]\s*", "", lines[0].strip())
-    return first_line.split(": ", 1)[0]
 
 
 @bp.on_request
@@ -101,57 +83,22 @@ async def preview(req, path):
     # Generate preview
     try:
         if filepath.suffix.lower() in OFFICE_PREVIEW_SUFFIXES:
-            img, preview_resp = await asyncio.wait_for(
-                generate_office_preview(filepath, quality, maxsize, maxzoom),
-                timeout=PREVIEW_TIMEOUT,
+            img, preview_resp = await generate_office_preview(
+                filepath, quality, maxsize, maxzoom
             )
         else:
-            img, preview_resp = await asyncio.wait_for(
-                run_preview(filepath, quality, maxsize, maxzoom),
-                timeout=PREVIEW_TIMEOUT,
-            )
-    except TimeoutError:
-        req.ctx.log_extra = f"{_expected_preview_backend(filepath)} timeout"
-        return empty(503)
-    except PreviewTimeoutError as e:
-        req.ctx.log_extra = (
-            f"{(e.backend or _expected_preview_backend(filepath))} timeout"
-        )
-        return empty(503)
-    except httpx.HTTPStatusError:
-        req.ctx.log_extra = "onlyoffice N/A"
-        return empty(503)
-    except httpx.RequestError:
-        req.ctx.log_extra = "onlyoffice N/A"
-        return empty(503)
-    except RuntimeError as e:
-        detail = str(e)
-        if detail.startswith("OnlyOffice"):
-            req.ctx.log_extra = onlyoffice_error_short_text(detail)
-            return empty(503)
-        raise
-    except PreviewPoolClosedError:
-        # Server is shutting down; not an error, just a cancelled preview.
-        req.ctx.log_extra = "preview cancelled"
-        return empty(503)
+            img, preview_resp = await run_preview(filepath, quality, maxsize, maxzoom)
     except PreviewError as e:
-        detail = str(e)
-        if detail == "preview worker error" and e.stderr:
-            captured = e.stderr.strip()
-            if captured:
-                detail = captured.splitlines()[0]
-        # The worker already logged the failure (with traceback where the
-        # error occurred) — annotate the access log instead of re-logging,
-        # with a shortened reason. In dev mode, print the full error too.
-        backend = e.backend or _expected_preview_backend(filepath)
+        # mediapreview is responsible for backend-specific diagnostics; cista only
+        # needs the backend name, a short access-log reason, and a response status.
+        if isinstance(e, PreviewCancelledError):
+            req.ctx.log_extra = e.short or "preview cancelled"
+            raise asyncio.CancelledError from e
+        status = 422 if isinstance(e, PreviewBackendError) else 503
+        req.ctx.log_extra = f"{e.backend}: {e.short}" if e.backend else e.short
         if req.app.debug:
-            full = detail
-            if e.stderr and e.stderr.strip() not in detail:
-                full = f"{detail}\n{e.stderr.strip()}"
-            logger.warning("[%s] preview failed: %s", backend, full.strip())
-        short = _shorten_error(detail)
-        req.ctx.log_extra = f"{backend}: {short}" if short else backend
-        return empty(422)
+            logger.warning("%s", str(e))
+        return empty(status)
     except asyncio.CancelledError:
         # Server shutdown or client disconnect: the connection is being torn
         # down, so responding is impossible — just annotate the access log.
