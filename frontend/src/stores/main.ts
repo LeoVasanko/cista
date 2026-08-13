@@ -79,6 +79,7 @@ export const useMainStore = defineStore('main', {
     connected: false,
     authInProgress: false,
     cursor: '' as string,
+    lastSearchLoc: '' as string,
     server: {} as Record<string, any> & {
       public?: boolean
       paskia?: boolean
@@ -159,6 +160,10 @@ export const useMainStore = defineStore('main', {
       this.docVersion++
       // Sync documents to search worker
       this.syncSearchWorker()
+      // Re-run the current search against the updated file list
+      if (this.query) {
+        this.search(this.query, this.lastSearchLoc)
+      }
     },
     /** Patch aspect ratios on existing docs from a server ar update message */
     updateAr(arMap: Record<string, number>) {
@@ -268,6 +273,7 @@ export const useMainStore = defineStore('main', {
 
       // Update query immediately so watchers know we're handling this
       this.query = query
+      this.lastSearchLoc = loc
 
       // Cancel pending timers
       if (loadingTimer) {
