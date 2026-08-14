@@ -68,7 +68,7 @@ async def close_client():
 # Keyed by (credential hash, validation URL) so that entries for different
 # perms/renew flags coexist and all entries for a credential can be purged
 # on logout.
-_VALIDATE_CACHE_TTL = 10
+_VALIDATE_CACHE_TTL = 300
 _validate_cache: dict[tuple[str, str], tuple[float, dict]] = {}
 
 
