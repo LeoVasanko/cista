@@ -177,7 +177,7 @@ def _next_ws_id() -> int:
 
 
 def _format_ws_id(ws_id: int, *, bright: bool = False) -> str:
-    value = str(ws_id) if ws_id >= 100 else f"{ws_id:02d}"
+    value = f"{ws_id % 100:02d}"
     color = _WS_OPEN if bright else _WS_CLOSE
     return f"{color}{value.rjust(3)}{_RESET}"
 
